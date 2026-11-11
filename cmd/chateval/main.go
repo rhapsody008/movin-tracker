@@ -19,6 +19,8 @@ import (
 
 	"github.com/rhapsody008/movin-tracker/internal/agent"
 	"github.com/rhapsody008/movin-tracker/internal/config"
+	"github.com/rhapsody008/movin-tracker/internal/docs"
+	"github.com/rhapsody008/movin-tracker/internal/docs/convert"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
@@ -27,6 +29,9 @@ import (
 
 // check gets the document before and after the message, and the result.
 type check func(before, after *entries.Doc, res agent.Result) error
+
+// lastLog is the log written during the current case (tool calls).
+var lastLog string
 
 type evalCase struct {
 	msg   string
@@ -224,17 +229,23 @@ func run() error {
 	saved := flag.Bool("saved", false, "use the LLM connection saved on the web page (settings.json in the configured bucket, read only) instead of LLM_* from .env; run it where the app's S3 settings and SETTINGS_SECRET are, e.g. docker compose exec app")
 	kind := flag.String("kind", "", "switch the connection kind for this run: claude (keeps the key only if it belongs to the Claude origin)")
 	model := flag.String("model", "", "use this model for this run")
+	withDocs := flag.Bool("docs", false, "also ask about the real documents in the bucket (read only; needs -saved and poppler, i.e. run inside the dev app)")
 	flag.Parse()
 	c, err := config.Load()
 	if err != nil {
 		return err
 	}
 	llmCfg := c.LLM
+	var bucket *objstore.S3
+	if *withDocs && !*saved {
+		return fmt.Errorf("-docs needs -saved (the documents are in the bucket)")
+	}
 	if *saved {
 		store, err := objstore.NewS3(context.Background(), objstore.S3Options{Bucket: c.S3Bucket, Prefix: c.S3Prefix, Region: c.AWSRegion, EndpointURL: c.S3EndpointURL})
 		if err != nil {
 			return err
 		}
+		bucket = store
 		sets, err := settings.NewService(store, c.LLM, c.SettingsSecret, testutil.Logger(nil))
 		if err != nil {
 			return err
@@ -286,6 +297,18 @@ func run() error {
 		return err
 	}
 	runner := &agent.Runner{Entries: svc, Loc: c.Location, Log: testutil.Logger(logs), Now: time.Now}
+	if *withDocs {
+		// Read only: the Syncer is only asked for the index and page text,
+		// never to sync, so nothing in the bucket changes.
+		pop := &convert.Poppler{}
+		syncer := &docs.Syncer{Store: bucket, Conv: pop, Log: testutil.Logger(logs)}
+		ix, err := syncer.Index(ctx)
+		if err != nil || len(ix.Docs) == 0 {
+			return fmt.Errorf("no documents index in the bucket (%v); run a sync in the app first", err)
+		}
+		runner.Docs = &docs.Library{Sync: syncer}
+		runner.Viewer = &docs.Viewer{Sync: syncer, Conv: pop}
+	}
 	now := time.Now().In(c.Location)
 	effort := "server default"
 	switch {
@@ -299,6 +322,9 @@ func run() error {
 	var secs float64
 
 	all := cases(now)
+	if *withDocs {
+		all = append(all, docCases()...)
+	}
 	failed := 0
 	for i, tc := range all {
 		before, _ := svc.Current(ctx)
@@ -307,7 +333,9 @@ func run() error {
 		if tc.group {
 			req.Channel = "telegram"
 		}
+		mark := len(logs.String())
 		res, err := runner.Run(ctx, req, llmCfg, nil)
+		lastLog = logs.String()[mark:]
 		after, _ := svc.Current(ctx)
 		took := time.Since(start).Seconds()
 		secs += took
