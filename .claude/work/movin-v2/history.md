@@ -12,5 +12,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Secrets plan + GitHub OAuth + public image decided (decisions.md). Step 1.6a done.
 - Step 1.7 done. UI check script lives in git-ignored `tmp/ui-check/check.mjs` (headless Chrome over CDP against `make dev` on :8080, DEV_EMAIL auth); rerun it after frontend changes.
 - Step 1.7a done.
-- Next: 1.8 Telegram client (hand-written Bot API client + token scrubbing).
+- Step 1.8 done.
+- Next: 1.8a settings telegram section (+ fix Save dropping other sections), then 1.9 bot.
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.
