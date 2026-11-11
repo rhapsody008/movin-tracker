@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"regexp"
@@ -20,6 +21,7 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/config"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
+	"github.com/rhapsody008/movin-tracker/internal/settings"
 	"github.com/rhapsody008/movin-tracker/internal/testutil"
 )
 
@@ -219,16 +221,51 @@ func run() error {
 	if os.Getenv("S3_BUCKET") == "" {
 		os.Setenv("S3_BUCKET", "unused") // config requires it; chat-eval uses memory
 	}
+	saved := flag.Bool("saved", false, "use the LLM connection saved on the web page (settings.json in the configured bucket, read only) instead of LLM_* from .env; run it where the app's S3 settings and SETTINGS_SECRET are, e.g. docker compose exec app")
+	kind := flag.String("kind", "", "switch the connection kind for this run: claude (keeps the key only if it belongs to the Claude origin)")
+	model := flag.String("model", "", "use this model for this run")
+	flag.Parse()
 	c, err := config.Load()
 	if err != nil {
 		return err
 	}
-	if c.LLM.BaseURL == "" || c.LLM.Model == "" {
-		return fmt.Errorf("set LLM_BASE_URL, LLM_MODEL (and LLM_API_KEY if needed) in .env first")
+	llmCfg := c.LLM
+	if *saved {
+		store, err := objstore.NewS3(context.Background(), objstore.S3Options{Bucket: c.S3Bucket, Prefix: c.S3Prefix, Region: c.AWSRegion, EndpointURL: c.S3EndpointURL})
+		if err != nil {
+			return err
+		}
+		sets, err := settings.NewService(store, c.LLM, c.SettingsSecret, testutil.Logger(nil))
+		if err != nil {
+			return err
+		}
+		llmCfg = sets.WithClaudeBaseURL(c.ClaudeBaseURL).Resolve(context.Background())
+	}
+	switch *kind {
+	case "":
+	case settings.KindClaude:
+		if llmCfg.Kind != settings.KindClaude {
+			// A key only goes to the origin it was configured for.
+			if !settings.SameOrigin(llmCfg.BaseURL, c.ClaudeBaseURL) {
+				llmCfg.APIKey = ""
+			}
+			llmCfg.Kind, llmCfg.BaseURL = settings.KindClaude, c.ClaudeBaseURL
+		}
+	default:
+		return fmt.Errorf("-kind must be claude (or left out)")
+	}
+	if *model != "" {
+		llmCfg.Model = *model
+	}
+	if llmCfg.BaseURL == "" || llmCfg.Model == "" {
+		return fmt.Errorf("set LLM_BASE_URL, LLM_MODEL (and LLM_API_KEY if needed) in .env first, or use -saved")
+	}
+	if llmCfg.Kind == settings.KindClaude && llmCfg.APIKey == "" {
+		return fmt.Errorf("no key for the Claude origin: save one on the web page (Settings → LLM) or set LLM_KIND=claude and LLM_API_KEY")
 	}
 	fixture := "fixtures/entries.sample.json"
-	if len(os.Args) > 1 {
-		fixture = os.Args[1]
+	if flag.NArg() > 0 {
+		fixture = flag.Arg(0)
 	}
 	data, err := os.ReadFile(fixture)
 	if err != nil {
@@ -250,7 +287,16 @@ func run() error {
 	}
 	runner := &agent.Runner{Entries: svc, Loc: c.Location, Log: testutil.Logger(logs), Now: time.Now}
 	now := time.Now().In(c.Location)
-	fmt.Printf("chat-eval: model %s at %s, today %s\n\n", c.LLM.Model, c.LLM.BaseURL, now.Format("Mon 2 Jan 2006"))
+	effort := "server default"
+	switch {
+	case llmCfg.Kind == settings.KindClaude && llmCfg.ThinkOnDemand:
+		effort = "low (think only when asked)"
+	case llmCfg.ThinkOnDemand:
+		effort = "thinking off (think only when asked)"
+	}
+	fmt.Printf("chat-eval: %s model %s at %s, %s, today %s\n\n", llmCfg.Kind, llmCfg.Model, llmCfg.BaseURL, effort, now.Format("Mon 2 Jan 2006"))
+	var total agent.Result
+	var secs float64
 
 	all := cases(now)
 	failed := 0
@@ -261,9 +307,17 @@ func run() error {
 		if tc.group {
 			req.Channel = "telegram"
 		}
-		res, err := runner.Run(ctx, req, c.LLM, nil)
+		res, err := runner.Run(ctx, req, llmCfg, nil)
 		after, _ := svc.Current(ctx)
-		fmt.Printf("%d. %q  (%.1fs)\n", i+1, tc.msg, time.Since(start).Seconds())
+		took := time.Since(start).Seconds()
+		secs += took
+		u := res.Usage
+		total.Usage.In += u.In
+		total.Usage.Out += u.Out
+		total.Usage.CacheRead += u.CacheRead
+		total.Usage.CacheWrite += u.CacheWrite
+		fmt.Printf("%d. %q  (%.1fs)\n", i+1, tc.msg, took)
+		fmt.Printf("   usage:   in %d, out %d, cache read %d, cache write %d\n", u.In, u.Out, u.CacheRead, u.CacheWrite)
 		if err != nil {
 			fmt.Printf("   FAIL  agent error: %v\n\n", err)
 			failed++
@@ -287,6 +341,7 @@ func run() error {
 			fmt.Printf("   PASS\n\n")
 		}
 	}
+	printTotals(len(all), secs, total)
 	if failed > 0 {
 		fmt.Println("tool-call log:")
 		for _, l := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
@@ -298,6 +353,19 @@ func run() error {
 	}
 	fmt.Printf("All %d messages produced the right change.\n", len(all))
 	return nil
+}
+
+// printTotals sums the run. Prompt tokens follow Claude's accounting, where
+// cached tokens are reported apart from input (vMLX reports no cache use).
+func printTotals(n int, secs float64, u agent.Result) {
+	t := u.Usage
+	prompt := t.In + t.CacheRead + t.CacheWrite
+	hit := 0.0
+	if prompt > 0 {
+		hit = 100 * float64(t.CacheRead) / float64(prompt)
+	}
+	fmt.Printf("totals: %d messages, %.1f s (%.1f s each), prompt tokens %d (uncached %d, cache read %d = %.0f%%, cache write %d), output %d\n",
+		n, secs, secs/float64(max(n, 1)), prompt, t.In, t.CacheRead, hit, t.CacheWrite, t.Out)
 }
 
 // diff describes what changed between two documents, field by field.

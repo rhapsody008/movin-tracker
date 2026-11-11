@@ -8,7 +8,7 @@ COMPOSE := docker compose
 TOOLS   := $(COMPOSE) --profile tools run --rm test
 IMAGE   ?= movin:local
 
-.PHONY: help dev down test conflict-test chat-eval lint build run clean
+.PHONY: help dev down test conflict-test chat-eval chat-eval-claude lint build run clean
 
 help: ## List the targets
 	@awk 'BEGIN{FS=":.*## "} /^[a-z-]+:.*## /{printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -35,6 +35,9 @@ conflict-test: ## Two concurrent writers on one ETag; both changes must survive
 
 chat-eval: .env ## Run the agent eval messages against the real endpoint from .env; print the entry diff per message
 	$(COMPOSE) --profile tools run --rm --no-deps test go run ./cmd/chateval
+
+chat-eval-claude: ## Run the eval on Claude native with the key saved on the web page (inside the running dev app; billed to that key)
+	$(COMPOSE) exec app go run ./cmd/chateval -saved -kind claude -model $${MODEL:-claude-opus-5-5}
 
 lint: ## gofmt + go vet
 	$(TOOLS) sh -c 'out=$$(gofmt -l $$(find . -name "*.go" -not -path "./vendor/*")); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi; go vet ./... && echo "lint ok"'

@@ -633,3 +633,38 @@ func TestThinkCommand(t *testing.T) {
 		t.Fatalf("entries: %+v", got)
 	}
 }
+
+// On a Claude connection /think asks for high effort and a plain message
+// for low effort (think only when asked).
+func TestThinkCommandOnClaude(t *testing.T) {
+	r := startBot(t)
+	var mu sync.Mutex
+	var efforts []string
+	claude := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var body struct {
+			OutputConfig struct {
+				Effort string `json:"effort"`
+			} `json:"output_config"`
+		}
+		json.NewDecoder(req.Body).Decode(&body)
+		mu.Lock()
+		efforts = append(efforts, body.OutputConfig.Effort)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"m","type":"message","role":"assistant","model":"claude-opus-5-5","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`)
+	}))
+	defer claude.Close()
+	r.sets.WithClaudeBaseURL(claude.URL)
+	if _, err := r.sets.Save(context.Background(), "zy", settings.Input{Kind: settings.KindClaude, Model: "claude-opus-5-5", ThinkOnDemand: true}); err != nil {
+		t.Fatal(err)
+	}
+	r.tg.push(private(zyID, "Zhou", "hello"))
+	r.tg.waitSent(t, 1)
+	r.tg.push(private(zyID, "Zhou", "/think compare the quotes"))
+	r.tg.waitSent(t, 2)
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(efforts, ",") != "low,high" {
+		t.Fatalf("efforts %v, want low then high", efforts)
+	}
+}
