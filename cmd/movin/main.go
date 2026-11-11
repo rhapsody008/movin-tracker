@@ -92,6 +92,7 @@ func serve() error {
 	if err != nil {
 		return err
 	}
+	sets.WithTelegramEnv(c.Telegram)
 	if c.SettingsSecret == "" {
 		log.Warn("SETTINGS_SECRET is not set; the settings drawer cannot store an API key")
 	}

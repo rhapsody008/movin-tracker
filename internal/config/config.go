@@ -26,6 +26,9 @@ type Config struct {
 	SettingsSecret string
 	LLM            settings.LLM // env-level defaults; settings.json overrides
 
+	TelegramToken string            // empty: the bot does not start
+	Telegram      settings.Telegram // env-level allowlist; settings.json overrides
+
 	Location  *time.Location
 	StaticDir string // serve the frontend from disk (live reload) instead of the embedded copy
 	PollEvery time.Duration
@@ -87,6 +90,10 @@ func Load() (Config, error) {
 		if c.LLM.Streaming, err = strconv.ParseBool(v); err != nil {
 			return c, fmt.Errorf("LLM_STREAMING: %w", err)
 		}
+	}
+	c.TelegramToken = env("TELEGRAM_BOT_TOKEN", "")
+	if c.Telegram, err = settings.ParseTelegramEnv(env("TELEGRAM_ALLOWED_IDS", ""), env("TELEGRAM_ALLOWED_CHATS", "")); err != nil {
+		return c, err
 	}
 	return c, nil
 }

@@ -1,5 +1,7 @@
-// Package settings stores the LLM connection in settings.json next to the
-// board. The API key is Fernet-encrypted at rest and never leaves the server.
+// Package settings stores runtime settings in settings.json next to the
+// entries: the LLM connection (the API key Fernet-encrypted at rest, never
+// sent to the browser) and the Telegram allowlist. Each section is written
+// on its own, so saving one never drops another.
 package settings
 
 import (
@@ -10,6 +12,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fernet/fernet-go"
@@ -35,11 +38,14 @@ type LLM struct {
 // the LLM_* env vars set a field.
 var Defaults = LLM{Temperature: 0.2, MaxTokens: 1024, TimeoutSec: 60, MaxToolRounds: 5, Streaming: true}
 
+// stored is the decoded settings.json. Top-level updated/by mean "LLM last
+// saved" (kept for files written before the telegram section existed).
 type stored struct {
-	Schema  int       `json:"schema"`
-	LLM     storedLLM `json:"llm"`
-	Updated string    `json:"updated,omitempty"`
-	By      string    `json:"by,omitempty"`
+	Schema   int             `json:"schema"`
+	LLM      storedLLM       `json:"llm"`
+	Telegram *storedTelegram `json:"telegram,omitempty"`
+	Updated  string          `json:"updated,omitempty"`
+	By       string          `json:"by,omitempty"`
 }
 
 type storedLLM struct {
@@ -90,18 +96,29 @@ func (e *ValidationError) Error() string { return e.Msg }
 
 var ErrConflict = errors.New("settings changed by someone else")
 
+// CacheTTL is how long a read of settings.json is reused before S3 is asked
+// again. Saves through this process update the cache at once; the TTL only
+// matters for edits made elsewhere (another replica, a restore).
+const CacheTTL = 30 * time.Second
+
 type Service struct {
-	store objstore.Store
-	env   LLM // values from LLM_* env vars, layered over Defaults
-	fkey  *fernet.Key
-	log   *slog.Logger
-	now   func() time.Time
+	store  objstore.Store
+	env    LLM      // values from LLM_* env vars, layered over Defaults
+	tgEnv  Telegram // from TELEGRAM_ALLOWED_IDS / TELEGRAM_ALLOWED_CHATS
+	fkey   *fernet.Key
+	log    *slog.Logger
+	now    func() time.Time
+	ttl    time.Duration
+	mu     sync.Mutex
+	cached stored
+	at     time.Time
+	has    bool
 }
 
 // NewService takes the env-level defaults and the SETTINGS_SECRET Fernet key
 // (may be empty: then keys can only come from LLM_API_KEY).
 func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) (*Service, error) {
-	s := &Service{store: store, env: env, log: log, now: time.Now}
+	s := &Service{store: store, env: env, log: log, now: time.Now, ttl: CacheTTL}
 	if secret != "" {
 		k, err := fernet.DecodeKey(secret)
 		if err != nil {
@@ -110,6 +127,90 @@ func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) 
 		s.fkey = k
 	}
 	return s, nil
+}
+
+// WithTelegramEnv sets the env-level Telegram allowlist (the default that a
+// telegram section in settings.json replaces).
+func (s *Service) WithTelegramEnv(t Telegram) *Service { s.tgEnv = t; return s }
+
+// SetClock replaces the time source (tests).
+func (s *Service) SetClock(now func() time.Time) { s.now = now }
+
+// current returns settings.json as of at most ttl ago. A missing file reads
+// as empty; an unreadable one is logged and reads as empty (env applies),
+// and is not cached so a fix shows up on the next call.
+func (s *Service) current(ctx context.Context) stored {
+	s.mu.Lock()
+	if s.has && s.now().Sub(s.at) < s.ttl {
+		st := s.cached
+		s.mu.Unlock()
+		return st
+	}
+	s.mu.Unlock()
+	st, _, err := s.load(ctx)
+	switch {
+	case err == nil, errors.Is(err, objstore.ErrNotFound):
+		s.mu.Lock()
+		s.cached, s.at, s.has = st, s.now(), true
+		s.mu.Unlock()
+		return st
+	default:
+		s.log.Warn("settings.json unreadable, using env defaults", "err", err)
+		return stored{}
+	}
+}
+
+func (s *Service) remember(body []byte) {
+	var st stored
+	if json.Unmarshal(body, &st) != nil {
+		return
+	}
+	s.mu.Lock()
+	s.cached, s.at, s.has = st, s.now(), true
+	s.mu.Unlock()
+}
+
+// modify is the only write path: read settings.json as raw sections, let fn
+// change the ones it owns, and write it back with the ETag guard. Sections
+// fn does not touch (including ones this version doesn't know) are kept.
+func (s *Service) modify(ctx context.Context, fn func(raw map[string]json.RawMessage) error) error {
+	for attempt := 0; ; attempt++ {
+		raw := map[string]json.RawMessage{}
+		body, etag, err := s.store.Get(ctx, Key)
+		switch {
+		case err == nil:
+			if json.Unmarshal(body, &raw) != nil {
+				// Unreadable file: overwrite it rather than leave the app stuck.
+				s.log.Warn("replacing unreadable settings.json")
+				raw = map[string]json.RawMessage{}
+			}
+		case errors.Is(err, objstore.ErrNotFound):
+			etag = ""
+		default:
+			return err
+		}
+		if err := fn(raw); err != nil {
+			return err
+		}
+		raw["schema"] = json.RawMessage("1")
+		out, _ := json.MarshalIndent(raw, "", "  ")
+		_, err = s.store.Put(ctx, Key, out, etag)
+		if err == nil {
+			s.remember(out)
+			return nil
+		}
+		if !errors.Is(err, objstore.ErrPrecondition) {
+			return err
+		}
+		if attempt >= 3 {
+			return ErrConflict
+		}
+	}
+}
+
+func setJSON(raw map[string]json.RawMessage, k string, v any) {
+	b, _ := json.Marshal(v)
+	raw[k] = b
 }
 
 func (s *Service) load(ctx context.Context) (stored, string, error) {
@@ -174,19 +275,12 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 // Resolve returns the settings to use right now. A missing or unreadable
 // settings.json falls back to env without failing.
 func (s *Service) Resolve(ctx context.Context) LLM {
-	st, _, err := s.load(ctx)
-	if err != nil && !errors.Is(err, objstore.ErrNotFound) {
-		s.log.Warn("settings.json unreadable, using env defaults", "err", err)
-	}
-	out, _ := s.resolve(st)
+	out, _ := s.resolve(s.current(ctx))
 	return out
 }
 
 func (s *Service) View(ctx context.Context) View {
-	st, _, err := s.load(ctx)
-	if err != nil && !errors.Is(err, objstore.ErrNotFound) {
-		s.log.Warn("settings.json unreadable, using env defaults", "err", err)
-	}
+	st := s.current(ctx)
 	l, fromEnv := s.resolve(st)
 	v := View{
 		BaseURL: l.BaseURL, Model: l.Model, Temperature: l.Temperature, MaxTokens: l.MaxTokens,
@@ -241,7 +335,8 @@ func (s *Service) ForTest(ctx context.Context, in Input) (LLM, error) {
 	}, nil
 }
 
-// Save writes settings.json with the same ETag guard as the board.
+// Save writes the llm section of settings.json (ETag-guarded), keeping
+// every other section as it is.
 func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 	if err := in.validate(); err != nil {
 		return View{}, err
@@ -258,41 +353,29 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 		e := string(tok)
 		enc = &e
 	}
-	for attempt := 0; ; attempt++ {
-		st, etag, err := s.load(ctx)
-		if err != nil && !errors.Is(err, objstore.ErrNotFound) {
-			// Unreadable file: overwrite it rather than leave the app stuck.
-			s.log.Warn("replacing unreadable settings.json", "err", err)
-		}
-		keep := st.LLM.APIKeyEnc
+	baseURL := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/")
+	model := strings.TrimSpace(in.Model)
+	err := s.modify(ctx, func(raw map[string]json.RawMessage) error {
+		var old storedLLM
+		_ = json.Unmarshal(raw["llm"], &old)
+		keep := old.APIKeyEnc
 		if in.ClearKey {
 			keep = nil
 		}
 		if enc != nil {
 			keep = enc
 		}
-		baseURL := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/")
-		model := strings.TrimSpace(in.Model)
-		next := stored{
-			Schema: 1,
-			LLM: storedLLM{
-				BaseURL: &baseURL, APIKeyEnc: keep, Model: &model, Temperature: &in.Temperature,
-				MaxTokens: &in.MaxTokens, TimeoutSec: &in.TimeoutSec, MaxToolRounds: &in.MaxToolRounds, Streaming: &in.Streaming,
-			},
-			Updated: s.now().UTC().Format(time.RFC3339),
-			By:      by,
-		}
-		body, _ := json.MarshalIndent(next, "", "  ")
-		_, err = s.store.Put(ctx, Key, body, etag)
-		if err == nil {
-			s.log.Info("LLM settings saved", "by", by, "model", model, "baseUrl", baseURL, "keyChanged", enc != nil || in.ClearKey)
-			return s.View(ctx), nil
-		}
-		if !errors.Is(err, objstore.ErrPrecondition) {
-			return View{}, err
-		}
-		if attempt >= 3 {
-			return View{}, ErrConflict
-		}
+		setJSON(raw, "llm", storedLLM{
+			BaseURL: &baseURL, APIKeyEnc: keep, Model: &model, Temperature: &in.Temperature,
+			MaxTokens: &in.MaxTokens, TimeoutSec: &in.TimeoutSec, MaxToolRounds: &in.MaxToolRounds, Streaming: &in.Streaming,
+		})
+		setJSON(raw, "updated", s.now().UTC().Format(time.RFC3339))
+		setJSON(raw, "by", by)
+		return nil
+	})
+	if err != nil {
+		return View{}, err
 	}
+	s.log.Info("LLM settings saved", "by", by, "model", model, "baseUrl", baseURL, "keyChanged", enc != nil || in.ClearKey)
+	return s.View(ctx), nil
 }

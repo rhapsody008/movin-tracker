@@ -13,5 +13,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Step 1.7 done. UI check script lives in git-ignored `tmp/ui-check/check.mjs` (headless Chrome over CDP against `make dev` on :8080, DEV_EMAIL auth); rerun it after frontend changes.
 - Step 1.7a done.
 - Step 1.8 done.
-- Next: 1.8a settings telegram section (+ fix Save dropping other sections), then 1.9 bot.
+- Step 1.8a done.
+- Next: 1.9 Telegram bot (poller, auth, per-chat workers, shared group history, Undo buttons, commands). Manual check needs a test bot token from ZY in `.env`.
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.
