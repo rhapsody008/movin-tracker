@@ -93,3 +93,5 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - Deleted the 20 `._*` files from `docs/raw/` (ZY OK).
 - Entries from the documents: broadband + router (ZY: needed before smart home works), Fermax activation, ask Fermax before renovation, defects via Novade, contacts.
 - Novade password in 3.1: ZY already changed it; no special handling needed for that document.
+- Bucket versioning stays **off** for now (ZY, 2026-11-11), until there is a need. Consequence: no S3-level undo; the in-app journal (last 200 changes) is the only undo. The admin guide's "Recover older data" applies only once versioning is on.
+- LLM connection gets **two kinds** (ZY): OpenAI-compatible (vMLX now, NAI later) and **Claude native** (Messages API, for prompt caching). Planned together with the widened Phase 1.5.
