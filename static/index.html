@@ -199,6 +199,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .drawer header h2{font-size:18px}
 .drawer .x{display:block}
 .drawer form{flex:1;overflow-y:auto;padding:16px;display:grid;gap:12px;align-content:start}
+.drawer form[hidden]{display:none}
 .drawer .row{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
 .drawer .row input{width:auto}
 .drawer .sub{font-size:13px;color:var(--muted);margin:0}
@@ -208,6 +209,21 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .drawer .result:empty{display:none}
 .drawer .foot2{border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
 .drawer .foot2 div{display:flex;gap:8px}
+.drawer .foot2[hidden]{display:none}
+.tabs{display:flex;gap:4px;padding:0 12px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 10px 8px;cursor:pointer;color:var(--muted);font-weight:700;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.panel{flex:1;overflow-y:auto;padding:16px;display:grid;gap:12px;align-content:start}
+.panel[hidden]{display:none}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0;font-size:14px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:14px}
+.steps li{display:flex;gap:8px;align-items:baseline;background:var(--sunk);border-radius:8px;padding:6px 10px;border-left:4px solid var(--line)}
+.steps li.ok{border-left-color:var(--ok)}
+.steps li.bad{border-left-color:var(--danger)}
+.steps li .ms{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
+.steps li .err{display:block;color:var(--danger);font-size:13px;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:no-preference){ .drawer{transition:transform .2s ease, visibility .2s} }
 @media (max-width:600px){ .drawer{width:100vw;border-left:0} }
 </style>
@@ -222,6 +238,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
       <div class="toplinks">
         <button class="link" id="newEntry" type="button">New entry</button>
         <a class="link" href="#calendar">Jump to calendar</a>
+        <button class="link" id="openAdmin" type="button">Settings</button>
       </div>
     </div>
     <button class="keytag" id="keytag" type="button" aria-label="Set move-in date"></button>
@@ -251,7 +268,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     <aside class="chat" id="chat" aria-label="Chat">
       <header><h2>Ask or tell</h2>
         <div class="hbtns">
-          <button class="gear" id="openSettings" type="button" aria-label="Chat settings" title="Chat settings">
+          <button class="gear" id="openSettings" type="button" aria-label="Settings" title="Settings">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
           <button class="x" id="closeChat" aria-label="Close chat">×</button>
@@ -269,9 +286,23 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 <button class="btn fab" id="fab" type="button">Ask or tell</button>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-label="Chat settings" aria-hidden="true">
-  <header><h2>Chat settings</h2><button class="x" id="closeSettings" type="button" aria-label="Close settings">×</button></header>
-  <form id="setForm" autocomplete="off">
+<aside class="drawer" id="drawer" aria-label="Settings" aria-hidden="true">
+  <header><h2>Settings</h2><button class="x" id="closeSettings" type="button" aria-label="Close settings">×</button></header>
+  <nav class="tabs" role="tablist" aria-label="Settings sections">
+    <button type="button" role="tab" id="tab-storage" aria-controls="panel-storage" data-tab="storage">Storage</button>
+    <button type="button" role="tab" id="tab-llm" aria-controls="setForm" data-tab="llm">LLM</button>
+    <button type="button" role="tab" id="tab-telegram" aria-controls="panel-telegram" data-tab="telegram" hidden>Telegram</button>
+    <button type="button" role="tab" id="tab-drawings" aria-controls="panel-drawings" data-tab="drawings" hidden>Drawings</button>
+  </nav>
+  <div class="panel" id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden>
+    <p class="sub">Where entries and settings are kept. These come from the server's environment and Secrets, so they can't be changed here.</p>
+    <dl class="kv" id="storageInfo"><dt>Loading…</dt><dd></dd></dl>
+    <p class="result bad" id="storageErr"></p>
+    <div><button class="btn ghost" type="button" id="storageTest">Test connection</button></div>
+    <p class="sub">Writes a scratch object under <code>_probe/</code>, checks that a stale write is refused (that is what protects concurrent edits), then deletes it.</p>
+    <ul class="steps" id="storageSteps" aria-live="polite"></ul>
+  </div>
+  <form id="setForm" role="tabpanel" aria-labelledby="tab-llm" autocomplete="off" hidden>
     <label>Endpoint URL<input name="baseUrl" type="url" placeholder="https://…/v1" required></label>
     <label>API key<input name="apiKey" type="password" autocomplete="new-password"></label>
     <p class="sub" id="keyNote"></p>
@@ -288,7 +319,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     <label class="row" id="saveAnywayRow" hidden><input type="checkbox" id="saveAnyway"> Save without a passing test</label>
     <p class="sub" id="setMeta"></p>
   </form>
-  <div class="foot2">
+  <div class="foot2" id="llmFoot" hidden>
     <button class="btn ghost" type="button" id="testBtn">Test connection</button>
     <div><button class="btn ghost" type="button" id="setCancel">Cancel</button><button class="btn" type="button" id="setSave" disabled>Save</button></div>
   </div>
@@ -805,7 +836,7 @@ $("input").addEventListener("input", autosize);
 $("input").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); send(); } });
 $("fab").onclick = ()=>{ $("chat").classList.add("open"); $("input").focus(); };
 $("closeChat").onclick = ()=>$("chat").classList.remove("open");
-function setModelLine(model){ $("modelLine").textContent = model ? "Answering: " + model : "No model set. Open settings (gear) to connect one."; }
+function setModelLine(model){ $("modelLine").textContent = model ? "Answering: " + model : "No model set. Open Settings → LLM to connect one."; }
 
 /* ---------- LLM settings drawer ---------- */
 const SF = $("setForm");
@@ -838,21 +869,83 @@ async function loadModels(){
   try{ const d = await api("GET", "/api/settings/llm/models?baseUrl="+encodeURIComponent(u)); fillModels(d.models); }catch{}
 }
 function fillModels(list){ $("modelList").innerHTML = (list||[]).map(m=>`<option value="${esc(m)}">`).join(""); }
-async function openSettings(){
+/* ---------- settings: tabs ---------- */
+const TABS = ["storage","llm"]; // telegram and drawings join in later steps
+let curTab = "llm", opener = null;
+function showTab(tab){
+  if(!TABS.includes(tab)) tab = "llm";
+  curTab = tab; store.set("movin.adminTab", tab);
+  document.querySelectorAll(".tabs [data-tab]").forEach(b=>{ const on = b.dataset.tab===tab; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; });
+  $("panel-storage").hidden = tab!=="storage";
+  SF.hidden = $("llmFoot").hidden = tab!=="llm";
+  if(tab==="storage") loadStorage();
+  if(tab==="llm") loadLLM();
+}
+document.querySelector(".tabs").addEventListener("click", e=>{ const b=e.target.closest("[data-tab]"); if(b) { showTab(b.dataset.tab); b.focus(); } });
+document.querySelector(".tabs").addEventListener("keydown", e=>{
+  if(e.key!=="ArrowRight" && e.key!=="ArrowLeft") return;
+  const i = TABS.indexOf(curTab), n = TABS[(i + (e.key==="ArrowRight" ? 1 : TABS.length-1)) % TABS.length];
+  showTab(n); $("tab-"+n).focus(); e.preventDefault();
+});
+function openSettings(tab, from){
+  opener = from || document.activeElement;
+  $("drawer").classList.add("open"); $("drawer").setAttribute("aria-hidden","false"); $("scrim").classList.add("open");
+  showTab(tab || store.get("movin.adminTab") || "llm");
+  $("tab-"+curTab).focus();
+}
+
+/* ---------- settings: storage ---------- */
+function ago(t){
+  const s = Math.round((Date.now() - new Date(t).getTime())/1000);
+  if(s < 60) return "just now";
+  if(s < 3600) return `${Math.round(s/60)} min ago`;
+  if(s < 86400) return `${Math.round(s/3600)} h ago`;
+  return `${Math.round(s/86400)} days ago`;
+}
+async function loadStorage(){
+  $("storageErr").textContent = "";
+  let v;
+  try{ v = await api("GET", "/api/admin/storage"); }catch(e){ $("storageErr").textContent = "Couldn't load storage details: " + e.message; return; }
+  const rows = [];
+  if(v.backend === "memory") rows.push(["Backend", "In memory (nothing is saved)"]);
+  else {
+    rows.push(["Bucket", v.bucket], ["Region", v.region || "—"], ["Prefix", v.prefix ? v.prefix + "/" : "(none)"],
+      ["Endpoint", v.endpoint || "AWS S3"], ["Credentials", v.credentialSource || "—"]);
+  }
+  rows.push(["Last write", v.lastWrite ? `${new Date(v.lastWrite.at).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} (${ago(v.lastWrite.at)}), ${v.lastWrite.key}` : "No entries saved yet"]);
+  $("storageInfo").innerHTML = rows.map(([k,x])=>`<dt>${esc(k)}</dt><dd>${esc(x)}</dd>`).join("");
+  $("storageErr").textContent = [v.credentialError, v.error].filter(Boolean).join(" ");
+}
+$("storageTest").onclick = async ()=>{
+  const b = $("storageTest"), list = $("storageSteps");
+  b.disabled = true; list.innerHTML = `<li>Testing…</li>`;
+  try{
+    const r = await api("POST", "/api/admin/storage/test");
+    list.innerHTML = r.steps.map(s=>`<li class="${s.ok?"ok":s.skipped?"":"bad"}"><span>${s.ok?"✓":s.skipped?"–":"✗"} ${esc(s.name)}${s.error?`<span class="err">${esc(s.error)}</span>`:""}</span><span class="ms">${s.skipped?"skipped":s.ms+" ms"}</span></li>`).join("")
+      + `<li class="${r.ok?"ok":"bad"}"><b>${r.ok ? "Storage works, including safe concurrent writes." : "Something failed; see the step above."}</b></li>`;
+    loadStorage();
+  }catch(e){ list.innerHTML = `<li class="bad">${esc(e.message)}</li>`; }
+  finally{ b.disabled = false; }
+};
+
+/* ---------- settings: LLM ---------- */
+async function loadLLM(){
   clearKey = false; testedSig = null; $("saveAnyway").checked = false; $("testResult").textContent = ""; $("testResult").className = "result";
-  try{ setState = await api("GET", "/api/settings/llm"); }catch(e){ flash("Couldn't load chat settings: " + e.message); return; }
+  try{ setState = await api("GET", "/api/settings/llm"); }catch(e){ $("testResult").className = "result bad"; $("testResult").textContent = "Couldn't load chat settings: " + e.message; return; }
   const v = setState;
   SF.baseUrl.value = v.baseUrl||""; SF.apiKey.value = ""; SF.model.value = v.model||"";
   SF.temperature.value = v.temperature; SF.maxTokens.value = v.maxTokens; SF.timeoutSec.value = v.timeoutSec;
   SF.maxToolRounds.value = v.maxToolRounds; SF.streaming.checked = !!v.streaming;
   $("setMeta").textContent = v.updated ? `Last saved ${new Date(v.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${v.by}.` : "Not saved yet; using the server's defaults.";
   keyNote(); updateSaveBtn();
-  $("drawer").classList.add("open"); $("drawer").setAttribute("aria-hidden","false"); $("scrim").classList.add("open");
-  SF.baseUrl.focus();
   loadModels();
 }
-function closeSettings(){ $("drawer").classList.remove("open"); $("drawer").setAttribute("aria-hidden","true"); $("scrim").classList.remove("open"); $("openSettings").focus(); }
-$("openSettings").onclick = openSettings;
+function closeSettings(){
+  $("drawer").classList.remove("open"); $("drawer").setAttribute("aria-hidden","true"); $("scrim").classList.remove("open");
+  (opener && document.contains(opener) ? opener : $("openAdmin")).focus();
+}
+$("openSettings").onclick = e=>openSettings("llm", e.currentTarget);
+$("openAdmin").onclick = e=>openSettings(null, e.currentTarget);
 $("closeSettings").onclick = closeSettings;
 $("setCancel").onclick = closeSettings;
 $("scrim").onclick = closeSettings;

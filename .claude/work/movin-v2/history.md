@@ -11,5 +11,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Step 1.6 done. Local MinIO's settings.json (saved via the drawer earlier) points the app at `nai-uep-backend` behind a Cloudflare tunnel that is down; `.env`'s vMLX values only apply when no drawer settings are saved.
 - Secrets plan + GitHub OAuth + public image decided (decisions.md). Step 1.6a done.
 - Step 1.7 done. UI check script lives in git-ignored `tmp/ui-check/check.mjs` (headless Chrome over CDP against `make dev` on :8080, DEV_EMAIL auth); rerun it after frontend changes.
-- Next: 1.7a admin shell (Storage + LLM tabs).
+- Step 1.7a done.
+- Next: 1.8 Telegram client (hand-written Bot API client + token scrubbing).
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.
