@@ -1,0 +1,33 @@
+# Production overlay. Set the image, host and emails here. A Flux
+# Kustomization pointing at this directory is a drop-in later.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: movin
+resources:
+  - namespace.yaml
+  - ../../base
+images:
+  - name: movin
+    newName: ghcr.io/rhapsody008/movin-tracker
+    newTag: "1.0.0" # git tag v1.0.0 -> image tag 1.0.0 (see .github/workflows/image.yml)
+configMapGenerator:
+  - name: movin-config
+    behavior: merge
+    literals:
+      - S3_BUCKET=zy-condo-board
+      - S3_PREFIX=prod
+      - ALLOWED_EMAILS=zy@example.com,partner@example.com
+patches:
+  - target: { kind: Ingress, name: movin }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: board.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: board.example.com
+  - target: { kind: Deployment, name: movin }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/1/env/0/value
+        value: https://board.example.com/oauth2/callback

@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: movin
+  labels: { app: movin }
+spec:
+  # One replica: S3 conditional writes would keep two correct, but SSE
+  # fan-out is per process. Recreate so two never overlap during a rollout.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: movin }
+  template:
+    metadata:
+      labels: { app: movin }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: app
+          image: movin:latest
+          args: ["serve"]
+          env:
+            # Localhost only: nothing but the oauth2-proxy sidecar can reach
+            # the app, so the X-Forwarded-Email header can be trusted.
+            - { name: LISTEN_ADDR, value: "127.0.0.1:8080" }
+          envFrom:
+            - configMapRef: { name: movin-config }
+            - secretRef: { name: movin-secrets }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          livenessProbe:
+            exec: { command: ["/movin", "healthcheck"] }
+            periodSeconds: 30
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
+          args: ["--config=/etc/oauth2-proxy/oauth2-proxy.cfg"]
+          envFrom:
+            - secretRef: { name: oauth2-proxy }
+          env:
+            - { name: OAUTH2_PROXY_REDIRECT_URL, value: "https://board.example.com/oauth2/callback" }
+          ports:
+            - { name: http, containerPort: 4180 }
+          readinessProbe:
+            # Passes through to the app's /readyz (skip_auth_routes), so the
+            # pod is ready only when the app can read S3.
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /ping, port: http }
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: oauth2-proxy-config, mountPath: /etc/oauth2-proxy, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+        - name: oauth2-proxy-config
+          configMap: { name: oauth2-proxy-config }

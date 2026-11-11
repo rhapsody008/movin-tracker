@@ -1,0 +1,16 @@
+# Live reload for `make dev`. Polling, because file events do not cross
+# the Docker Desktop bind mount reliably on macOS.
+root = "."
+tmp_dir = "/tmp/air"
+
+[build]
+  cmd = "go build -o /tmp/air/movin ./cmd/movin"
+  entrypoint = ["/tmp/air/movin"]
+  include_ext = ["go"]
+  exclude_dir = ["static", "reference", "deploy", "fixtures", ".git"]
+  poll = true
+  poll_interval = 1000
+  delay = 300
+
+[log]
+  main_only = true

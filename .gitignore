@@ -1,0 +1,12 @@
+.env
+.env.bak
+/tmp/
+*.test
+/movin
+board.import.json
+
+# macOS
+.DS_Store
+
+# Unit drawings and other private source material (kept in S3, never in git)
+/unitmaterial/
