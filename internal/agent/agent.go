@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rhapsody008/movin-tracker/internal/docs"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/llm"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
@@ -86,6 +87,7 @@ type Event struct {
 
 type Runner struct {
 	Entries *entries.Service
+	Docs    *docs.Library // nil: the documents feature is off
 	Loc     *time.Location
 	Log     *slog.Logger
 	Now     func() time.Time
@@ -108,6 +110,11 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 		return Result{}, err
 	}
 	system := r.SystemSections(snap.Doc, req)
+	if ds := r.docsSection(ctx); ds != "" {
+		// Between the rules and the entries: it changes only with a sync.
+		system = append([]llm.Section{system[0], {Text: ds, CacheBreak: true}}, system[1:]...)
+	}
+	tools := r.tools()
 	msgs := make([]llm.Message, 0, len(turns))
 	for _, t := range turns {
 		msgs = append(msgs, llm.Message{Role: t.Role, Content: t.Content})
@@ -123,7 +130,7 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 	for round := 1; round <= rounds; round++ {
 		force := round == rounds
 		out, err := client.Complete(ctx, llm.Request{
-			System: system, Messages: msgs, Tools: Tools, ForceAnswer: force, Stream: cfg.Streaming, Think: req.Think,
+			System: system, Messages: msgs, Tools: tools, ForceAnswer: force, Stream: cfg.Streaming, Think: req.Think,
 			OnText: func(s string) { emit(Event{Type: "delta", Text: s}) },
 		})
 		if err != nil {

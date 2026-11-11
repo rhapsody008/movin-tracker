@@ -41,7 +41,7 @@ var (
 		`"tags":{"type":"array","items":{"type":"string"}}`
 )
 
-// Tools are the agent's tools. ask_drawings joins in phase 1.5.
+// Tools are the entry tools; DocTools join them when documents are on.
 var Tools = []llm.Tool{
 	tool("add_entry", "Record one or more new entries. Returns their ids.",
 		`{"type":"object","properties":{"entries":{"type":"array","items":{"type":"object","properties":{`+entryProps+`},"required":["kind","title"]}}},"required":["entries"]}`),
@@ -81,6 +81,10 @@ func (r *Runner) exec(ctx context.Context, a entries.Actor, tc llm.ToolCall) (st
 			return r.setDates(ctx, args)
 		case "undo_change":
 			return r.undoChange(ctx, a, args)
+		case "search_documents":
+			return r.searchDocuments(ctx, args)
+		case "read_document_page":
+			return r.readDocumentPage(ctx, args)
 		}
 		return nil, nil, fmt.Errorf("unknown tool %q", tc.Function.Name)
 	}()
