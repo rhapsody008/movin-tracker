@@ -24,3 +24,5 @@ configMapGenerator:
       # people as id=name, groups as negative chat IDs.
       - TELEGRAM_ALLOWED_IDS=
       - TELEGRAM_ALLOWED_CHATS=
+      # Daily re-read of the PDFs under docs/raw/ (HH:MM in TZ), or off.
+      - DOCS_SYNC_SCHEDULE=03:00

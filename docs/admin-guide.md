@@ -325,6 +325,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `TZ` | `Asia/Singapore` | Time zone for dates |
 | `LOG_LEVEL` | `info` | `debug` logs every request |
 | `DOCS_SYNC_SCHEDULE` | `03:00` | Daily document sync time in `TZ` (HH:MM), or `off` |
+| `GOMEMLIMIT` | `128MiB` in k8s | Go's heap target, below the 256 Mi pod limit (the PDF tools run beside it) |
 
 ### What's in the bucket
 
@@ -335,7 +336,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `_probe/...` | Storage test scratch files, deleted right after |
 | `docs/raw/...` | Your documents: drawings, contracts, developer and management-office papers (upload here, subfolders welcome, e.g. `docs/raw/contracts/...`) |
 | `docs/index.json` | The documents list the app keeps (kind, pages, status, last sync); rebuilt by a sync if deleted |
-| `docs/text/...` | The text of each page, one file per document (`<same path>.json`); safe to delete, the next sync recreates it |
+| `docs/text/...` | The text of each page, one file per document (`<same path>.json`); safe to delete, the next sync recreates it. The app never deletes anything, so the text of a removed PDF stays until you delete it |
 
 ## Not built yet
 

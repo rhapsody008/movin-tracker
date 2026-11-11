@@ -49,7 +49,7 @@ Plan, progress and decisions for the current work: [.claude/work/movin-v2](.clau
 
 ## Deployment, in short
 
-Single-replica Deployment (`Recreate`, no PVC) with the app and an oauth2-proxy sidecar; read-only root filesystem, 16 Mi `/tmp`. Manifests are in [deploy/k8s](deploy/k8s); the Secrets to create by hand are described in [deploy/k8s/base/secrets.example.yaml](deploy/k8s/base/secrets.example.yaml); the S3 permissions are in [deploy/iam-policy.json](deploy/iam-policy.json). The target is an NKP project with Flux pulling a versioned OCI artifact that CI publishes on each `v*` tag (planned; CI never commits to the repo). The admin guide has the step-by-step.
+Single-replica Deployment (`Recreate`, no PVC) with the app and an oauth2-proxy sidecar; read-only root filesystem, 16 Mi `/tmp`, app memory limit 256 Mi with `GOMEMLIMIT=128MiB` (the PDF tools run beside the Go process; measured peak 135 MiB while rendering a drawing). Manifests are in [deploy/k8s](deploy/k8s); the Secrets to create by hand are described in [deploy/k8s/base/secrets.example.yaml](deploy/k8s/base/secrets.example.yaml); the S3 permissions are in [deploy/iam-policy.json](deploy/iam-policy.json). The target is an NKP project with Flux pulling a versioned OCI artifact that CI publishes on each `v*` tag (planned; CI never commits to the repo). The admin guide has the step-by-step.
 
 ## Notes
 

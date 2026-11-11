@@ -67,7 +67,9 @@ services:
       # Published for the local check only; in k8s the app stays on
       # 127.0.0.1 behind oauth2-proxy (the code's default).
       LISTEN_ADDR: ":8080"
+      GOMEMLIMIT: 128MiB
     read_only: true
+    mem_limit: 256m # as in k8s (deploy/k8s/base/deployment.yaml)
     tmpfs: ["/tmp:size=16m"]
     user: "65532:65532"
     cap_drop: [ALL]

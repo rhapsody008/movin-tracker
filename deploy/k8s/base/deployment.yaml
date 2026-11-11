@@ -29,12 +29,18 @@ spec:
             # Localhost only: nothing but the oauth2-proxy sidecar can reach
             # the app, so the X-Forwarded-Email header can be trusted.
             - { name: LISTEN_ADDR, value: "127.0.0.1:8080" }
+            # Go's own heap target, below the limit: the PDF tools (poppler)
+            # run as child processes in the same memory limit.
+            - { name: GOMEMLIMIT, value: "128MiB" }
           envFrom:
             - configMapRef: { name: movin-config }
             - secretRef: { name: movin-secrets }
+          # Measured with the documents feature on the production image: about
+          # 30 MiB at rest, 135 MiB peak while rendering a drawing (whole
+          # sheet, then a zoomed crop; poppler included).
           resources:
-            requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 128Mi }
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { memory: 256Mi }
           livenessProbe:
             exec: { command: ["/movin", "healthcheck"] }
             periodSeconds: 30
