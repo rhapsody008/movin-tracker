@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/agent"
@@ -35,6 +36,8 @@ type Server struct {
 
 	// SSEHeartbeat keeps idle proxies from closing the event stream.
 	SSEHeartbeat time.Duration
+
+	probeMu sync.Mutex // one storage test at a time
 }
 
 type ctxKey struct{}
@@ -57,6 +60,8 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"email": userOf(r)})
 	})
+	api.HandleFunc("GET /api/admin/storage", s.getStorage)
+	api.HandleFunc("POST /api/admin/storage/test", s.testStorage)
 	api.HandleFunc("GET /api/settings/llm", s.getSettings)
 	api.HandleFunc("PUT /api/settings/llm", s.putSettings)
 	api.HandleFunc("POST /api/settings/llm/test", s.testSettings)

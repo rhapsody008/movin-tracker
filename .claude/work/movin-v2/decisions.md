@@ -58,3 +58,10 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - Bridge: NKP watches a static `deploy/flux/` folder holding an OCIRepository (semver `>=1.0.0`, secretRef ghcr-pull) and a Flux Kustomization (path ./overlays/prod, prune). Rollback = hand-edit a tag pin there.
 - The overlay drops namespace.yaml and `namespace: movin`; the NKP project owns the namespace.
 - NKP service-account permissions for creating Flux objects: ZY will fix if needed. No cluster available yet; planner + cluster check happen when ZY says it's up.
+
+## Secrets and sign-in (2026-11-11)
+- Secrets are created by hand in the NKP project namespace for now; SOPS + Flux (one age key) is the later option if rotation gets tedious.
+- Manual secrets: `movin-secrets` (AWS_ACCESS_KEY_ID/SECRET — static IAM user, NKP has no IRSA; SETTINGS_SECRET — self-generated Fernet key, separate from dev, kept stable; TELEGRAM_BOT_TOKEN; LLM_API_KEY optional, prefer the admin page), `oauth2-proxy` (client id/secret + cookie secret), `ghcr-pull` (GitHub token, read:packages, for Flux to pull the private deploy artifact).
+- Web sign-in: **GitHub OAuth App** via oauth2-proxy (`provider = "github"`, `scope = "user:email"`, email allowlist kept). Telegram does not use OAuth.
+- The app image on GHCR is **public** (binary + embedded frontend only, no config or secrets). The deploy artifact stays **private**.
+- After editing a hand-made secret: `kubectl rollout restart deploy/movin` (or Reloader annotation if NKP has it).

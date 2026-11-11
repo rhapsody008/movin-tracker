@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -534,5 +535,106 @@ func TestSettingsTestEndpoint(t *testing.T) {
 	// Testing does not save.
 	if _, v, _ := e.do(t, "GET", "/api/settings/llm", ""); v["model"] != "env-model" {
 		t.Fatalf("test must not save: %v", v)
+	}
+}
+
+// denyDelete simulates an IAM policy without s3:DeleteObject.
+type denyDelete struct{ objstore.Store }
+
+func (denyDelete) Delete(context.Context, string) error {
+	return fmt.Errorf("operation error S3: DeleteObject, StatusCode: 403, AccessDenied")
+}
+
+func (d denyDelete) Info(ctx context.Context) objstore.Info {
+	return d.Store.(objstore.Describer).Info(ctx)
+}
+
+func TestStorageAdmin(t *testing.T) {
+	for name, store := range testutil.Stores(t) {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t, store, nil)
+			code, m, body := e.do(t, "GET", "/api/admin/storage", "")
+			if code != 200 || m["backend"] == nil {
+				t.Fatalf("storage view: %d %s", code, body)
+			}
+			if name == "s3" && (m["bucket"] == "" || m["credentialSource"] != "env keys") {
+				t.Fatalf("s3 view: %s", body)
+			}
+			first, _ := m["lastWrite"].(map[string]any)
+			if first == nil || first["key"] != "entries.json" {
+				t.Fatalf("lastWrite missing after load: %s", body)
+			}
+			// Key material must never reach the browser.
+			for _, k := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
+				if v := os.Getenv(k); len(v) >= 4 && strings.Contains(body, v) {
+					t.Fatalf("%s value leaked into the storage view", k)
+				}
+			}
+
+			// S3 LastModified has one-second resolution.
+			time.Sleep(1100 * time.Millisecond)
+			e.do(t, "POST", "/api/entries", `{"title":"after"}`)
+			_, m, _ = e.do(t, "GET", "/api/admin/storage", "")
+			second := m["lastWrite"].(map[string]any)
+			if !(second["at"].(string) > first["at"].(string)) {
+				t.Fatalf("lastWrite did not advance: %v → %v", first["at"], second["at"])
+			}
+
+			code, m, body = e.do(t, "POST", "/api/admin/storage/test", "")
+			steps, _ := m["steps"].([]any)
+			if code != 200 || m["ok"] != true || len(steps) != 6 {
+				t.Fatalf("probe: %d %s", code, body)
+			}
+			if _, err := store.Stat(context.Background(), m["key"].(string)); err == nil {
+				t.Fatal("probe left its scratch object behind")
+			}
+		})
+	}
+}
+
+func TestStorageProbeReportsDeniedDelete(t *testing.T) {
+	store := denyDelete{objstore.NewMemory()}
+	e := setup(t, store, nil)
+	code, m, body := e.do(t, "POST", "/api/admin/storage/test", "")
+	steps := m["steps"].([]any)
+	if code != 200 || m["ok"] != false || len(steps) != 6 {
+		t.Fatalf("probe: %d %s", code, body)
+	}
+	for i, s := range steps {
+		st := s.(map[string]any)
+		if wantOK := i < 5; st["ok"] != wantOK {
+			t.Errorf("step %d (%v) ok=%v, want %v", i, st["name"], st["ok"], wantOK)
+		}
+	}
+	if last := steps[5].(map[string]any); last["name"] != "delete" || !strings.Contains(last["error"].(string), "AccessDenied") {
+		t.Fatalf("delete step: %v", last)
+	}
+}
+
+// staleAccepted simulates storage that ignores If-Match.
+type staleAccepted struct{ *objstore.Memory }
+
+func (s staleAccepted) Put(ctx context.Context, k string, b []byte, m string) (string, error) {
+	if strings.HasPrefix(k, server.ProbePrefix) && m != "" {
+		return s.Memory.Put(ctx, k, b, s.etag(ctx, k))
+	}
+	return s.Memory.Put(ctx, k, b, m)
+}
+
+func (s staleAccepted) etag(ctx context.Context, k string) string {
+	e, _ := s.Memory.Head(ctx, k)
+	return e
+}
+
+func TestStorageProbeCatchesIgnoredConditions(t *testing.T) {
+	store := staleAccepted{objstore.NewMemory()}
+	e := setup(t, store, nil)
+	_, m, body := e.do(t, "POST", "/api/admin/storage/test", "")
+	steps := m["steps"].([]any)
+	if m["ok"] != false || steps[3].(map[string]any)["ok"] != false || steps[4].(map[string]any)["skipped"] != true || steps[5].(map[string]any)["ok"] != true {
+		t.Fatalf("want stale-write step failed, write skipped, delete still run: %s", body)
+	}
+	if _, err := store.Stat(context.Background(), m["key"].(string)); err == nil {
+		t.Fatal("a failed probe must still clean up")
 	}
 }

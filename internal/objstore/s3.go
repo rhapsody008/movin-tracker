@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -18,13 +19,17 @@ import (
 
 // S3 is a Store backed by one bucket and key prefix.
 type S3 struct {
-	Client *s3.Client
-	Bucket string
-	Prefix string
+	Client   *s3.Client
+	Bucket   string
+	Prefix   string
+	Region   string
+	Endpoint string
+	creds    aws.CredentialsProvider
 }
 
 // S3Options configures NewS3. Credentials come from the default AWS chain
-// (env vars, IRSA, instance profile), so none are passed here.
+// (env keys, shared profile, web identity, instance role), so none are
+// passed here.
 type S3Options struct {
 	Bucket      string
 	Prefix      string
@@ -43,7 +48,7 @@ func NewS3(ctx context.Context, o S3Options) (*S3, error) {
 			opt.UsePathStyle = true
 		}
 	})
-	return &S3{Client: client, Bucket: o.Bucket, Prefix: o.Prefix}, nil
+	return &S3{Client: client, Bucket: o.Bucket, Prefix: o.Prefix, Region: o.Region, Endpoint: o.EndpointURL, creds: cfg.Credentials}, nil
 }
 
 func (s *S3) key(k string) string {
@@ -93,6 +98,60 @@ func (s *S3) Put(ctx context.Context, key string, body []byte, ifMatch string) (
 	return aws.ToString(out.ETag), nil
 }
 
+func (s *S3) Stat(ctx context.Context, key string) (ObjectInfo, error) {
+	out, err := s.Client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &s.Bucket, Key: aws.String(s.key(key))})
+	if err != nil {
+		return ObjectInfo{}, mapErr(err)
+	}
+	return ObjectInfo{Key: key, ETag: aws.ToString(out.ETag), Size: aws.ToInt64(out.ContentLength), LastModified: aws.ToTime(out.LastModified)}, nil
+}
+
+func (s *S3) Delete(ctx context.Context, key string) error {
+	_, err := s.Client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.Bucket, Key: aws.String(s.key(key))})
+	return mapErr(err)
+}
+
+// Info reports where the store points and which kind of credentials the
+// AWS chain found. It resolves the credentials (cached by the SDK) but only
+// keeps their source name.
+func (s *S3) Info(ctx context.Context) Info {
+	in := Info{Backend: "s3", Bucket: s.Bucket, Region: s.Region, Prefix: s.Prefix, Endpoint: s.Endpoint}
+	if s.creds == nil {
+		in.CredentialSource = "none"
+		return in
+	}
+	c, err := s.creds.Retrieve(ctx)
+	if err != nil {
+		in.CredentialSource = "none found"
+		in.CredentialError = "no AWS credentials could be loaded"
+		return in
+	}
+	in.CredentialSource = CredentialLabel(c.Source)
+	return in
+}
+
+// CredentialLabel turns an AWS SDK credential source name into a short
+// label for the admin page.
+func CredentialLabel(source string) string {
+	switch {
+	case strings.Contains(source, "EnvConfig"):
+		return "env keys"
+	case strings.Contains(source, "WebIdentity"):
+		return "web identity (IRSA)"
+	case strings.Contains(source, "SharedConfig"):
+		return "shared profile"
+	case strings.Contains(source, "EC2RoleProvider"):
+		return "instance role"
+	case strings.Contains(source, "Endpoint"), strings.Contains(source, "ECS"):
+		return "container role"
+	case strings.Contains(source, "SSO"):
+		return "SSO"
+	case source == "":
+		return "unknown"
+	}
+	return source
+}
+
 // CreateBucket makes the bucket and turns versioning on. Local dev only; the
 // production IAM policy deliberately does not allow it.
 func (s *S3) CreateBucket(ctx context.Context) error {
@@ -110,6 +169,9 @@ func (s *S3) CreateBucket(ctx context.Context) error {
 }
 
 func mapErr(err error) error {
+	if err == nil {
+		return nil
+	}
 	var re *smithyhttp.ResponseError
 	if errors.As(err, &re) {
 		switch re.HTTPStatusCode() {

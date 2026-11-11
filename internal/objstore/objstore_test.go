@@ -74,3 +74,58 @@ func TestConditionalWrites(t *testing.T) {
 		})
 	}
 }
+
+func TestStatDeleteInfo(t *testing.T) {
+	for name, s := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			if _, err := s.Stat(ctx, "y.json"); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("stat missing: want ErrNotFound, got %v", err)
+			}
+			before := time.Now().Add(-2 * time.Second)
+			etag, err := s.Put(ctx, "y.json", []byte(`{"v":1}`), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			st, err := s.Stat(ctx, "y.json")
+			if err != nil || st.ETag != etag || st.Size != 7 || st.LastModified.Before(before) || st.LastModified.After(time.Now().Add(2*time.Second)) {
+				t.Fatalf("stat: %+v err=%v", st, err)
+			}
+			if err := s.Delete(ctx, "y.json"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Stat(ctx, "y.json"); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("after delete: want ErrNotFound, got %v", err)
+			}
+			if err := s.Delete(ctx, "y.json"); err != nil {
+				t.Fatalf("deleting a missing key must not fail: %v", err)
+			}
+			d, ok := s.(Describer)
+			if !ok {
+				t.Fatal("store does not describe itself")
+			}
+			in := d.Info(ctx)
+			if name == "s3" && (in.Backend != "s3" || in.Bucket == "" || in.Endpoint == "" || in.CredentialSource != "env keys") {
+				t.Fatalf("s3 info: %+v", in)
+			}
+			if name == "memory" && in.Backend != "memory" {
+				t.Fatalf("memory info: %+v", in)
+			}
+		})
+	}
+}
+
+func TestCredentialLabel(t *testing.T) {
+	for in, want := range map[string]string{
+		"EnvConfigCredentials":                      "env keys",
+		"WebIdentityCredentials":                    "web identity (IRSA)",
+		"SharedConfigCredentials: /root/.aws/creds": "shared profile",
+		"EC2RoleProvider":                           "instance role",
+		"":                                          "unknown",
+		"SomethingNew":                              "SomethingNew",
+	} {
+		if got := CredentialLabel(in); got != want {
+			t.Errorf("CredentialLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

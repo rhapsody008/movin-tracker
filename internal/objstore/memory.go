@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"sync"
+	"time"
 )
 
 // Memory is an in-process Store with the same conditional-write rules as S3.
@@ -18,6 +19,7 @@ type Memory struct {
 type memObj struct {
 	body []byte
 	etag string
+	mod  time.Time
 }
 
 func NewMemory() *Memory { return &Memory{objs: map[string]memObj{}} }
@@ -58,6 +60,25 @@ func (m *Memory) Put(_ context.Context, key string, body []byte, ifMatch string)
 	m.seq++
 	sum := md5.Sum(append([]byte{byte(m.seq), byte(m.seq >> 8)}, body...))
 	etag := `"` + hex.EncodeToString(sum[:]) + `"`
-	m.objs[key] = memObj{body: append([]byte(nil), body...), etag: etag}
+	m.objs[key] = memObj{body: append([]byte(nil), body...), etag: etag, mod: time.Now().UTC()}
 	return etag, nil
 }
+
+func (m *Memory) Stat(_ context.Context, key string) (ObjectInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	o, ok := m.objs[key]
+	if !ok {
+		return ObjectInfo{}, ErrNotFound
+	}
+	return ObjectInfo{Key: key, ETag: o.etag, Size: int64(len(o.body)), LastModified: o.mod}, nil
+}
+
+func (m *Memory) Delete(_ context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.objs, key)
+	return nil
+}
+
+func (m *Memory) Info(context.Context) Info { return Info{Backend: "memory"} }

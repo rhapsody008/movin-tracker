@@ -9,5 +9,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Committed 1.1–1.4 as e7b3fa1. Deployment decision (OCI artifact + NKP/Flux bridge) recorded; planner + cluster check wait until ZY's NKP cluster is up.
 - Local LLM: vMLX on 127.0.0.1:8081 (another project's container `secure-intake-app-standby-1` also publishes 8081 on all interfaces, so `localhost` from the Mac can hit the wrong one; from Docker use `host.docker.internal:8081`). Step 1.5 done: 10/10.
 - Step 1.6 done. Local MinIO's settings.json (saved via the drawer earlier) points the app at `nai-uep-backend` behind a Cloudflare tunnel that is down; `.env`'s vMLX values only apply when no drawer settings are saved.
-- Next: 1.6a storage admin.
+- Secrets plan + GitHub OAuth + public image decided (decisions.md). Step 1.6a done.
+- Next: 1.7 frontend (kanban/calendar on entries).
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.
