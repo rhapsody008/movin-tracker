@@ -55,6 +55,9 @@ type request struct {
 	Temperature float64   `json:"temperature"`
 	MaxTokens   int       `json:"max_tokens"`
 	Stream      bool      `json:"stream,omitempty"`
+	// ChatTemplateKwargs carries enable_thinking=false when thinking is
+	// on demand and this turn didn't ask for it.
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 }
 
 // APIError is a non-2xx answer from the endpoint, kept short for the UI.
@@ -70,6 +73,9 @@ func (e *APIError) Error() string {
 type Client struct {
 	cfg  settings.LLM
 	http *http.Client
+	// Think asks for thinking on this turn. It only matters when
+	// cfg.ThinkOnDemand is set; otherwise the server decides.
+	Think bool
 }
 
 func New(cfg settings.LLM) *Client {
@@ -158,6 +164,9 @@ func (c *Client) Complete(ctx context.Context, msgs []Message, tools []Tool, for
 	}
 	if forceAnswer && len(tools) > 0 {
 		req.ToolChoice = "none"
+	}
+	if c.cfg.ThinkOnDemand && !c.Think {
+		req.ChatTemplateKwargs = map[string]any{"enable_thinking": false}
 	}
 	resp, err := c.do(ctx, http.MethodPost, "/chat/completions", req)
 	if err != nil {

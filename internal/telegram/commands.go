@@ -13,6 +13,7 @@ import (
 
 // Commands is the menu Telegram shows when typing "/".
 var Commands = []BotCommand{
+	{Command: "think", Description: "Think it through first (slower), e.g. /think compare the quotes"},
 	{Command: "recent", Description: "Show the last 10 changes"},
 	{Command: "undo", Description: "Undo my last change"},
 	{Command: "sync", Description: "Re-read the drawings"},
@@ -28,6 +29,7 @@ Examples:
 • What did we decide for the kitchen and what did it cost?
 
 Every change comes back with an Undo button.
+/think   start a message with it when I should think it through first (slower), e.g. /think compare the two zip blind quotes
 /recent  the last 10 changes
 /undo    undo your last change
 /help    this message`
@@ -35,7 +37,8 @@ Every change comes back with an Undo button.
 // command handles a /command. In groups, "/cmd@otherbot" is for another bot
 // and is ignored.
 func (b *Bot) command(ctx context.Context, m *Message, name, text string) {
-	word, _, _ := strings.Cut(text, " ")
+	word := strings.Fields(text)[0]
+	rest := strings.TrimSpace(text[len(word):])
 	cmd, target, _ := strings.Cut(strings.TrimPrefix(word, "/"), "@")
 	b.mu.Lock()
 	me := b.st.BotUsername
@@ -44,6 +47,12 @@ func (b *Bot) command(ctx context.Context, m *Message, name, text string) {
 		return
 	}
 	switch strings.ToLower(cmd) {
+	case "think":
+		if rest == "" {
+			b.reply(ctx, m, "Put your question after /think, e.g. /think which countertop fits our budget better?", nil)
+			return
+		}
+		b.converse(ctx, m, name, rest, true)
 	case "start", "help":
 		b.reply(ctx, m, helpText, nil)
 	case "recent":

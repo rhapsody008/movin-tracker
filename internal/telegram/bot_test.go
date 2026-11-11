@@ -190,6 +190,7 @@ type stubLLM struct {
 	maxSeen  atomic.Int32
 	mu       sync.Mutex
 	requests [][]map[string]any
+	kwargs   []map[string]any // chat_template_kwargs per request
 }
 
 func newLLM(t *testing.T) *stubLLM {
@@ -206,10 +207,12 @@ func newLLM(t *testing.T) *stubLLM {
 		time.Sleep(s.delay)
 		var req struct {
 			Messages []map[string]any `json:"messages"`
+			Kwargs   map[string]any   `json:"chat_template_kwargs"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		s.mu.Lock()
 		s.requests = append(s.requests, req.Messages)
+		s.kwargs = append(s.kwargs, req.Kwargs)
 		s.mu.Unlock()
 		last := req.Messages[len(req.Messages)-1]
 		content, _ := last["content"].(string)
@@ -254,6 +257,7 @@ func startBot(t *testing.T) *botRig {
 	llm := newLLM(t)
 	env := settings.Defaults
 	env.BaseURL, env.Model, env.MaxToolRounds = llm.srv.URL+"/v1", "m", 3
+	env.ThinkOnDemand = true
 	sets, _ := settings.NewService(store, env, "", log)
 	tgEnv, _ := settings.ParseTelegramEnv(fmt.Sprintf("%d=ZY,%d=Partner", zyID, partnerID), fmt.Sprint(groupID))
 	sets.WithTelegramEnv(tgEnv)
@@ -563,6 +567,7 @@ func TestShutdownFinishesTakenTurns(t *testing.T) {
 	llm.delay = 300 * time.Millisecond
 	env := settings.Defaults
 	env.BaseURL, env.Model, env.MaxToolRounds = llm.srv.URL+"/v1", "m", 3
+	env.ThinkOnDemand = true
 	sets, _ := settings.NewService(store, env, "", log)
 	tgEnv, _ := settings.ParseTelegramEnv(fmt.Sprintf("%d=ZY", zyID), "")
 	sets.WithTelegramEnv(tgEnv)
@@ -591,5 +596,40 @@ func TestShutdownFinishesTakenTurns(t *testing.T) {
 	snap, _ := ents.Current(context.Background())
 	if len(snap.Doc.Entries) != 2 {
 		t.Fatalf("both entries should be saved, got %d", len(snap.Doc.Entries))
+	}
+}
+
+// /think turns thinking on for that one message; every other message asks
+// the server not to think. "/think" alone gets a hint, not a model call.
+func TestThinkCommand(t *testing.T) {
+	r := startBot(t)
+	r.tg.push(private(zyID, "Zhou", "hello"))
+	r.tg.waitSent(t, 1)
+	r.tg.push(private(zyID, "Zhou", "/think\nrecord Compare quotes"))
+	r.tg.waitSent(t, 2)
+	r.tg.push(private(zyID, "Zhou", "/think"))
+	if s := r.tg.waitSent(t, 3); !strings.Contains(s[2].Text, "Put your question after /think") {
+		t.Fatalf("bare /think: %q", s[2].Text)
+	}
+	r.llm.mu.Lock()
+	defer r.llm.mu.Unlock()
+	// hello: 1 request; /think record: tool round + answer = 2 requests.
+	if len(r.llm.kwargs) != 3 {
+		t.Fatalf("requests: %d", len(r.llm.kwargs))
+	}
+	if r.llm.kwargs[0]["enable_thinking"] != false {
+		t.Fatalf("plain message should ask for no thinking: %v", r.llm.kwargs[0])
+	}
+	for i := 1; i < 3; i++ {
+		if r.llm.kwargs[i] != nil {
+			t.Fatalf("/think request %d sent kwargs %v", i, r.llm.kwargs[i])
+		}
+	}
+	msgs := r.llm.requests[1]
+	if c := msgs[len(msgs)-1]["content"]; c != "record Compare quotes" {
+		t.Fatalf("/think should reach the model without the command: %q", c)
+	}
+	if got := r.doc(t).Entries; len(got) != 1 || got[0].Title != "Compare quotes" {
+		t.Fatalf("entries: %+v", got)
 	}
 }

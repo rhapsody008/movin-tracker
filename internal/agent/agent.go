@@ -26,7 +26,25 @@ type Request struct {
 	By      string // who is asking; stamped on every change
 	Channel string // web, telegram
 	Group   bool   // a group chat: the model may choose to stay silent
+	Think   bool   // the user asked for thinking (/think); see settings.LLM.ThinkOnDemand
 	Turns   []Turn
+}
+
+// ThinkCommand starts a message that asks the model to think first.
+const ThinkCommand = "/think"
+
+// ParseThink reports whether text starts with /think (any case, as its own
+// word) and returns the rest of the message.
+func ParseThink(text string) (string, bool) {
+	t := strings.TrimSpace(text)
+	if len(t) < len(ThinkCommand) || !strings.EqualFold(t[:len(ThinkCommand)], ThinkCommand) {
+		return text, false
+	}
+	rest := t[len(ThinkCommand):]
+	if rest != "" && rest[0] != ' ' && rest[0] != '\n' && rest[0] != '\t' {
+		return text, false
+	}
+	return strings.TrimSpace(rest), true
 }
 
 // ChangeLine is one change shown to the user. ID is the journal change ID
@@ -82,6 +100,7 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 
 	actor := entries.Actor{By: req.By, Channel: req.Channel}
 	client := llm.New(cfg)
+	client.Think = req.Think
 	res := Result{Changes: []ChangeLine{}, Model: cfg.Model}
 	// MaxToolRounds counts rounds that may call tools. If the model is still
 	// calling tools after that, one more round is forced to answer in words,

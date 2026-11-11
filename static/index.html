@@ -357,6 +357,8 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
       <label>Max tool rounds<input name="maxToolRounds" type="number" min="1" max="8" step="1" required></label>
     </div>
     <label class="row"><input name="streaming" type="checkbox"> Stream replies</label>
+    <label class="row"><input name="thinkOnDemand" type="checkbox"> Think only when asked: start a message with /think</label>
+    <p class="sub">Faster replies from thinking models (Qwen3 on vMLX, vLLM). Leave off for OpenAI and other endpoints that reject <code>chat_template_kwargs</code>.</p>
     <p class="result" id="testResult" aria-live="polite"></p>
     <label class="row" id="saveAnywayRow" hidden><input type="checkbox" id="saveAnyway"> Save without a passing test</label>
     <p class="sub" id="setMeta"></p>
@@ -905,7 +907,7 @@ let setState = null, testedSig = null, clearKey = false;
 function formVals(){
   return {baseUrl:SF.baseUrl.value.trim(), apiKey:SF.apiKey.value, clearKey: clearKey && !SF.apiKey.value, model:SF.model.value.trim(),
     temperature:Number(SF.temperature.value), maxTokens:Number(SF.maxTokens.value), timeoutSec:Number(SF.timeoutSec.value),
-    maxToolRounds:Number(SF.maxToolRounds.value), streaming:SF.streaming.checked};
+    maxToolRounds:Number(SF.maxToolRounds.value), streaming:SF.streaming.checked, thinkOnDemand:SF.thinkOnDemand.checked};
 }
 const sig = v => JSON.stringify(v);
 function updateSaveBtn(){
@@ -1082,7 +1084,7 @@ async function loadLLM(){
   const v = setState;
   SF.baseUrl.value = v.baseUrl||""; SF.apiKey.value = ""; SF.model.value = v.model||"";
   SF.temperature.value = v.temperature; SF.maxTokens.value = v.maxTokens; SF.timeoutSec.value = v.timeoutSec;
-  SF.maxToolRounds.value = v.maxToolRounds; SF.streaming.checked = !!v.streaming;
+  SF.maxToolRounds.value = v.maxToolRounds; SF.streaming.checked = !!v.streaming; SF.thinkOnDemand.checked = !!v.thinkOnDemand;
   $("setMeta").textContent = v.updated ? `Last saved ${new Date(v.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${v.by}.` : "Not saved yet; using the server's defaults.";
   keyNote(); updateSaveBtn();
   loadModels();

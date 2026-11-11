@@ -414,3 +414,22 @@ func mustPatch(t *testing.T, js string) entries.Patch {
 	}
 	return p
 }
+
+func TestParseThink(t *testing.T) {
+	for _, c := range []struct {
+		in, rest string
+		think    bool
+	}{
+		{"/think compare the quotes", "compare the quotes", true},
+		{"  /THINK\nwhich one?", "which one?", true},
+		{"/think", "", true},
+		{"/thinking about tiles", "/thinking about tiles", false},
+		{"I think so", "I think so", false},
+		{"/thin", "/thin", false},
+	} {
+		rest, think := agent.ParseThink(c.in)
+		if rest != c.rest || think != c.think {
+			t.Errorf("ParseThink(%q) = %q, %v; want %q, %v", c.in, rest, think, c.rest, c.think)
+		}
+	}
+}

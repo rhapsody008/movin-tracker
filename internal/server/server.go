@@ -426,6 +426,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Settings.Resolve(r.Context())
 	user := userOf(r)
 	req := agent.Request{By: user, Channel: "web", Turns: body.Turns}
+	if n := len(req.Turns); n > 0 && req.Turns[n-1].Role == "user" {
+		req.Turns[n-1].Content, req.Think = agent.ParseThink(req.Turns[n-1].Content)
+	}
 	wantStream := cfg.Streaming && strings.Contains(r.Header.Get("Accept"), "text/event-stream")
 	if !wantStream {
 		res, err := s.Agent.Run(r.Context(), req, cfg, nil)

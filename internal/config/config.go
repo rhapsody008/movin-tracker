@@ -93,6 +93,11 @@ func Load() (Config, error) {
 			return c, fmt.Errorf("LLM_STREAMING: %w", err)
 		}
 	}
+	if v := env("LLM_THINK_ON_DEMAND", ""); v != "" {
+		if c.LLM.ThinkOnDemand, err = strconv.ParseBool(v); err != nil {
+			return c, fmt.Errorf("LLM_THINK_ON_DEMAND: %w", err)
+		}
+	}
 	c.TelegramToken = env("TELEGRAM_BOT_TOKEN", "")
 	if c.Telegram, err = settings.ParseTelegramEnv(env("TELEGRAM_ALLOWED_IDS", ""), env("TELEGRAM_ALLOWED_CHATS", "")); err != nil {
 		return c, err

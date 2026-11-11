@@ -378,11 +378,12 @@ func (b *Bot) handle(ctx context.Context, u Update) {
 		b.command(ctx, m, name, text)
 		return
 	}
-	b.converse(ctx, m, name, text)
+	b.converse(ctx, m, name, text, false)
 }
 
-// converse runs one agent turn for a text message.
-func (b *Bot) converse(ctx context.Context, m *Message, name, text string) {
+// converse runs one agent turn for a text message; think asks the model to
+// think first (/think).
+func (b *Bot) converse(ctx context.Context, m *Message, name, text string, think bool) {
 	group := m.Chat.IsGroup()
 	content := text
 	if group {
@@ -400,7 +401,7 @@ func (b *Bot) converse(ctx context.Context, m *Message, name, text string) {
 	stop := b.typing(ctx, m.Chat.ID)
 	cfg := b.Settings.Resolve(ctx)
 	cfg.Streaming = false
-	res, err := b.Agent.Run(ctx, agent.Request{By: name, Channel: "telegram", Group: group, Turns: turns}, cfg, nil)
+	res, err := b.Agent.Run(ctx, agent.Request{By: name, Channel: "telegram", Group: group, Think: think, Turns: turns}, cfg, nil)
 	stop()
 
 	b.mu.Lock()

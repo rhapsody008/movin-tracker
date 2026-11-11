@@ -153,6 +153,8 @@ Endpoint URL, API key, model and tuning. **Test connection** must show "Tool cal
 
 A key is only ever sent to the endpoint it belongs to. If you switch to a **different host**, type that host's key: the saved key is dropped rather than sent to the new host, and the server's `LLM_API_KEY` only goes to `LLM_BASE_URL`.
 
+**Think only when asked** is for thinking models such as Qwen3 on vMLX or vLLM. Thinking makes every reply minutes slower, so with this ticked the model answers straight away, and thinks only when a message starts with `/think` (Telegram or the web chat), e.g. `/think compare the two zip blind quotes`. Under the hood every other request sends `chat_template_kwargs: {"enable_thinking": false}`. Leave it off for OpenAI and other endpoints that reject that field (Test connection fails with a 400 if so). With it off, the model server decides, and `/think` makes no difference.
+
 ### Settings → Telegram
 
 - **Status**: "Running as @yourbot" with the time of the last message, or why it isn't running.
@@ -213,6 +215,7 @@ If something is unclear (which bathroom?), it asks instead of guessing. In the g
 
 | Command | Does |
 | --- | --- |
+| `/think <message>` | Think it through before answering (slower); for comparisons and analysis. Only matters with Settings → LLM → Think only when asked |
 | `/recent` | The last 10 changes, who made them and when |
 | `/undo` | Undo your own last change |
 | `/help` | What the bot can do |
@@ -277,7 +280,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS chain | Secret `movin-secrets` |
 | `SETTINGS_SECRET` | empty | Fernet key for the saved LLM key (Secret) |
 | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | empty | Defaults; Settings → LLM overrides |
-| `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SEC`, `LLM_MAX_TOOL_ROUNDS`, `LLM_STREAMING` | 0.2, 1024, 60, 5, true | Defaults; Settings → LLM overrides |
+| `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SEC`, `LLM_MAX_TOOL_ROUNDS`, `LLM_STREAMING`, `LLM_THINK_ON_DEMAND` | 0.2, 1024, 60, 5, true, false | Defaults; Settings → LLM overrides |
 | `TELEGRAM_BOT_TOKEN` | empty | Bot token (Secret); empty = bot off |
 | `TELEGRAM_ALLOWED_IDS`, `TELEGRAM_ALLOWED_CHATS` | empty | Defaults; Settings → Telegram replaces them |
 | `LISTEN_ADDR` | `127.0.0.1:8080` | Keep on loopback in k8s: the app trusts the auth header, so only the proxy beside it may reach it |
