@@ -30,6 +30,10 @@ type Meta struct {
 	KeyDate  *string `json:"keyDate"`
 }
 
+// Entry is one record. Its pointer and slice fields (Room, Date, Time, Cost,
+// Tags) are only ever replaced, never changed in place (Patch.Apply builds
+// new values), so a plain value copy of an Entry is safe to keep while the
+// original moves on. Clone is only needed to hand copies outside the package.
 type Entry struct {
 	ID       string   `json:"id"`
 	Kind     string   `json:"kind"`
@@ -175,6 +179,8 @@ func NormRoom(s string) (string, bool) {
 // clears a nullable field; an absent key leaves the field alone.
 type Patch map[string]json.RawMessage
 
+var textLimits = map[string]int{"vendor": 200, "source": 500, "notes": 4000, "category": 40}
+
 var patchable = map[string]bool{
 	"kind": true, "title": true, "room": true, "category": true, "status": true,
 	"cost": true, "vendor": true, "date": true, "time": true, "source": true,
@@ -262,8 +268,7 @@ func (p Patch) Apply(e *Entry) error {
 				return err
 			}
 			s = strings.TrimSpace(s)
-			limit := map[string]int{"vendor": 200, "source": 500, "notes": 4000, "category": 40}[k]
-			if err := maxLen(k, s, limit); err != nil {
+			if err := maxLen(k, s, textLimits[k]); err != nil {
 				return err
 			}
 			switch k {
@@ -561,6 +566,21 @@ func normalise(e *Entry) {
 	if !slices.Contains(Channels, e.Channel) {
 		e.Channel = "web"
 	}
+}
+
+// View is the document as the web page receives it: without the journal,
+// which the page never reads (undo handles travel with each change line).
+type View struct {
+	Schema  int     `json:"schema"`
+	Meta    Meta    `json:"meta"`
+	Entries []Entry `json:"entries"`
+}
+
+func (d *Doc) View() *View {
+	if d == nil {
+		return nil
+	}
+	return &View{Schema: d.Schema, Meta: d.Meta, Entries: d.Entries}
 }
 
 func Empty() *Doc {

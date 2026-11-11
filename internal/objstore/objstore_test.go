@@ -47,8 +47,8 @@ func TestConditionalWrites(t *testing.T) {
 			if _, _, err := s.Get(ctx, "x.json"); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("get missing: want ErrNotFound, got %v", err)
 			}
-			if _, err := s.Head(ctx, "x.json"); !errors.Is(err, ErrNotFound) {
-				t.Fatalf("head missing: want ErrNotFound, got %v", err)
+			if _, err := s.Stat(ctx, "x.json"); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("stat missing: want ErrNotFound, got %v", err)
 			}
 			e1, err := s.Put(ctx, "x.json", []byte(`{"v":1}`), "")
 			if err != nil {
@@ -68,8 +68,8 @@ func TestConditionalWrites(t *testing.T) {
 			if err != nil || string(body) != `{"v":2}` || etag != e2 {
 				t.Fatalf("get: body=%s etag=%s want %s err=%v", body, etag, e2, err)
 			}
-			if h, _ := s.Head(ctx, "x.json"); h != e2 {
-				t.Fatalf("head etag %s want %s", h, e2)
+			if st, _ := s.Stat(ctx, "x.json"); st.ETag != e2 {
+				t.Fatalf("stat etag %s want %s", st.ETag, e2)
 			}
 		})
 	}

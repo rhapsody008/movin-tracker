@@ -64,12 +64,16 @@ func (r *Runner) SystemPrompt(d *entries.Doc, req Request) string {
 			live = append(live, e)
 		}
 	}
+	// Pick the most recently updated, then list them in creation order: an
+	// edit then changes only that entry's line, so the prompt prefix stays
+	// the same between turns and servers that cache prefixes can reuse it.
 	sort.SliceStable(live, func(i, j int) bool { return live[i].Updated > live[j].Updated })
 	more := ""
 	if len(live) > PromptEntries {
 		more = fmt.Sprintf(" (the %d most recently updated of %d; use search_entries for the rest)", PromptEntries, len(live))
 		live = live[:PromptEntries]
 	}
+	sort.SliceStable(live, func(i, j int) bool { return live[i].Created < live[j].Created })
 	list := make([]compactEntry, 0, len(live))
 	for _, e := range live {
 		list = append(list, compact(e, 0))
@@ -78,7 +82,6 @@ func (r *Runner) SystemPrompt(d *entries.Doc, req Request) string {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, `You are the renovation assistant for a couple in Singapore fitting out their new condo (unit type C5: 3 bedrooms + flex). You keep their record of ideas, decisions, tasks, notes and questions, and answer questions from it.
-Today is %s (%s). Key collection: %s. Move-in: %s.
 
 Entry fields:
 - kind: idea (something they might do or buy), decision (something chosen), task (something to get done, often with a date), note (a fact or thought worth keeping), question (an open question to resolve).
@@ -89,8 +92,6 @@ Entry fields:
 - date YYYY-MM-DD and time HH:MM (24h); a time needs a date.
 - vendor, source (where it came from: a link, a shop, a site visit), notes, tags.
 
-Current entries%s: %s
-
 Rules:
 - When a message states something worth keeping (an idea, a decision, a quote, a payment, a date, progress), record it with the tools. Put several new entries in one add_entry call.
 - Update an existing entry instead of adding a duplicate: a payment or new quote for something already listed is an update.
@@ -99,11 +100,15 @@ Rules:
 - Questions about past decisions, costs or plans: answer from the entries; call search_entries when the list above is not enough.
 - "Drop", "remove" or "forget" means archive (update_entry with archived=true). "Undo that" means undo_change.
 - Reply in one to three short plain-text sentences. Don't repeat the saved fields; the app shows them.`,
-		now.Format("2006-01-02"), now.Format("Monday"), orNotSet(d.Meta.KeyDate), orNotSet(d.Meta.MoveDate),
-		strings.Join(entries.Rooms, ", "), strings.Join(Categories, ", "), more, listJSON)
+		strings.Join(entries.Rooms, ", "), strings.Join(Categories, ", "))
 	if req.Group {
 		fmt.Fprintf(&b, `
 This is a group chat; each user message starts with the speaker's name. If a message needs nothing recorded and asks you nothing (chat between the two of them), reply with exactly %s.`, SilentReply)
 	}
+	// What changes between turns goes last.
+	fmt.Fprintf(&b, `
+
+Today is %s (%s). Key collection: %s. Move-in: %s.
+Current entries%s: %s`, now.Format("2006-01-02"), now.Format("Monday"), orNotSet(d.Meta.KeyDate), orNotSet(d.Meta.MoveDate), more, listJSON)
 	return b.String()
 }

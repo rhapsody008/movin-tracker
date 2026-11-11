@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -79,12 +80,19 @@ func TestV1FileReadsAsBefore(t *testing.T) {
 	r := newRig(t, v1File, envTG(t))
 	ctx := context.Background()
 	l := r.svc.Resolve(ctx)
-	if l.BaseURL != "https://llm.example/v1" || l.Model != "qwen" || l.Temperature != 0.1 || l.MaxTokens != 2048 || l.TimeoutSec != 90 || l.MaxToolRounds != 4 || l.Streaming || l.APIKey != "sk-env-0000-aaaa" {
+	// The env key belongs to LLM_BASE_URL (env.example); the file points at
+	// llm.example, so the env key must not be sent there.
+	if l.BaseURL != "https://llm.example/v1" || l.Model != "qwen" || l.Temperature != 0.1 || l.MaxTokens != 2048 || l.TimeoutSec != 90 || l.MaxToolRounds != 4 || l.Streaming || l.APIKey != "" {
 		t.Fatalf("v1 llm resolved differently: %+v", l)
 	}
 	v := r.svc.View(ctx)
-	if v.Updated != "2026-10-14T00:00:00Z" || v.By != "zy@example.com" || !v.KeyFromEnv {
+	if v.Updated != "2026-10-14T00:00:00Z" || v.By != "zy@example.com" || v.KeySet || v.KeyFromEnv {
 		t.Fatalf("v1 view: %+v", v)
+	}
+	// Pointing back at the env endpoint brings the env key back.
+	r2 := newRig(t, strings.Replace(v1File, "https://llm.example/v1", "https://env.example/v1", 1), envTG(t))
+	if l := r2.svc.Resolve(ctx); l.APIKey != "sk-env-0000-aaaa" {
+		t.Fatalf("env key on its own endpoint: %+v", l)
 	}
 	tg := r.svc.ResolveTelegram(ctx)
 	if !tg.FromEnv || len(tg.Users) != 2 || tg.Users[1].Name != "Partner" || !tg.GroupAllowed(-1001234) {
@@ -179,6 +187,7 @@ func TestTelegramValidation(t *testing.T) {
 		"positive group":     {Users: u("5", "a"), Groups: []string{"1001"}},
 		"group not a number": {Users: u("5", "a"), Groups: []string{"reno"}},
 		"duplicate group":    {Users: u("5", "a"), Groups: []string{"-1", "-1"}},
+		"duplicate name":     {Users: append(u("5", "ZY"), u("6", "zy")...)},
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -279,5 +288,52 @@ func TestTelegramSaveRetriesOnConflictAndKeepsTheOtherWrite(t *testing.T) {
 	body, _, _ := mem.Get(context.Background(), settings.Key)
 	if !strings.Contains(string(body), `"raced"`) || !strings.Contains(string(body), `"telegram"`) {
 		t.Fatalf("both writes must survive: %s", body)
+	}
+}
+
+// blockFirstGet holds the first Get until released, to order a slow read
+// after a save.
+type blockFirstGet struct {
+	*objstore.Memory
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+func (b *blockFirstGet) Get(ctx context.Context, k string) ([]byte, string, error) {
+	first := false
+	b.once.Do(func() { first = true })
+	body, etag, err := b.Memory.Get(ctx, k)
+	if first {
+		close(b.started)
+		<-b.release
+	}
+	return body, etag, err
+}
+
+// TestSlowReadDoesNotCacheOverASave: a read that started before a save and
+// finished after it must not put the older settings back in the cache (a
+// removed Telegram user would keep access for the TTL).
+func TestSlowReadDoesNotCacheOverASave(t *testing.T) {
+	mem := objstore.NewMemory()
+	mem.Put(context.Background(), settings.Key, []byte(`{"schema":1,"llm":{},"telegram":{"users":[{"id":"1","name":"Old"}],"groups":[]}}`), "")
+	store := &blockFirstGet{Memory: mem, started: make(chan struct{}), release: make(chan struct{})}
+	svc, _ := settings.NewService(store, settings.Defaults, "", testutil.Logger(nil))
+	ctx := context.Background()
+
+	done := make(chan settings.Telegram)
+	go func() { done <- svc.ResolveTelegram(ctx) }() // slow read of the old list
+	<-store.started
+	if _, err := svc.SaveTelegram(ctx, "zy", settings.TelegramInput{Users: []settings.TelegramUser{{ID: "2", Name: "New"}}}); err != nil {
+		t.Fatal(err)
+	}
+	close(store.release)
+	<-done
+	tg := svc.ResolveTelegram(ctx)
+	if _, ok := tg.UserName(1); ok {
+		t.Fatal("the slow read put the old allowlist back in the cache")
+	}
+	if _, ok := tg.UserName(2); !ok {
+		t.Fatalf("the saved list is missing: %+v", tg)
 	}
 }

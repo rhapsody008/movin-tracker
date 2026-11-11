@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -314,15 +315,42 @@ func TestGroupSilence(t *testing.T) {
 func TestSystemPromptListsRecentEntriesOnly(t *testing.T) {
 	r := newRig(t)
 	ctx := context.Background()
-	var patches []entries.Patch
+	clock := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	r.svc.SetClock(func() time.Time { clock = clock.Add(time.Second); return clock })
+	a := entries.Actor{By: "zy", Channel: "web"}
+	var ids []string
 	for i := 0; i < agent.PromptEntries+5; i++ {
-		patches = append(patches, mustPatch(t, fmt.Sprintf(`{"kind":"note","title":"n%d"}`, i)))
+		res, _ := r.svc.Create(ctx, a, []entries.Patch{mustPatch(t, fmt.Sprintf(`{"kind":"note","title":"n%03d"}`, i))})
+		ids = append(ids, res.Entries[0].ID)
 	}
-	r.svc.Create(ctx, entries.Actor{By: "zy", Channel: "web"}, patches)
+	// n000 is the oldest and would drop off; touching it makes it recent.
+	r.svc.Update(ctx, a, ids[0], mustPatch(t, `{"notes":"touched"}`))
+	// An archived entry never appears, however recent.
+	r.svc.Update(ctx, a, ids[1], mustPatch(t, `{"archived":true}`))
 	snap, _ := r.svc.Current(ctx)
 	p := r.runner.SystemPrompt(snap.Doc, agent.Request{})
 	if !strings.Contains(p, "use search_entries for the rest") || !strings.Contains(p, "master bathroom") || strings.Contains(p, "group chat") {
 		t.Fatal("prompt missing the overflow hint, the room list, or has the group rule outside a group")
+	}
+	if !strings.Contains(p, `"n000"`) || strings.Contains(p, `"n001"`) {
+		t.Fatal("want the touched n000 listed and the archived n001 left out")
+	}
+	// 154 live (one archived), 150 shown: the four oldest untouched,
+	// n002..n005, fall off.
+	for _, gone := range []string{`"n002"`, `"n005"`} {
+		if strings.Contains(p, gone) {
+			t.Fatalf("%s should have dropped off", gone)
+		}
+	}
+	if !strings.Contains(p, `"n006"`) || !strings.Contains(p, `"n007"`) {
+		t.Fatal("n006 and n007 should be listed")
+	}
+	// Listed in creation order, and the rules come before the entries (stable prefix).
+	if i0, i7, i8 := strings.Index(p, `"n000"`), strings.Index(p, `"n007"`), strings.Index(p, `"n008"`); !(i0 < i7 && i7 < i8) {
+		t.Fatal("entries should be in creation order")
+	}
+	if strings.Index(p, "Rules:") > strings.Index(p, "Current entries") {
+		t.Fatal("rules should come before the entry list")
 	}
 }
 
@@ -333,8 +361,9 @@ func TestRunRejectsBadInput(t *testing.T) {
 	}
 	cfg := r.cfg
 	cfg.Model = ""
-	if _, err := r.runner.Run(context.Background(), user("zy", "web", "hi"), cfg, nil); err == nil || !strings.Contains(err.Error(), "admin page") {
-		t.Fatalf("want a configuration error, got %v", err)
+	var ie *agent.InputError
+	if _, err := r.runner.Run(context.Background(), user("zy", "web", "hi"), cfg, nil); !errors.As(err, &ie) || !strings.Contains(err.Error(), "Settings → LLM") {
+		t.Fatalf("want an InputError pointing at Settings → LLM, got %v", err)
 	}
 }
 

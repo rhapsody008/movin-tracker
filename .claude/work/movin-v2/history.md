@@ -19,5 +19,7 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Step 1.10 done (files only; nothing applied).
 - ZY stopped the mid-build review: reviews wait until all code is complete (decisions.md). Step 1.11 done with ZY's OK.
 - Step 1.12 done: admin guide in repo + on the web page (/guide.html). Phase 1 coding complete; manual Telegram check still waits for ZY's bot token.
+- Strict review of all Phase 1 code (verdict REJECT: key exfiltration via ?baseUrl=, dialog overwriting concurrent edits, plus majors); ZY approved fixing all but deleting the Telegram download code; fixed and verified (progress.md 'Review fixes').
+- ZY widened 1.5 from drawings to all documents (contracts, developer and management-office material); discussion only so far, questions pending (volume/scans, upload path, which model reads contracts, task suggestions, embeddings, samples).
 - Next: ZY reviews the guide; then Phase 1.5 (drawings) — 1.5.1/1.5.2/1.5.4 can start before the dense sheet; 1.5.0 spike needs it. Deployment steps D.* wait for the NKP cluster. One code review after all code is complete.
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.

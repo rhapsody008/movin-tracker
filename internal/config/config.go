@@ -44,7 +44,9 @@ func env(k, d string) string {
 
 func Load() (Config, error) {
 	c := Config{
-		ListenAddr:     env("LISTEN_ADDR", ":8080"),
+		// Loopback by default: the app trusts the auth header, so only the
+		// proxy beside it may reach it. Compose sets ":8080" for local use.
+		ListenAddr:     env("LISTEN_ADDR", "127.0.0.1:8080"),
 		S3Bucket:       env("S3_BUCKET", ""),
 		S3Prefix:       strings.Trim(env("S3_PREFIX", ""), "/"),
 		AWSRegion:      env("AWS_REGION", "ap-southeast-1"),

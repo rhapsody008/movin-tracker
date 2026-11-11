@@ -20,8 +20,6 @@ var (
 type Store interface {
 	// Get returns the body and ETag, or ErrNotFound.
 	Get(ctx context.Context, key string) (body []byte, etag string, err error)
-	// Head returns the current ETag, or ErrNotFound.
-	Head(ctx context.Context, key string) (etag string, err error)
 	// Put writes body. With ifMatch set, the write only happens if the stored
 	// ETag equals it. With ifMatch empty, the write only happens if the object
 	// does not exist yet (If-None-Match: *). Returns the new ETag or ErrPrecondition.

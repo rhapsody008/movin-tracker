@@ -71,14 +71,6 @@ func (s *S3) Get(ctx context.Context, key string) ([]byte, string, error) {
 	return body, aws.ToString(out.ETag), nil
 }
 
-func (s *S3) Head(ctx context.Context, key string) (string, error) {
-	out, err := s.Client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &s.Bucket, Key: aws.String(s.key(key))})
-	if err != nil {
-		return "", mapErr(err)
-	}
-	return aws.ToString(out.ETag), nil
-}
-
 func (s *S3) Put(ctx context.Context, key string, body []byte, ifMatch string) (string, error) {
 	in := &s3.PutObjectInput{
 		Bucket:      &s.Bucket,

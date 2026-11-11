@@ -41,7 +41,29 @@ type Server struct {
 	// SSEHeartbeat keeps idle proxies from closing the event stream.
 	SSEHeartbeat time.Duration
 
-	probeMu sync.Mutex // one storage test at a time
+	probeMu   sync.Mutex // one storage test at a time
+	closeOnce sync.Once
+	closing   chan struct{} // closed by CloseStreams
+}
+
+func (s *Server) closingCh() <-chan struct{} {
+	s.closeOnce.Do(func() {
+		if s.closing == nil {
+			s.closing = make(chan struct{})
+		}
+	})
+	return s.closing
+}
+
+// CloseStreams ends every open SSE stream, so http.Server.Shutdown does not
+// wait for them. Register it with RegisterOnShutdown.
+func (s *Server) CloseStreams() {
+	ch := s.closingCh()
+	select {
+	case <-ch:
+	default:
+		close(s.closing)
+	}
 }
 
 type ctxKey struct{}
@@ -61,9 +83,6 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("PUT /api/meta", s.putMeta)
 	api.HandleFunc("GET /api/events", s.events)
 	api.HandleFunc("POST /api/chat", s.chat)
-	api.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"email": userOf(r)})
-	})
 	api.HandleFunc("GET /api/admin/guide", s.getGuide)
 	api.HandleFunc("GET /api/admin/storage", s.getStorage)
 	api.HandleFunc("POST /api/admin/storage/test", s.testStorage)
@@ -72,7 +91,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/settings/llm", s.getSettings)
 	api.HandleFunc("PUT /api/settings/llm", s.putSettings)
 	api.HandleFunc("POST /api/settings/llm/test", s.testSettings)
-	api.HandleFunc("GET /api/settings/llm/models", s.listModels)
+	api.HandleFunc("POST /api/settings/llm/models", s.listModels)
 	api.Handle("/", s.static())
 
 	root := http.NewServeMux()
@@ -145,7 +164,7 @@ func (s *Server) static() http.Handler {
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	if _, err := s.Store.Head(ctx, entries.Key); err != nil && !errors.Is(err, objstore.ErrNotFound) {
+	if _, err := s.Store.Stat(ctx, entries.Key); err != nil && !errors.Is(err, objstore.ErrNotFound) {
 		s.Log.Warn("readyz: S3 not reachable", "err", err)
 		http.Error(w, "S3 not reachable", http.StatusServiceUnavailable)
 		return
@@ -183,10 +202,12 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusNotFound, "That change is too old to undo.")
 	case errors.Is(err, entries.ErrUndoStale):
 		snap, _ := s.Entries.Current(r.Context())
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "That entry was changed again since, so it can't be undone.", "doc": snap.Doc, "etag": snap.ETag})
-	case errors.Is(err, entries.ErrConflict), errors.Is(err, settings.ErrConflict):
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "That entry was changed again since, so it can't be undone.", "doc": snap.Doc.View(), "etag": snap.ETag})
+	case errors.Is(err, settings.ErrConflict):
+		writeErr(w, http.StatusConflict, "These settings were changed somewhere else at the same moment. Reopen Settings and try again.")
+	case errors.Is(err, entries.ErrConflict):
 		snap, _ := s.Entries.Current(r.Context())
-		writeJSON(w, http.StatusConflict, map[string]any{"error": conflictMsg, "doc": snap.Doc, "etag": snap.ETag})
+		writeJSON(w, http.StatusConflict, map[string]any{"error": conflictMsg, "doc": snap.Doc.View(), "etag": snap.ETag})
 	default:
 		s.Log.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "That change didn't save. Try again.")
@@ -211,6 +232,10 @@ func (s *Server) getEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("ETag", snap.ETag)
+	if r.Header.Get("If-None-Match") == snap.ETag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	writeJSON(w, http.StatusOK, snap)
 }
 
@@ -220,12 +245,12 @@ func (s *Server) getEntries(w http.ResponseWriter, r *http.Request) {
 type entryResp struct {
 	Entry  *entries.Entry    `json:"entry,omitempty"`
 	Change *agent.ChangeLine `json:"change,omitempty"`
-	Doc    *entries.Doc      `json:"doc"`
+	Doc    *entries.View     `json:"doc"`
 	ETag   string            `json:"etag"`
 }
 
 func respond(res entries.Result) entryResp {
-	out := entryResp{Doc: res.Snapshot.Doc, ETag: res.Snapshot.ETag}
+	out := entryResp{Doc: res.Snapshot.Doc.View(), ETag: res.Snapshot.ETag}
 	if len(res.Entries) > 0 {
 		out.Entry = &res.Entries[0]
 	}
@@ -313,7 +338,7 @@ func (s *Server) putMeta(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, entryResp{Doc: snap.Doc, ETag: snap.ETag})
+	writeJSON(w, http.StatusOK, entryResp{Doc: snap.Doc.View(), ETag: snap.ETag})
 }
 
 // ---------- SSE ----------
@@ -370,9 +395,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	tick := time.NewTicker(hb)
 	defer tick.Stop()
+	closing := s.closingCh()
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-closing:
 			return
 		case snap := <-ch:
 			if out.send("entries", snap) != nil {
@@ -401,6 +429,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	wantStream := cfg.Streaming && strings.Contains(r.Header.Get("Accept"), "text/event-stream")
 	if !wantStream {
 		res, err := s.Agent.Run(r.Context(), req, cfg, nil)
+		var ie *agent.InputError
+		if errors.As(err, &ie) {
+			writeErr(w, http.StatusBadRequest, ie.Msg)
+			return
+		}
 		if err != nil {
 			s.Log.Warn("chat failed", "by", user, "model", cfg.Model, "err", err)
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "changes": res.Changes, "model": cfg.Model})
@@ -488,17 +521,26 @@ func (s *Server) testSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// listModels proxies GET {baseUrl}/models. ?baseUrl= lets the drawer list
-// models for an endpoint it has not saved yet, using the stored key.
+// listModels proxies GET {baseUrl}/models for the drawer, which may name an
+// endpoint it has not saved yet. It is a POST so that following a link
+// can't trigger it, and the configured key is only sent to its own origin.
 func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		BaseURL string `json:"baseUrl"`
+		APIKey  string `json:"apiKey"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
 	cfg := s.Settings.Resolve(r.Context())
-	if u := r.URL.Query().Get("baseUrl"); u != "" {
+	if u := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/"); u != "" {
 		cfg.BaseURL = u
 	}
 	if cfg.BaseURL == "" {
 		writeErr(w, http.StatusBadRequest, "Set an endpoint URL first.")
 		return
 	}
+	cfg.APIKey = s.Settings.KeyFor(r.Context(), cfg.BaseURL, in.APIKey)
 	cfg.TimeoutSec = 15
 	ids, err := llm.New(cfg).Models(r.Context())
 	if err != nil {

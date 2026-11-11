@@ -29,21 +29,19 @@ const MaxDownload = 20 << 20
 type Update struct {
 	UpdateID      int64          `json:"update_id"`
 	Message       *Message       `json:"message,omitempty"`
-	EditedMessage *Message       `json:"edited_message,omitempty"`
 	CallbackQuery *CallbackQuery `json:"callback_query,omitempty"`
 }
 
 type Message struct {
-	MessageID      int64       `json:"message_id"`
-	From           *User       `json:"from,omitempty"`
-	Chat           Chat        `json:"chat"`
-	Date           int64       `json:"date"`
-	Text           string      `json:"text,omitempty"`
-	Caption        string      `json:"caption,omitempty"`
-	ReplyToMessage *Message    `json:"reply_to_message,omitempty"`
-	Document       *Document   `json:"document,omitempty"`
-	Photo          []PhotoSize `json:"photo,omitempty"`
-	Voice          *Voice      `json:"voice,omitempty"`
+	MessageID int64       `json:"message_id"`
+	From      *User       `json:"from,omitempty"`
+	Chat      Chat        `json:"chat"`
+	Date      int64       `json:"date"`
+	Text      string      `json:"text,omitempty"`
+	Caption   string      `json:"caption,omitempty"`
+	Document  *Document   `json:"document,omitempty"`
+	Photo     []PhotoSize `json:"photo,omitempty"`
+	Voice     *Voice      `json:"voice,omitempty"`
 	// The message's inline keyboard (present on the bot's own messages
 	// when they come back inside a callback query).
 	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
@@ -136,8 +134,7 @@ type APIError struct {
 	Method      string
 	Code        int // error_code: 409 another poller, 429 flood control, 403 blocked, ...
 	Description string
-	RetryAfter  int   // seconds, on 429
-	MigrateTo   int64 // new chat ID when a group was upgraded
+	RetryAfter  int // seconds, on 429
 }
 
 func (e *APIError) Error() string {
@@ -220,8 +217,7 @@ func (c *Client) call(ctx context.Context, method string, params, out any, timeo
 		ErrorCode   int             `json:"error_code"`
 		Description string          `json:"description"`
 		Parameters  *struct {
-			RetryAfter      int   `json:"retry_after"`
-			MigrateToChatID int64 `json:"migrate_to_chat_id"`
+			RetryAfter int `json:"retry_after"`
 		} `json:"parameters"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&env); err != nil {
@@ -233,7 +229,7 @@ func (c *Client) call(ctx context.Context, method string, params, out any, timeo
 			ae.Code = resp.StatusCode
 		}
 		if env.Parameters != nil {
-			ae.RetryAfter, ae.MigrateTo = env.Parameters.RetryAfter, env.Parameters.MigrateToChatID
+			ae.RetryAfter = env.Parameters.RetryAfter
 		}
 		if c.token != "" {
 			ae.Description = strings.ReplaceAll(ae.Description, c.token, "<token>")
@@ -256,7 +252,7 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, pollSeconds int) 
 	var out []Update
 	params := map[string]any{
 		"offset": offset, "timeout": pollSeconds,
-		"allowed_updates": []string{"message", "edited_message", "callback_query"},
+		"allowed_updates": []string{"message", "callback_query"},
 	}
 	err := c.call(ctx, "getUpdates", params, &out, time.Duration(pollSeconds)*time.Second+15*time.Second)
 	return out, err

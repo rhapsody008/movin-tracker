@@ -425,7 +425,7 @@ const COLS = [
   {name:"Done", task:"done", plan:"done"}
 ];
 const DONE_SHOWN = 12;
-const S = {doc:{entries:[], meta:{}, changes:[]}, etag:"", showArchived:false, showAllDone:false, loaded:false,
+const S = {doc:{entries:[], meta:{}}, etag:"", showArchived:false, showAllDone:false, loaded:false,
   f:{room:"", kind:"", cat:"", text:""}};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -472,11 +472,11 @@ function flash(msg, undoID){
 
 /* ---------- server sync ---------- */
 const CONFLICT = "Someone else just changed this. Showing the latest.";
-let pending = 0, pushedWhileBusy = false;
+let pending = 0, pushedEtag = null; // etag of a push held back while writes were in flight
 function applyServer(snap){
   if(!snap || !snap.doc) return;
   const d = snap.doc;
-  S.doc = {entries:d.entries||[], meta:d.meta||{}, changes:d.changes||[]};
+  S.doc = {entries:d.entries||[], meta:d.meta||{}};
   S.etag = snap.etag || ""; S.loaded = true;
   render();
 }
@@ -489,7 +489,8 @@ async function api(method, path, body){
 async function resync(){ try{ applyServer(await api("GET","/api/entries")); }catch{} }
 /* Optimistic write: change local state now, send, then take the server's doc.
    While writes are in flight, pushed docs are held back so the change does not
-   flicker; once they settle we fetch the latest if anything was pushed. */
+   flicker; once they settle we fetch the latest only if what was pushed is
+   not what we already have (usually it is our own write's echo). */
 async function write(localChange, method, path, body){
   localChange(); render();
   pending++;
@@ -505,7 +506,7 @@ async function write(localChange, method, path, body){
     throw e;
   }finally{
     pending--;
-    if(pending===0 && pushedWhileBusy){ pushedWhileBusy = false; resync(); }
+    if(pending===0 && pushedEtag){ const p = pushedEtag; pushedEtag = null; if(p !== S.etag) resync(); }
   }
 }
 function clean(f){
@@ -532,10 +533,23 @@ async function addEntry(f){
     source:"", notes:"", tags:[], archived:false, created:new Date().toISOString(), updated:new Date().toISOString()}, body);
   await write(()=>S.doc.entries.push(tmp), "POST", "/api/entries", body);
 }
-async function updateEntry(id, f){
+async function updateEntry(id, f){ await patchEntry(id, clean(f)); }
+async function patchEntry(id, body){
   if(!S.doc.entries.some(e=>e.id===id)) throw new Error("No entry with id " + id);
-  const body = clean(f);
   await write(()=>{ S.doc.entries = S.doc.entries.map(e=>e.id===id ? merge(e, body) : e); }, "PATCH", "/api/entries/"+encodeURIComponent(id), body);
+}
+/* Only what the person changed in the dialog, so a field someone else
+   changed meanwhile (say, a payment recorded from Telegram) is kept. */
+function changedFields(now, was){
+  const d = {};
+  for(const k of Object.keys(now)){
+    if(k === "cost"){
+      const c = {};
+      for(const sub of ["estimate","actual"]) if((now.cost||{})[sub] !== (was.cost||{})[sub]) c[sub] = now.cost[sub];
+      if(Object.keys(c).length) d.cost = c;
+    } else if(JSON.stringify(now[k]) !== JSON.stringify(was[k])) d[k] = now[k];
+  }
+  return d;
 }
 async function deleteEntry(id){
   await write(()=>{ S.doc.entries = S.doc.entries.filter(e=>e.id!==id); }, "DELETE", "/api/entries/"+encodeURIComponent(id));
@@ -656,7 +670,7 @@ function card(e){
     ${bits.length ? `<div class="cm">${bits.join("<br>")}</div>` : ""}
     <div class="crow">
       ${e.archived ? `<button class="restore" type="button" data-restore="${esc(e.id)}">Restore</button>`
-        : `<button class="status" type="button" data-s="${esc(e.status)}" data-cycle="${esc(e.id)}" data-next="${esc(next)}" aria-label="Status: ${ST_NAME[e.status]||e.status}. Change to ${ST_NAME[next]}">${ST_NAME[e.status]||esc(e.status)}</button>`}
+        : `<button class="status" type="button" data-s="${esc(e.status)}" data-cycle="${esc(e.id)}" data-next="${esc(next)}" aria-label="Status: ${esc(ST_NAME[e.status]||e.status)}. Change to ${esc(ST_NAME[next]||next)}">${ST_NAME[e.status]||esc(e.status)}</button>`}
       ${e.channel==="telegram" ? `<span class="via" title="Added or last changed in Telegram">via Telegram</span>` : ""}
     </div>
   </div>`;
@@ -730,7 +744,7 @@ function openDay(key){ if(S.loaded) openEntry(null, {kind:"task", status:"todo",
 $("calGrid").addEventListener("keydown", e=>{ const c=e.target.closest(".cell"); if(c && (e.key==="Enter"||e.key===" ") && e.target===c){ e.preventDefault(); openDay(c.dataset.day); } });
 
 /* ---------- board interactions ---------- */
-let editing = null;
+let editing = null, editWas = null; // what the dialog showed when it opened
 document.addEventListener("click", e=>{
   const b = e.target.closest("button");
   if(!b){ const c = e.target.closest(".cell"); if(c && c.dataset.day) openDay(c.dataset.day); return; }
@@ -771,16 +785,21 @@ function openEntry(id, preset){
   $("dlgMeta").textContent = id && e.updated ? `Last changed ${new Date(e.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${e.by||"?"}${e.channel==="telegram"?" in Telegram":""}.` : "";
   $("delBtn").hidden = $("archBtn").hidden = !id;
   $("archBtn").textContent = e.archived ? "Restore" : "Archive";
+  editWas = clean(formData());
   $("entryDlg").showModal();
   EF.title.focus();
 }
-EF.addEventListener("submit", ev=>{
-  ev.preventDefault();
-  const data = {title:EF.title.value, kind:EF.kind.value, status:EF.status.value, room:EF.room.value, category:EF.category.value,
+function formData(){
+  return {title:EF.title.value, kind:EF.kind.value, status:EF.status.value, room:EF.room.value, category:EF.category.value,
     date:EF.date.value, time:EF.time.value, estimate:EF.estimate.value, actual:EF.actual.value,
     vendor:EF.vendor.value, source:EF.source.value, tags:EF.tags.value, notes:EF.notes.value};
-  (editing ? updateEntry(editing, data) : addEntry(data)).catch(()=>{});
+}
+EF.addEventListener("submit", ev=>{
+  ev.preventDefault();
   $("entryDlg").close();
+  if(!editing){ addEntry(formData()).catch(()=>{}); return; }
+  const diff = changedFields(clean(formData()), editWas);
+  if(Object.keys(diff).length) patchEntry(editing, diff).catch(()=>{});
 });
 $("cancelBtn").onclick = ()=>$("entryDlg").close();
 $("archBtn").onclick = ()=>{ const e=S.doc.entries.find(x=>x.id===editing); if(e) updateEntry(editing,{archived:!e.archived}).catch(()=>{}); $("entryDlg").close(); };
@@ -908,7 +927,7 @@ function keyNote(){
 SF.addEventListener("click", e=>{ if(e.target.id==="clearKey"){ clearKey = true; keyNote(); updateSaveBtn(); } });
 async function loadModels(){
   const u = SF.baseUrl.value.trim(); if(!u) return;
-  try{ const d = await api("GET", "/api/settings/llm/models?baseUrl="+encodeURIComponent(u)); fillModels(d.models); }catch{}
+  try{ const d = await api("POST", "/api/settings/llm/models", {baseUrl:u, apiKey:SF.apiKey.value}); fillModels(d.models); }catch{}
 }
 function fillModels(list){ $("modelList").innerHTML = (list||[]).map(m=>`<option value="${esc(m)}">`).join(""); }
 /* ---------- settings: tabs ---------- */
@@ -1069,6 +1088,7 @@ async function loadLLM(){
   loadModels();
 }
 function closeSettings(){
+  clearInterval(tgTimer); tgTimer = null;
   $("drawer").classList.remove("open"); $("drawer").setAttribute("aria-hidden","true"); $("scrim").classList.remove("open");
   (opener && document.contains(opener) ? opener : $("openAdmin")).focus();
 }
@@ -1119,7 +1139,8 @@ api("GET","/api/settings/llm").then(v=>setModelLine(v.model)).catch(()=>{});
   es.addEventListener("entries", e=>{
     const snap = JSON.parse(e.data);
     if(!S.loaded) banner("");
-    if(pending > 0){ pushedWhileBusy = true; return; }
+    if(snap.etag && snap.etag === S.etag) return; // already have it
+    if(pending > 0){ pushedEtag = snap.etag; return; }
     applyServer(snap);
   });
   es.onopen = ()=>{ opened = true; clearTimeout(downTimer); if($("banner").textContent.startsWith("Stopped syncing")) banner(""); };

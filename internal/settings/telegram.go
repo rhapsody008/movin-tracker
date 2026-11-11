@@ -81,7 +81,7 @@ const (
 // characters, no duplicates.
 func validTelegram(users []TelegramUser, groups []string) ([]TelegramUser, []string, error) {
 	outU, outG := []TelegramUser{}, []string{}
-	seen := map[string]bool{}
+	seen, names := map[string]bool{}, map[string]bool{}
 	if len(users) > maxTelegramUsers {
 		return nil, nil, &ValidationError{fmt.Sprintf("at most %d Telegram users", maxTelegramUsers)}
 	}
@@ -102,7 +102,12 @@ func validTelegram(users []TelegramUser, groups []string) ([]TelegramUser, []str
 		if seen[id] {
 			return nil, nil, &ValidationError{fmt.Sprintf("Telegram user %s is listed twice", id)}
 		}
-		seen[id] = true
+		// Names are what the journal records as "by" and what /undo matches
+		// on, so two people can't share one.
+		if names[strings.ToLower(name)] {
+			return nil, nil, &ValidationError{fmt.Sprintf("two Telegram users are named %q; give each a different name", name)}
+		}
+		seen[id], names[strings.ToLower(name)] = true, true
 		outU = append(outU, TelegramUser{ID: id, Name: name})
 	}
 	for _, g := range groups {

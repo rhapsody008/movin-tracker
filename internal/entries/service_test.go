@@ -2,10 +2,13 @@ package entries_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
@@ -344,5 +347,84 @@ func TestPollPicksUpOutsideWrites(t *testing.T) {
 		}
 	default:
 		t.Fatal("refresh after an outside write must notify subscribers")
+	}
+}
+
+// gateGet blocks Gets while armed, to order a slow Refresh around a write.
+type gateGet struct {
+	*objstore.Memory
+	mu      sync.Mutex
+	armed   bool
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (g *gateGet) Get(ctx context.Context, k string) ([]byte, string, error) {
+	g.mu.Lock()
+	armed := g.armed
+	g.armed = false
+	g.mu.Unlock()
+	body, etag, err := g.Memory.Get(ctx, k)
+	if armed {
+		close(g.entered)
+		<-g.release
+	}
+	return body, etag, err
+}
+
+// TestRefreshCannotOverwriteANewerWrite: a poll that read the document
+// before a write must not put that older copy back after the write.
+func TestRefreshCannotOverwriteANewerWrite(t *testing.T) {
+	ctx := context.Background()
+	mem := objstore.NewMemory()
+	gate := &gateGet{Memory: mem, entered: make(chan struct{}), release: make(chan struct{})}
+	svc := load(t, gate)
+	create(t, load(t, mem), zyWeb, `{"title":"outside write"}`) // moves the ETag
+	gate.mu.Lock()
+	gate.armed = true
+	gate.mu.Unlock()
+
+	refreshed := make(chan error)
+	go func() { refreshed <- svc.Refresh(ctx) }()
+	<-gate.entered // Refresh is mid-read of the outside version
+	wrote := make(chan error)
+	go func() {
+		_, err := svc.Create(ctx, ptTg, []entries.Patch{patch(t, `{"title":"bot write"}`)})
+		wrote <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(gate.release)
+	if err := <-refreshed; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-wrote; err != nil {
+		t.Fatal(err)
+	}
+	snap, _ := svc.Current(ctx)
+	if len(snap.Doc.Entries) != 2 {
+		t.Fatalf("cache lost the newer write: %d entries", len(snap.Doc.Entries))
+	}
+	st, _ := mem.Stat(ctx, entries.Key)
+	if snap.ETag != st.ETag {
+		t.Fatal("cache ETag is not the stored one")
+	}
+}
+
+func TestUndoOfAnEmptyRecordIsRefused(t *testing.T) {
+	mem := objstore.NewMemory()
+	mem.Put(context.Background(), entries.Key, []byte(`{"schema":1,"entries":[],"changes":[{"id":"c1","op":"update","entryId":"x"}]}`), "")
+	svc := load(t, mem)
+	if _, err := svc.Undo(context.Background(), zyWeb, "c1"); !errors.Is(err, entries.ErrChangeNotFound) {
+		t.Fatalf("want ErrChangeNotFound, got %v", err)
+	}
+}
+
+func TestSnapshotJSONLeavesOutTheJournal(t *testing.T) {
+	svc := load(t, objstore.NewMemory())
+	create(t, svc, zyWeb, `{"title":"x"}`)
+	snap, _ := svc.Current(context.Background())
+	b, _ := json.Marshal(snap)
+	if strings.Contains(string(b), `"changes"`) || !strings.Contains(string(b), `"entries"`) || !strings.Contains(string(b), `"etag"`) {
+		t.Fatalf("wire snapshot: %s", b)
 	}
 }

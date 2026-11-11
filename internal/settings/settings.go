@@ -113,6 +113,7 @@ type Service struct {
 	cached stored
 	at     time.Time
 	has    bool
+	gen    uint64 // bumped by every save, so a slower read can't cache older data
 }
 
 // NewService takes the env-level defaults and the SETTINGS_SECRET Fernet key
@@ -146,12 +147,18 @@ func (s *Service) current(ctx context.Context) stored {
 		s.mu.Unlock()
 		return st
 	}
+	gen := s.gen
 	s.mu.Unlock()
 	st, _, err := s.load(ctx)
 	switch {
 	case err == nil, errors.Is(err, objstore.ErrNotFound):
 		s.mu.Lock()
-		s.cached, s.at, s.has = st, s.now(), true
+		if s.gen != gen {
+			// A save landed while we were reading; its copy is newer.
+			st = s.cached
+		} else {
+			s.cached, s.at, s.has = st, s.now(), true
+		}
 		s.mu.Unlock()
 		return st
 	default:
@@ -167,6 +174,7 @@ func (s *Service) remember(body []byte) {
 	}
 	s.mu.Lock()
 	s.cached, s.at, s.has = st, s.now(), true
+	s.gen++
 	s.mu.Unlock()
 }
 
@@ -269,7 +277,37 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 	if l.Streaming != nil {
 		out.Streaming = *l.Streaming
 	}
-	return out, keyFromEnv
+	// The env key belongs to LLM_BASE_URL. If the page points the app at a
+	// different host, that key must not follow it there.
+	if keyFromEnv && s.env.BaseURL != "" && !SameOrigin(out.BaseURL, s.env.BaseURL) {
+		out.APIKey = ""
+	}
+	return out, keyFromEnv && out.APIKey != ""
+}
+
+// SameOrigin reports whether two URLs share scheme, host and port. A saved
+// or env API key is only ever sent to the origin it was configured for.
+func SameOrigin(a, b string) bool {
+	ua, err1 := url.Parse(strings.TrimSpace(a))
+	ub, err2 := url.Parse(strings.TrimSpace(b))
+	if err1 != nil || err2 != nil || ua.Host == "" {
+		return false
+	}
+	return strings.EqualFold(ua.Scheme, ub.Scheme) && strings.EqualFold(ua.Host, ub.Host)
+}
+
+// KeyFor returns the API key to send to baseURL: the typed one if given,
+// otherwise the configured key only when baseURL is the origin it belongs
+// to. Everything that calls an endpoint the request names must use this.
+func (s *Service) KeyFor(ctx context.Context, baseURL, typed string) string {
+	if typed != "" {
+		return typed
+	}
+	cur := s.Resolve(ctx)
+	if cur.APIKey != "" && SameOrigin(baseURL, cur.BaseURL) {
+		return cur.APIKey
+	}
+	return ""
 }
 
 // Resolve returns the settings to use right now. A missing or unreadable
@@ -320,16 +358,16 @@ func (s *Service) ForTest(ctx context.Context, in Input) (LLM, error) {
 	if err := in.validate(); err != nil {
 		return LLM{}, err
 	}
-	cur := s.Resolve(ctx)
-	key := cur.APIKey
-	if in.ClearKey {
-		key = s.env.APIKey
-	}
-	if in.APIKey != "" {
-		key = in.APIKey
+	base := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/")
+	key := s.KeyFor(ctx, base, in.APIKey)
+	if in.ClearKey && in.APIKey == "" {
+		key = ""
+		if s.env.APIKey != "" && (s.env.BaseURL == "" || SameOrigin(base, s.env.BaseURL)) {
+			key = s.env.APIKey
+		}
 	}
 	return LLM{
-		BaseURL: strings.TrimRight(strings.TrimSpace(in.BaseURL), "/"), APIKey: key, Model: strings.TrimSpace(in.Model),
+		BaseURL: base, APIKey: key, Model: strings.TrimSpace(in.Model),
 		Temperature: in.Temperature, MaxTokens: in.MaxTokens, TimeoutSec: in.TimeoutSec,
 		MaxToolRounds: in.MaxToolRounds, Streaming: in.Streaming,
 	}, nil
@@ -360,6 +398,11 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 		_ = json.Unmarshal(raw["llm"], &old)
 		keep := old.APIKeyEnc
 		if in.ClearKey {
+			keep = nil
+		}
+		// A saved key belongs to its endpoint: moving to another host
+		// without typing a key drops it instead of sending it there.
+		if keep != nil && enc == nil && old.BaseURL != nil && !SameOrigin(baseURL, *old.BaseURL) {
 			keep = nil
 		}
 		if enc != nil {

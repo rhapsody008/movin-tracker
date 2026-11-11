@@ -31,11 +31,34 @@ type Actor struct {
 	Channel string
 }
 
-// Snapshot is the document as of one ETag. It is what GET /api/entries
-// returns and what every SSE event carries.
+// Snapshot is the document as of one ETag. On the wire (GET /api/entries
+// and every SSE event) the doc is sent as a View, without the journal.
 type Snapshot struct {
-	Doc  *Doc   `json:"doc"`
+	Doc  *Doc   `json:"-"`
 	ETag string `json:"etag"`
+}
+
+type wireSnapshot struct {
+	Doc  *View  `json:"doc"`
+	ETag string `json:"etag"`
+}
+
+func (s Snapshot) MarshalJSON() ([]byte, error) {
+	return json.Marshal(wireSnapshot{s.Doc.View(), s.ETag})
+}
+
+// UnmarshalJSON reads the wire form back; the journal is not on the wire,
+// so Changes comes back empty.
+func (s *Snapshot) UnmarshalJSON(b []byte) error {
+	var w wireSnapshot
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	s.ETag, s.Doc = w.ETag, nil
+	if w.Doc != nil {
+		s.Doc = &Doc{Schema: w.Doc.Schema, Meta: w.Doc.Meta, Entries: w.Doc.Entries, Changes: []Change{}}
+	}
+	return nil
 }
 
 // Result is what a journaled write returns: the entries it touched, the
@@ -148,11 +171,18 @@ func (s *Service) Current(ctx context.Context) (Snapshot, error) {
 }
 
 // Refresh does a HEAD and re-reads the document only if its ETag moved.
+// It skips when a write is running: the write leaves the cache current, and
+// a read finishing after it would put an older document back.
 func (s *Service) Refresh(ctx context.Context) error {
-	etag, err := s.store.Head(ctx, Key)
+	if !s.writeMu.TryLock() {
+		return nil
+	}
+	defer s.writeMu.Unlock()
+	st, err := s.store.Stat(ctx, Key)
 	if err != nil {
 		return err
 	}
+	etag := st.ETag
 	s.mu.RLock()
 	same := etag == s.etag
 	s.mu.RUnlock()
@@ -256,7 +286,7 @@ func (s *Service) Create(ctx context.Context, a Actor, patches []Patch) (Result,
 				return err
 			}
 			d.Entries = append(d.Entries, e)
-			res.Entries = append(res.Entries, e.Clone())
+			res.Entries = append(res.Entries, e)
 			res.Changes = append(res.Changes, s.record(d, a, "create", e.ID, nil, &e))
 		}
 		return nil
@@ -274,14 +304,13 @@ func (s *Service) Update(ctx context.Context, a Actor, id string, p Patch) (Resu
 		if i < 0 {
 			return fmt.Errorf("%w: %s", ErrEntryNotFound, id)
 		}
-		before := d.Entries[i].Clone()
-		e := d.Entries[i].Clone()
+		before, e := d.Entries[i], d.Entries[i] // value copies; see Entry
 		if err := p.Apply(&e); err != nil {
 			return err
 		}
 		e.Updated, e.By, e.Channel = s.stamp(), a.By, a.Channel
 		d.Entries[i] = e
-		res.Entries = []Entry{e.Clone()}
+		res.Entries = []Entry{e}
 		res.Changes = []Change{s.record(d, a, "update", id, &before, &e)}
 		return nil
 	})
@@ -300,9 +329,9 @@ func (s *Service) Delete(ctx context.Context, a Actor, id string) (Result, error
 		if i < 0 {
 			return fmt.Errorf("%w: %s", ErrEntryNotFound, id)
 		}
-		before := d.Entries[i].Clone()
+		before := d.Entries[i]
 		d.Entries = append(d.Entries[:i], d.Entries[i+1:]...)
-		res.Entries = []Entry{before.Clone()}
+		res.Entries = []Entry{before}
 		res.Changes = []Change{s.record(d, a, "delete", id, &before, nil)}
 		return nil
 	})

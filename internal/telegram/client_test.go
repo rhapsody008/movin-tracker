@@ -106,7 +106,7 @@ func TestGetUpdatesDecodesAndSendsOffset(t *testing.T) {
 	if body["offset"] != float64(10) || body["timeout"] != float64(1) {
 		t.Fatalf("getUpdates params: %v", body)
 	}
-	if fmt.Sprint(body["allowed_updates"]) != "[message edited_message callback_query]" {
+	if fmt.Sprint(body["allowed_updates"]) != "[message callback_query]" {
 		t.Fatalf("allowed_updates: %v", body["allowed_updates"])
 	}
 }
@@ -173,8 +173,8 @@ func TestAPIErrors(t *testing.T) {
 		t.Fatalf("want 429 with retry_after, got %#v", err)
 	}
 	_, err = c.GetMe(ctx)
-	if !errors.As(err, &ae) || ae.MigrateTo != -1009 {
-		t.Fatalf("want migrate_to_chat_id, got %#v", err)
+	if !errors.As(err, &ae) || ae.Code != 400 {
+		t.Fatalf("want 400, got %#v", err)
 	}
 	// A wrong token is just another API error.
 	_, err = telegram.New("999:wrong", f.srv.URL).GetMe(ctx)

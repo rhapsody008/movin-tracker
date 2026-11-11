@@ -207,8 +207,9 @@ func TestAuth(t *testing.T) {
 
 func TestDevEmailFallback(t *testing.T) {
 	e := setup(t, objstore.NewMemory(), func(s *server.Server) { s.DevEmail = "zy@example.com" })
-	if code, m, _ := e.do(t, "GET", "/api/me", "", "X-Forwarded-Email", ""); code != 200 || m["email"] != "zy@example.com" {
-		t.Fatalf("dev email: %d %v", code, m)
+	code, m, raw := e.do(t, "POST", "/api/entries", `{"title":"as dev"}`, "X-Forwarded-Email", "")
+	if code != 201 || m["entry"].(map[string]any)["by"] != "zy@example.com" {
+		t.Fatalf("dev email: %d %s", code, raw)
 	}
 }
 
@@ -429,7 +430,7 @@ func TestSettingsKeyNeverLeaks(t *testing.T) {
 			}
 			rec(e.do(t, "GET", "/api/settings/llm", ""))
 			rec(e.do(t, "POST", "/api/settings/llm/test", strings.Replace(save, storedKey, "", 1)))
-			rec(e.do(t, "GET", "/api/settings/llm/models", ""))
+			rec(e.do(t, "POST", "/api/settings/llm/models", `{}`))
 			rec(e.do(t, "POST", "/api/chat", `{"turns":[{"role":"user","content":"We move in on 5 Dec"}]}`))
 
 			// The stored key is what the endpoint receives.
@@ -626,8 +627,8 @@ func (s staleAccepted) Put(ctx context.Context, k string, b []byte, m string) (s
 }
 
 func (s staleAccepted) etag(ctx context.Context, k string) string {
-	e, _ := s.Memory.Head(ctx, k)
-	return e
+	st, _ := s.Memory.Stat(ctx, k)
+	return st.ETag
 }
 
 func TestStorageProbeCatchesIgnoredConditions(t *testing.T) {
@@ -717,5 +718,133 @@ func TestAdminGuide(t *testing.T) {
 	e2 := setup(t, objstore.NewMemory(), nil)
 	if code, _, _ := e2.do(t, "GET", "/api/admin/guide", ""); code != 404 {
 		t.Fatalf("no guide: want 404, got %d", code)
+	}
+}
+
+// TestStoredKeyOnlyGoesToItsOwnEndpoint: the saved (or env) key must never be
+// sent to a host the request names. Before the fix, ?baseUrl= on the model
+// list, or an empty key on "Test connection", sent the stored key anywhere.
+func TestStoredKeyOnlyGoesToItsOwnEndpoint(t *testing.T) {
+	e := setup(t, objstore.NewMemory(), nil)
+	other := newFakeLLM(t) // a different host:port, e.g. someone else's server
+	save := fmt.Sprintf(`{"baseUrl":%q,"apiKey":%q,"model":"m","temperature":0.2,"maxTokens":1024,"timeoutSec":30,"maxToolRounds":3,"streaming":false}`, e.llm.srv.URL+"/v1", storedKey)
+	if code, _, raw := e.do(t, "PUT", "/api/settings/llm", save); code != 200 {
+		t.Fatalf("save: %d %s", code, raw)
+	}
+	otherAuths := func() []string {
+		other.mu.Lock()
+		defer other.mu.Unlock()
+		return append([]string{}, other.auths...)
+	}
+
+	// Model list for another host: no key goes there.
+	if code, _, raw := e.do(t, "POST", "/api/settings/llm/models", fmt.Sprintf(`{"baseUrl":%q}`, other.srv.URL+"/v1")); code != 200 {
+		t.Fatalf("models other: %d %s", code, raw)
+	}
+	// "Test connection" against another host without typing a key: no key either.
+	e.do(t, "POST", "/api/settings/llm/test", strings.Replace(strings.Replace(save, storedKey, "", 1), e.llm.srv.URL, other.srv.URL, 1))
+	for _, a := range otherAuths() {
+		if a != "" {
+			t.Fatalf("another host received Authorization %q", a)
+		}
+	}
+	if len(otherAuths()) == 0 {
+		t.Fatal("setup: the other host was never called")
+	}
+	// A key typed for the other host is sent to it (that's the point of typing it).
+	e.do(t, "POST", "/api/settings/llm/models", fmt.Sprintf(`{"baseUrl":%q,"apiKey":"sk-typed-other-1111"}`, other.srv.URL+"/v1"))
+	if got := otherAuths(); got[len(got)-1] != "Bearer sk-typed-other-1111" {
+		t.Fatalf("typed key: %v", got)
+	}
+	// Same host still gets the stored key.
+	e.do(t, "POST", "/api/settings/llm/models", `{}`)
+	e.llm.mu.Lock()
+	last := e.llm.auths[len(e.llm.auths)-1]
+	e.llm.mu.Unlock()
+	if last != "Bearer "+storedKey {
+		t.Fatalf("own host: %q", last)
+	}
+	// A plain link (GET) can no longer trigger the model list.
+	before := len(otherAuths())
+	if code, _, _ := e.do(t, "GET", "/api/settings/llm/models?baseUrl="+other.srv.URL+"/v1", ""); code == 200 {
+		t.Fatal("GET models must not work")
+	}
+	if len(otherAuths()) != before {
+		t.Fatal("a GET link reached the other host")
+	}
+
+	// Saving another host without a key drops the stored key, so the chat
+	// never sends it there (and the env key, bound to LLM_BASE_URL, doesn't
+	// follow either).
+	moved := strings.Replace(strings.Replace(save, storedKey, "", 1), e.llm.srv.URL, other.srv.URL, 1)
+	if code, m, raw := e.do(t, "PUT", "/api/settings/llm", moved); code != 200 || m["keySet"] != false {
+		t.Fatalf("move host: %d %s", code, raw)
+	}
+	e.do(t, "POST", "/api/chat", `{"turns":[{"role":"user","content":"hello"}]}`)
+	for _, a := range otherAuths()[1:] {
+		if a != "" && a != "Bearer sk-typed-other-1111" {
+			t.Fatalf("stored or env key followed the host change: %q", a)
+		}
+	}
+}
+
+// alwaysConflictSettings makes every settings.json write lose its ETag race.
+type alwaysConflictSettings struct{ *objstore.Memory }
+
+func (s alwaysConflictSettings) Put(ctx context.Context, k string, b []byte, m string) (string, error) {
+	if k == settings.Key {
+		return "", objstore.ErrPrecondition
+	}
+	return s.Memory.Put(ctx, k, b, m)
+}
+
+func TestSettingsConflictHasItsOwnMessage(t *testing.T) {
+	e := setup(t, alwaysConflictSettings{objstore.NewMemory()}, nil)
+	code, m, raw := e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"1","name":"A"}]}`)
+	if code != 409 || m["doc"] != nil || !strings.Contains(raw, "settings were changed") {
+		t.Fatalf("want a settings-specific 409 without the entries doc, got %d %s", code, raw)
+	}
+}
+
+func TestPageNeverReceivesTheJournal(t *testing.T) {
+	e := setup(t, objstore.NewMemory(), nil)
+	_, m, body := e.do(t, "POST", "/api/entries", `{"title":"Book movers"}`)
+	id := m["entry"].(map[string]any)["id"].(string)
+	_, _, b2 := e.do(t, "PATCH", "/api/entries/"+id, `{"status":"shortlisted"}`)
+	_, _, b3 := e.do(t, "GET", "/api/entries", "")
+	for i, b := range []string{body, b2, b3} {
+		if strings.Contains(b, `"changes"`) || !strings.Contains(b, `"entries"`) {
+			t.Fatalf("response %d carries the journal or no entries: %s", i, b)
+		}
+	}
+	// The change line (with its undo id) still comes with each write.
+	if !strings.Contains(b2, `"change":{"id":"`) {
+		t.Fatalf("write response lost its change line: %s", b2)
+	}
+	// If nothing changed since the page's copy: 304, no body.
+	var snap struct{ ETag string }
+	json.Unmarshal([]byte(b3), &snap)
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/entries", nil)
+	req.Header.Set("X-Forwarded-Email", "zy@example.com")
+	req.Header.Set("If-None-Match", snap.ETag)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 304 {
+		t.Fatalf("If-None-Match: want 304, got %d", resp.StatusCode)
+	}
+}
+
+func TestChatInputErrorsAre400(t *testing.T) {
+	e := setup(t, objstore.NewMemory(), nil)
+	if code, _, raw := e.do(t, "POST", "/api/chat", `{"turns":[{"role":"assistant","content":"hi"}]}`); code != 400 {
+		t.Fatalf("bad turns: want 400, got %d %s", code, raw)
+	}
+	e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"m","temperature":0.2,"maxTokens":1024,"timeoutSec":30,"maxToolRounds":3,"streaming":false}`, e.llm.srv.URL+"/v1"))
+	e.llm.srv.Close() // endpoint down: that one is the gateway's fault
+	if code, _, raw := e.do(t, "POST", "/api/chat", `{"turns":[{"role":"user","content":"hi"}]}`); code != 502 {
+		t.Fatalf("endpoint down: want 502, got %d %s", code, raw)
 	}
 }

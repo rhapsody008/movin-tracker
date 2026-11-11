@@ -151,6 +151,8 @@ Shows where the data is (bucket, region, prefix, endpoint), what kind of AWS cre
 
 Endpoint URL, API key, model and tuning. **Test connection** must show "Tool calling works" before **Save** is allowed (or tick "Save without a passing test"). The key is stored encrypted; the page only ever shows its last four characters. Saving here overrides the `LLM_*` env vars, and the bot uses the new model from its next message.
 
+A key is only ever sent to the endpoint it belongs to. If you switch to a **different host**, type that host's key: the saved key is dropped rather than sent to the new host, and the server's `LLM_API_KEY` only goes to `LLM_BASE_URL`.
+
 ### Settings → Telegram
 
 - **Status**: "Running as @yourbot" with the time of the last message, or why it isn't running.
@@ -256,6 +258,8 @@ make clean     # stop and delete the local data
 | Web page 403 "not on the list" | Email missing in one of the two lists | Add it to `authenticated-emails.txt` and `ALLOWED_EMAILS` |
 | Web page shows "Couldn't reach the server" | Pod not ready, usually S3 unreachable | `kubectl -n <namespace> get pods`; check the app logs and Secrets |
 | Saved LLM key "could not be decrypted" in the logs | `SETTINGS_SECRET` changed | Re-enter the key in Settings → LLM |
+| LLM tab shows "No key saved" after changing the endpoint | Keys don't follow a change of host | Type the new endpoint's key, Test, Save |
+| Log warns "listening beyond loopback" | `LISTEN_ADDR` set to something other than `127.0.0.1` | Fine locally; in k8s keep the default so only oauth2-proxy can reach the app |
 
 Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally `docker compose logs -f app`). Useful messages: `telegram message ignored` (who was refused and why), `agent tool call` (every change the agent made), `storage test`, `telegram bot started`.
 
@@ -275,6 +279,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SEC`, `LLM_MAX_TOOL_ROUNDS`, `LLM_STREAMING` | 0.2, 1024, 60, 5, true | Defaults; Settings → LLM overrides |
 | `TELEGRAM_BOT_TOKEN` | empty | Bot token (Secret); empty = bot off |
 | `TELEGRAM_ALLOWED_IDS`, `TELEGRAM_ALLOWED_CHATS` | empty | Defaults; Settings → Telegram replaces them |
+| `LISTEN_ADDR` | `127.0.0.1:8080` | Keep on loopback in k8s: the app trusts the auth header, so only the proxy beside it may reach it |
 | `AUTH_HEADER` | `X-Forwarded-Email` | Header oauth2-proxy sets |
 | `ALLOWED_EMAILS` | empty | Who may use the web page (empty = anyone the proxy lets in) |
 | `DEV_EMAIL` | empty | Local only: act as this user without a proxy. Never in production |

@@ -34,16 +34,6 @@ func (m *Memory) Get(_ context.Context, key string) ([]byte, string, error) {
 	return append([]byte(nil), o.body...), o.etag, nil
 }
 
-func (m *Memory) Head(_ context.Context, key string) (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	o, ok := m.objs[key]
-	if !ok {
-		return "", ErrNotFound
-	}
-	return o.etag, nil
-}
-
 func (m *Memory) Put(_ context.Context, key string, body []byte, ifMatch string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

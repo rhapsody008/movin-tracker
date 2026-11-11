@@ -6,7 +6,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -15,6 +14,12 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/llm"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
+
+// InputError is a problem with the request itself (not the model or the
+// endpoint); the web chat answers it with 400.
+type InputError struct{ Msg string }
+
+func (e *InputError) Error() string { return e.Msg }
 
 // Request is one turn from a channel.
 type Request struct {
@@ -61,10 +66,10 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 	}
 	turns := CleanTurns(req.Turns)
 	if len(turns) == 0 || turns[len(turns)-1].Role != "user" {
-		return Result{}, errors.New("the last turn must be a user message")
+		return Result{}, &InputError{"the last turn must be a user message"}
 	}
 	if cfg.BaseURL == "" || cfg.Model == "" {
-		return Result{}, errors.New("no LLM endpoint or model is configured; set one in the admin page (LLM tab)")
+		return Result{}, &InputError{"no LLM endpoint or model is configured; set one in Settings → LLM"}
 	}
 	snap, err := r.Entries.Current(ctx)
 	if err != nil {

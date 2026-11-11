@@ -108,8 +108,8 @@ func (s *Server) probe(ctx context.Context) probeResult {
 		return err
 	})
 	step("head", func() error {
-		got, err := s.Store.Head(ctx, key)
-		if err == nil && got != etag {
+		st, err := s.Store.Stat(ctx, key)
+		if err == nil && st.ETag != etag {
 			return errors.New("head returned a different ETag than the write")
 		}
 		return err

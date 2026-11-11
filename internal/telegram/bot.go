@@ -38,12 +38,11 @@ type Bot struct {
 	// Now is the clock (tests).
 	Now func() time.Time
 
-	mu       sync.Mutex
-	workers  map[int64]chan Update
-	history  map[int64]*chatHistory
-	seen     map[int64]bool
-	seenList []int64
-	st       Status
+	mu      sync.Mutex
+	workers map[int64]chan Update
+	history map[int64]*chatHistory
+	st      Status
+	wg      sync.WaitGroup // running workers
 }
 
 type chatHistory struct {
@@ -78,9 +77,11 @@ type Status struct {
 
 const (
 	maxRejected    = 10
-	maxSeen        = 1000
 	maxMessage     = 4000 // Telegram allows 4096; leave room
 	maxUndoButtons = 8
+	// turnTimeout bounds one message's work, which is not cancelled on
+	// shutdown (Telegram won't redeliver an update once polled past).
+	turnTimeout = 3 * time.Minute
 )
 
 func (b *Bot) now() time.Time {
@@ -121,7 +122,7 @@ func (b *Bot) Run(ctx context.Context) error {
 		b.ConflictWait = 15 * time.Second
 	}
 	b.mu.Lock()
-	b.workers, b.history, b.seen = map[int64]chan Update{}, map[int64]*chatHistory{}, map[int64]bool{}
+	b.workers, b.history = map[int64]chan Update{}, map[int64]*chatHistory{}
 	b.st.Rejected = []Rejected{}
 	b.mu.Unlock()
 
@@ -189,13 +190,13 @@ func (b *Bot) Run(ctx context.Context) error {
 			b.st.LastUpdateAt = b.now()
 		}
 		b.mu.Unlock()
+		// The next getUpdates with this offset confirms these to Telegram,
+		// so each update is handed out once.
 		for _, u := range ups {
 			if u.UpdateID >= offset {
 				offset = u.UpdateID + 1
 			}
-			if b.firstTime(u.UpdateID) {
-				b.dispatch(ctx, u)
-			}
+			b.dispatch(ctx, u)
 		}
 	}
 }
@@ -209,22 +210,6 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	case <-t.C:
 		return true
 	}
-}
-
-// firstTime dedupes update IDs (at-least-once delivery after a retry).
-func (b *Bot) firstTime(id int64) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.seen[id] {
-		return false
-	}
-	b.seen[id] = true
-	b.seenList = append(b.seenList, id)
-	if len(b.seenList) > maxSeen {
-		delete(b.seen, b.seenList[0])
-		b.seenList = b.seenList[1:]
-	}
-	return true
 }
 
 func displayName(u *User) string {
@@ -298,7 +283,7 @@ func (b *Bot) dispatch(ctx context.Context, u Update) {
 	case u.CallbackQuery != nil && u.CallbackQuery.Message != nil:
 		chat, from = u.CallbackQuery.Message.Chat, &u.CallbackQuery.From
 	default:
-		return // edited messages and anything else: ignored on purpose
+		return // anything else: ignored on purpose
 	}
 	if _, why := b.authorise(ctx, chat, from); why != "" {
 		if from == nil || !from.IsBot {
@@ -314,6 +299,7 @@ func (b *Bot) dispatch(ctx context.Context, u Update) {
 	if !ok {
 		ch = make(chan Update, 64)
 		b.workers[chat.ID] = ch
+		b.wg.Add(1)
 		go b.work(ctx, ch)
 	}
 	b.mu.Unlock()
@@ -324,14 +310,43 @@ func (b *Bot) dispatch(ctx context.Context, u Update) {
 	}
 }
 
+// work runs one chat's turns in order. Turns run detached from ctx (with
+// their own timeout): once polled, Telegram won't redeliver an update, so on
+// shutdown the worker finishes what it already took, then exits.
 func (b *Bot) work(ctx context.Context, ch chan Update) {
+	defer b.wg.Done()
+	run := func(u Update) {
+		tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), turnTimeout)
+		defer cancel()
+		b.handle(tctx, u)
+	}
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			for {
+				select {
+				case u := <-ch:
+					run(u)
+				default:
+					return
+				}
+			}
 		case u := <-ch:
-			b.handle(ctx, u)
+			run(u)
 		}
+	}
+}
+
+// Wait blocks until every worker has finished after Run's ctx ended, or
+// timeout passes. It reports whether they all finished.
+func (b *Bot) Wait(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() { b.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
 	}
 }
 

@@ -21,31 +21,23 @@ var (
 	ErrUndoStale = errors.New("that entry has changed since, so undo was refused")
 )
 
-// record appends a journal entry to d and returns a copy of it.
+// record appends a journal entry to d and returns it. Value copies of the
+// entries are enough (see Entry).
 func (s *Service) record(d *Doc, a Actor, op, entryID string, before, after *Entry) Change {
 	c := Change{ID: ulid.Make().String(), At: s.stamp(), By: a.By, Channel: a.Channel, Op: op, EntryID: entryID}
 	if before != nil {
-		b := before.Clone()
+		b := *before
 		c.Before = &b
 	}
 	if after != nil {
-		x := after.Clone()
+		x := *after
 		c.After = &x
 	}
 	d.Changes = append(d.Changes, c)
 	if over := len(d.Changes) - MaxChanges; over > 0 {
 		d.Changes = append([]Change(nil), d.Changes[over:]...)
 	}
-	out := c
-	if c.Before != nil {
-		b := c.Before.Clone()
-		out.Before = &b
-	}
-	if c.After != nil {
-		x := c.After.Clone()
-		out.After = &x
-	}
-	return out
+	return c
 }
 
 func sameEntry(a, b *Entry) bool {
@@ -74,11 +66,15 @@ func (s *Service) Undo(ctx context.Context, a Actor, changeID string) (Result, e
 			return fmt.Errorf("%w: %s", ErrChangeNotFound, changeID)
 		}
 		entryID, before, after := ch.EntryID, ch.Before, ch.After
+		if before == nil && after == nil {
+			// Never written by the app; a hand-edited file could hold one.
+			return fmt.Errorf("%w: %s (empty record)", ErrChangeNotFound, changeID)
+		}
 
 		i := d.find(entryID)
 		var cur *Entry
 		if i >= 0 {
-			c := d.Entries[i].Clone()
+			c := d.Entries[i]
 			cur = &c
 		}
 		if !sameEntry(cur, after) {
@@ -90,19 +86,19 @@ func (s *Service) Undo(ctx context.Context, a Actor, changeID string) (Result, e
 		case before == nil: // undo a create: remove it
 			d.Entries = append(d.Entries[:i], d.Entries[i+1:]...)
 		case i < 0: // undo a delete: put it back
-			r := before.Clone()
+			r := *before
 			d.Entries = append(d.Entries, r)
 			restored = &r
 		default: // undo an update: restore the old fields
-			r := before.Clone()
+			r := *before
 			r.Updated, r.By, r.Channel = s.stamp(), a.By, a.Channel
 			d.Entries[i] = r
 			restored = &r
 		}
 		if restored != nil {
-			res.Entries = []Entry{restored.Clone()}
+			res.Entries = []Entry{*restored}
 		} else {
-			res.Entries = []Entry{cur.Clone()}
+			res.Entries = []Entry{*cur}
 		}
 		res.Changes = []Change{s.record(d, a, "undo", entryID, cur, restored)}
 		return nil

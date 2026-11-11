@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -135,17 +136,46 @@ func serve() error {
 		IdleTimeout:       120 * time.Second,
 		// No WriteTimeout: SSE streams stay open.
 	}
+	// On SIGTERM: stop taking requests, end SSE streams, let in-flight
+	// requests finish, then let the bot finish the turns it already took
+	// from Telegram (they won't be redelivered).
+	hs.RegisterOnShutdown(srv.CloseStreams)
+	shutdown := make(chan struct{})
 	go func() {
 		<-ctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		hs.Shutdown(sctx)
+		if err := hs.Shutdown(sctx); err != nil {
+			log.Warn("HTTP shutdown did not finish cleanly", "err", err)
+		}
+		close(shutdown)
 	}()
+	if !loopback(c.ListenAddr) {
+		log.Warn("listening beyond loopback; the app trusts "+c.AuthHeader+", so only the auth proxy may be able to reach this port", "addr", c.ListenAddr)
+	}
 	log.Info("listening", "addr", c.ListenAddr, "bucket", c.S3Bucket, "prefix", c.S3Prefix, "authHeader", c.AuthHeader, "devEmail", c.DevEmail != "")
 	if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-shutdown
+	if bot != nil && !bot.Wait(15*time.Second) {
+		log.Warn("telegram bot still busy at shutdown; a turn may have been cut short")
+	}
+	log.Info("stopped")
 	return nil
+}
+
+// loopback reports whether a listen address only accepts local connections.
+func loopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func healthcheck() error {

@@ -6,7 +6,8 @@ import (
 	"strings"
 )
 
-// Filter is a structured query over entries. Empty fields match anything.
+// Filter is a structured query over entries. Its JSON names are the agent's
+// search_entries tool arguments. Empty fields match anything.
 // List fields match any of their values (Kinds, Rooms, Statuses) except
 // Tags, where an entry must carry every listed tag.
 type Filter struct {
@@ -17,9 +18,9 @@ type Filter struct {
 	Tags            []string `json:"tags,omitempty"`
 	Vendor          string   `json:"vendor,omitempty"` // case-insensitive substring
 	Text            string   `json:"text,omitempty"`   // every word must appear somewhere
-	DateFrom        string   `json:"dateFrom,omitempty"`
-	DateTo          string   `json:"dateTo,omitempty"`
-	IncludeArchived bool     `json:"includeArchived,omitempty"`
+	DateFrom        string   `json:"date_from,omitempty"`
+	DateTo          string   `json:"date_to,omitempty"`
+	IncludeArchived bool     `json:"include_archived,omitempty"`
 	Limit           int      `json:"limit,omitempty"`
 }
 

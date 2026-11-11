@@ -365,18 +365,6 @@ func TestAuthorisation(t *testing.T) {
 	}
 }
 
-func TestDuplicateUpdateProcessedOnce(t *testing.T) {
-	r := startBot(t)
-	u := private(zyID, "Zhou", "record Once only")
-	u.UpdateID = 42
-	r.tg.push(u, u)
-	r.tg.waitSent(t, 1)
-	time.Sleep(300 * time.Millisecond)
-	if n := len(r.doc(t).Entries); n != 1 {
-		t.Fatalf("want 1 entry, got %d", n)
-	}
-}
-
 func TestConflictBacksOffThenRecovers(t *testing.T) {
 	r := startBot(t)
 	r.tg.mu.Lock()
@@ -511,19 +499,18 @@ func TestCommands(t *testing.T) {
 	}
 }
 
-func TestNonTextAndEditsAndStatusHasNoToken(t *testing.T) {
+func TestNonTextAndStatusHasNoToken(t *testing.T) {
 	r := startBot(t)
 	doc := private(zyID, "Zhou", "")
 	doc.Message.Document = &telegram.Document{FileID: "F", FileName: "E1.pdf"}
-	edit := telegram.Update{EditedMessage: private(zyID, "Zhou", "record edited").Message}
-	r.tg.push(edit, doc)
-	s := r.tg.waitSent(t, 1)
+	r.tg.push(doc)
+	r.tg.waitSent(t, 1)
 	time.Sleep(200 * time.Millisecond)
-	if s = r.tg.sentCopy(); len(s) != 1 || !strings.Contains(s[0].Text, "only read text") {
+	if s := r.tg.sentCopy(); len(s) != 1 || !strings.Contains(s[0].Text, "only read text") {
 		t.Fatalf("non-text reply: %+v", s)
 	}
 	if len(r.doc(t).Entries) != 0 {
-		t.Fatal("edited messages must be ignored")
+		t.Fatal("a document must not create an entry")
 	}
 	b, _ := json.Marshal(r.bot.Status())
 	if strings.Contains(string(b), token) || strings.Contains(string(b), "AAFake") {
@@ -531,5 +518,78 @@ func TestNonTextAndEditsAndStatusHasNoToken(t *testing.T) {
 	}
 	if strings.Contains(r.logs.String(), token) {
 		t.Fatal("logs contain the token")
+	}
+}
+
+// TestUndoButtonRefusedForStrangerInGroup: a person not on the list, in the
+// allowed group, presses someone's Undo button. Nothing may change.
+func TestUndoButtonRefusedForStrangerInGroup(t *testing.T) {
+	r := startBot(t)
+	r.tg.push(inGroup(groupID, zyID, "Zhou", "record Keep me", 40))
+	sent := r.tg.waitSent(t, 1)
+	btn := sent[0].Buttons[0]
+	r.tg.push(telegram.Update{CallbackQuery: &telegram.CallbackQuery{ID: "cbx", From: telegram.User{ID: 333, FirstName: "Stranger"}, Data: btn.CallbackData,
+		Message: &telegram.Message{MessageID: 1001, Chat: telegram.Chat{ID: groupID, Type: "supergroup"}}}})
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		r.tg.mu.Lock()
+		n := len(r.tg.answers)
+		r.tg.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	r.tg.mu.Lock()
+	answers := append([]string{}, r.tg.answers...)
+	r.tg.mu.Unlock()
+	if len(answers) != 1 || !strings.Contains(answers[0], "not on this bot's list") {
+		t.Fatalf("stranger's press should be refused: %v", answers)
+	}
+	if d := r.doc(t); len(d.Entries) != 1 || d.Entries[0].Title != "Keep me" {
+		t.Fatalf("entry changed: %+v", d.Entries)
+	}
+}
+
+// TestShutdownFinishesTakenTurns: messages already polled (and so confirmed
+// to Telegram) are still answered after the bot is told to stop.
+func TestShutdownFinishesTakenTurns(t *testing.T) {
+	logs := &testutil.SyncBuffer{}
+	log := testutil.Logger(logs)
+	store := objstore.NewMemory()
+	ents := entries.NewService(store, log)
+	ents.Load(context.Background())
+	llm := newLLM(t)
+	llm.delay = 300 * time.Millisecond
+	env := settings.Defaults
+	env.BaseURL, env.Model, env.MaxToolRounds = llm.srv.URL+"/v1", "m", 3
+	sets, _ := settings.NewService(store, env, "", log)
+	tgEnv, _ := settings.ParseTelegramEnv(fmt.Sprintf("%d=ZY", zyID), "")
+	sets.WithTelegramEnv(tgEnv)
+	tg := newFakeTG(t)
+	bot := &telegram.Bot{API: telegram.New(token, tg.srv.URL), Entries: ents, Settings: sets, Log: log,
+		Agent: &agent.Runner{Entries: ents, Loc: time.UTC, Log: log, Now: time.Now}, PollSeconds: 1}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { bot.Run(ctx); close(done) }()
+	for i := 0; i < 200 && !bot.Status().Running; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	tg.push(private(zyID, "Zhou", "record First"), private(zyID, "Zhou", "record Second"))
+	// Stop as soon as the first turn is running (both are already polled).
+	for i := 0; i < 300 && llm.inFlight.Load() == 0; i++ {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if !bot.Wait(10 * time.Second) {
+		t.Fatal("workers did not finish")
+	}
+	if s := tg.sentCopy(); len(s) != 2 {
+		t.Fatalf("both taken turns should be answered, got %d replies", len(s))
+	}
+	snap, _ := ents.Current(context.Background())
+	if len(snap.Doc.Entries) != 2 {
+		t.Fatalf("both entries should be saved, got %d", len(snap.Doc.Entries))
 	}
 }

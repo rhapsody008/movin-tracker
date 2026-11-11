@@ -94,11 +94,13 @@ func (r *Runner) exec(ctx context.Context, a entries.Actor, tc llm.ToolCall) (st
 	return string(out), lines
 }
 
+// truncate cuts s to at most n runes (never inside a UTF-8 sequence).
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return string(r[:n]) + "…"
 }
 
 func orEmptyObj(s string) string {
@@ -192,27 +194,15 @@ func (r *Runner) updateEntry(ctx context.Context, a entries.Actor, args map[stri
 	return map[string]any{"ok": true, "entry": compact(res.Entries[0], 300)}, lines(res.Changes), nil
 }
 
-func strList(v any) []string {
-	raw, _ := v.([]any)
-	var out []string
-	for _, x := range raw {
-		if s, ok := x.(string); ok {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
 func (r *Runner) searchEntries(ctx context.Context, args map[string]any) (any, []ChangeLine, error) {
-	str := func(k string) string { s, _ := args[k].(string); return s }
-	f := entries.Filter{
-		Kinds: strList(args["kinds"]), Rooms: strList(args["rooms"]), Statuses: strList(args["statuses"]),
-		Category: str("category"), Tags: strList(args["tags"]), Vendor: str("vendor"), Text: str("text"),
-		DateFrom: str("date_from"), DateTo: str("date_to"), Limit: 30,
+	// The tool's argument names are Filter's JSON names.
+	raw, _ := json.Marshal(args)
+	var f entries.Filter
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return nil, nil, fmt.Errorf("bad search arguments: %w", err)
 	}
-	f.IncludeArchived, _ = args["include_archived"].(bool)
-	if n, ok := args["limit"].(float64); ok && n > 0 {
-		f.Limit = int(n)
+	if f.Limit <= 0 {
+		f.Limit = 30
 	}
 	snap, err := r.Entries.Current(ctx)
 	if err != nil {
