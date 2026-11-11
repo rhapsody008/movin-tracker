@@ -298,10 +298,17 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 		out.Vision = true
 	}
 	if l.APIKeyEnc != nil {
-		if k, ok := s.decrypt(*l.APIKeyEnc); ok {
-			out.APIKey, keyFromEnv = k, false
-		} else {
+		switch k, ok := s.decrypt(*l.APIKeyEnc); {
+		case !ok:
 			s.log.Warn("stored API key could not be decrypted; using LLM_API_KEY instead (check SETTINGS_SECRET)")
+		case l.BaseURL == nil || !SameOrigin(*l.BaseURL, out.BaseURL):
+			// The stored key belongs to the URL it was saved with. If this
+			// process would send it elsewhere (another kind from env, a
+			// test override of the Claude origin, a hand-edited file), it
+			// is not used.
+			s.log.Warn("stored API key belongs to another host; not using it", "savedFor", originOf(l.BaseURL), "target", originOf(&out.BaseURL))
+		default:
+			out.APIKey, keyFromEnv = k, false
 		}
 	}
 	if l.Model != nil {
@@ -319,6 +326,18 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 		out.APIKey = ""
 	}
 	return out, keyFromEnv && out.APIKey != ""
+}
+
+// originOf is a URL's scheme://host for logs (never a path or a query).
+func originOf(u *string) string {
+	if u == nil {
+		return ""
+	}
+	p, err := url.Parse(strings.TrimSpace(*u))
+	if err != nil {
+		return ""
+	}
+	return p.Scheme + "://" + p.Host
 }
 
 // SameOrigin reports whether two URLs share scheme, host and port. A saved

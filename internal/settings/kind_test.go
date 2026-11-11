@@ -189,3 +189,48 @@ func TestVision(t *testing.T) {
 		t.Fatal("claude without vision")
 	}
 }
+
+// Review blocker: a stored key is only used for the host it was saved for,
+// whatever this process's env says.
+func TestStoredKeyStaysWithItsHost(t *testing.T) {
+	ctx := context.Background()
+	k := fernet.Key{}
+	k.Generate()
+	tok, err := fernet.EncryptAndSign([]byte("sk-vmlx-stored-7777"), &k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 1. A file without a kind (older build) holding a vMLX key, read by a
+	//    process with LLM_KIND=claude: the key must not go to Claude.
+	store := objstore.NewMemory()
+	file := `{"schema":1,"llm":{"baseUrl":"http://host.docker.internal:8081/v1","apiKeyEnc":"` + string(tok) + `","model":"q"}}`
+	store.Put(ctx, settings.Key, []byte(file), "")
+	env := settings.Defaults
+	env.Kind, env.BaseURL = settings.KindClaude, settings.ClaudeOrigin
+	svc, err := settings.NewService(store, env, k.Encode(), testutil.Logger(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := svc.Resolve(ctx); l.BaseURL != settings.ClaudeOrigin || l.APIKey != "" {
+		t.Fatalf("vMLX key sent to Claude: %+v", l)
+	}
+	if got := svc.KeyFor(ctx, settings.ClaudeOrigin, ""); got != "" {
+		t.Fatalf("KeyFor gave the vMLX key to Claude")
+	}
+
+	// 2. A Claude key saved for the real origin, read by a process whose
+	//    Claude origin is overridden (LLM_CLAUDE_BASE_URL): not sent there.
+	r := newRig(t, "", envTG(t))
+	if _, err := r.svc.Save(ctx, "zy", settings.Input{Kind: settings.KindClaude, APIKey: "sk-ant-real-8888", Model: "claude-opus-5-5"}); err != nil {
+		t.Fatal(err)
+	}
+	r.svc.WithClaudeBaseURL("http://127.0.0.1:9999")
+	if l := r.svc.Resolve(ctx); l.APIKey == "sk-ant-real-8888" {
+		t.Fatalf("Claude key sent to the override %s", l.BaseURL)
+	}
+	// Back on the real origin it is used again.
+	r.svc.WithClaudeBaseURL(settings.ClaudeOrigin)
+	if l := r.svc.Resolve(ctx); l.APIKey != "sk-ant-real-8888" {
+		t.Fatalf("key lost on its own origin: %+v", l)
+	}
+}
