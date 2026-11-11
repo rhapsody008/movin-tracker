@@ -10,5 +10,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Local LLM: vMLX on 127.0.0.1:8081 (another project's container `secure-intake-app-standby-1` also publishes 8081 on all interfaces, so `localhost` from the Mac can hit the wrong one; from Docker use `host.docker.internal:8081`). Step 1.5 done: 10/10.
 - Step 1.6 done. Local MinIO's settings.json (saved via the drawer earlier) points the app at `nai-uep-backend` behind a Cloudflare tunnel that is down; `.env`'s vMLX values only apply when no drawer settings are saved.
 - Secrets plan + GitHub OAuth + public image decided (decisions.md). Step 1.6a done.
-- Next: 1.7 frontend (kanban/calendar on entries).
+- Step 1.7 done. UI check script lives in git-ignored `tmp/ui-check/check.mjs` (headless Chrome over CDP against `make dev` on :8080, DEV_EMAIL auth); rerun it after frontend changes.
+- Next: 1.7a admin shell (Storage + LLM tabs).
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.

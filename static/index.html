@@ -18,8 +18,9 @@
 <style>
 :root{
   --bg:#EEF1F0; --surface:#FFFFFF; --sunk:#E3E8E6; --ink:#1C2321; --muted:#5D6965; --line:#D3DAD7;
-  --admin:#4F74AD; --reno:#B8891F; --shopping:#8A5A9E;
-  --brass:#C9A44C; --brass-ink:#3A2E10; --focus:#2F6FEB; --danger:#B9483F;
+  /* one colour per kind of entry */
+  --idea:#8A5A9E; --decision:#B8891F; --task:#4F74AD; --note:#6B7772; --question:#2E8A7A;
+  --brass:#C9A44C; --brass-ink:#3A2E10; --focus:#2F6FEB; --danger:#B9483F; --ok:#2E8A55;
   --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
   box-sizing:border-box;
@@ -29,14 +30,14 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#211B17; --surface:#2C241F; --sunk:#362D27; --ink:#F2EAE1; --muted:#B8AA9C; --line:#4A3E35;
-    --admin:#7FA0D6; --reno:#D9AE4A; --shopping:#B98BCB;
-    --brass:#D4B25F; --brass-ink:#241C08; --focus:#7AA5FF; --danger:#E07A70; color-scheme:dark;
+    --idea:#B98BCB; --decision:#D9AE4A; --task:#7FA0D6; --note:#A89C90; --question:#5CC2AE;
+    --brass:#D4B25F; --brass-ink:#241C08; --focus:#7AA5FF; --danger:#E07A70; --ok:#6CC28F; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#211B17; --surface:#2C241F; --sunk:#362D27; --ink:#F2EAE1; --muted:#B8AA9C; --line:#4A3E35;
-  --admin:#7FA0D6; --reno:#D9AE4A; --shopping:#B98BCB;
-  --brass:#D4B25F; --brass-ink:#241C08; --focus:#7AA5FF; --danger:#E07A70; color-scheme:dark;
+  --idea:#B98BCB; --decision:#D9AE4A; --task:#7FA0D6; --note:#A89C90; --question:#5CC2AE;
+  --brass:#D4B25F; --brass-ink:#241C08; --focus:#7AA5FF; --danger:#E07A70; --ok:#6CC28F; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:inherit}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -44,15 +45,19 @@ body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:16px/1.
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 h1,h2,h3{font-family:var(--display);margin:0;line-height:1.15}
-.wrap{max-width:1440px;margin:0 auto;padding:20px clamp(14px,3vw,32px) 40px}
-.banner{background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px;color:var(--muted)}
+.wrap{max-width:1500px;margin:0 auto;padding:20px clamp(14px,3vw,32px) 40px}
+.banner{background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px;color:var(--muted);
+  display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .banner:empty{display:none}
+.banner .undo{background:none;border:0;padding:0;color:var(--focus);font-weight:700;cursor:pointer}
 
 /* header */
-header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;margin-bottom:22px}
+header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;margin-bottom:18px}
 .title h1{font-size:clamp(28px,4vw,44px);font-weight:700;letter-spacing:-0.02em}
 .money{display:flex;gap:22px;margin-top:8px;flex-wrap:wrap;color:var(--muted);font-size:15px}
 .money b{color:var(--ink);font-weight:700}
+.money small{font-size:13px}
+.toplinks{display:flex;gap:16px;margin-top:6px;flex-wrap:wrap}
 
 /* key tag: the one loud element */
 .keytag{position:relative;display:flex;align-items:center;gap:14px;background:var(--brass);color:var(--brass-ink);
@@ -64,38 +69,41 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 .keytag .l{font-size:14px;line-height:1.3;padding-right:22px}
 .keytag .l span{display:block;opacity:.8}
 
-/* next up */
-.nextup{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin-bottom:22px;scroll-snap-type:x proximity}
-.nextup:empty{display:none}
-.chip{flex:0 0 auto;scroll-snap-align:start;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--c);
-  border-radius:8px;padding:8px 12px;cursor:pointer;text-align:left;max-width:260px}
-.chip .d{font-size:13px;color:var(--muted)}
-.chip .d.late{color:var(--danger);font-weight:700}
-.chip .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* filters */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.filters select,.filters input{border:1px solid var(--line);border-radius:20px;padding:5px 12px;background:var(--surface);font-size:14px;max-width:100%}
+.filters select.on{border-color:var(--ink);font-weight:700}
+.filters input{min-width:160px;flex:0 1 220px}
+.filters .count{color:var(--muted);font-size:14px}
 
 /* layout */
 .main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:22px;align-items:start}
-.board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.col{background:var(--sunk);border-radius:12px;padding:12px;min-height:200px}
-.colhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.colhead h2{font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px}
-.colhead h2::before{content:"";width:12px;height:18px;border-radius:3px;background:var(--c)}
-.colhead .count{color:var(--muted);font-size:14px}
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.col{background:var(--sunk);border-radius:12px;padding:10px;min-height:200px;border:2px solid transparent}
+.col.drop{border-color:var(--focus)}
+.colhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:8px}
+.colhead h2{font-size:17px;font-weight:700}
+.colhead .count{color:var(--muted);font-size:13px;white-space:nowrap}
 .add{border:1px dashed var(--line);background:transparent;border-radius:8px;width:100%;padding:8px;color:var(--muted);cursor:pointer;margin-top:4px}
 .add:hover{color:var(--ink);border-color:var(--muted)}
-.card{background:var(--surface);border-radius:9px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--line);position:relative}
+.card{background:var(--surface);border-radius:9px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--line);border-left:4px solid var(--c);position:relative}
+.card[draggable="true"]{cursor:grab}
+.card.dragging{opacity:.4}
 .card.done .ct{text-decoration:line-through;color:var(--muted)}
 .card.archived{opacity:.55}
-.ct{font-weight:700;cursor:pointer;background:none;border:0;padding:0;text-align:left;width:100%;display:block}
-.cm{font-size:13.5px;color:var(--muted);margin-top:3px}
+.kind{font-size:12px;font-weight:700;color:var(--c);text-transform:uppercase;letter-spacing:.04em}
+.ct{font-weight:700;cursor:pointer;background:none;border:0;padding:0;text-align:left;width:100%;display:block;overflow-wrap:anywhere}
+.cm{font-size:13.5px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
 .cm.late{color:var(--danger);font-weight:700}
 .crow{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px}
 .status{border:1px solid var(--line);background:var(--bg);border-radius:20px;padding:2px 10px;font-size:13px;cursor:pointer}
-.status[data-s="doing"]{border-color:var(--c);color:var(--c);font-weight:700}
-.status[data-s="done"]{background:var(--c);border-color:var(--c);color:var(--surface)}
+.status[data-s="doing"],.status[data-s="shortlisted"]{border-color:var(--c);color:var(--c);font-weight:700}
+.status[data-s="decided"],.status[data-s="done"]{background:var(--c);border-color:var(--c);color:var(--surface)}
+.via{font-size:12px;color:var(--muted)}
 .restore{font-size:13px;background:none;border:0;color:var(--focus);cursor:pointer;padding:0}
 .foot{margin-top:16px;display:flex;gap:16px;flex-wrap:wrap}
 .link{background:none;border:0;padding:0;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:14px}
+.empty{color:var(--muted);font-size:14px;margin:4px 2px 8px}
 
 /* calendar */
 .cal{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;scroll-margin-top:16px}
@@ -105,7 +113,7 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 .calnav button{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:5px 12px;cursor:pointer}
 .grid7{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .dow{font-size:13px;color:var(--muted);padding:0 6px 4px}
-.cell{background:var(--bg);border-radius:8px;min-height:96px;padding:5px 6px;display:flex;flex-direction:column;gap:3px;cursor:pointer;border:1px solid transparent;text-align:left;font:inherit;color:inherit}
+.cell{background:var(--bg);border-radius:8px;min-height:96px;padding:5px 6px;display:flex;flex-direction:column;gap:3px;cursor:pointer;border:1px solid transparent;text-align:left;font:inherit;color:inherit;min-width:0}
 .cell.out{opacity:.4}
 .cell.today{border-color:var(--ink)}
 .cell .dn{font-size:13px;color:var(--muted)}
@@ -118,7 +126,6 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 .agenda .day{padding:8px 0;border-top:1px solid var(--line)}
 .agenda .day h3{font-family:var(--body);font-size:14px;color:var(--muted);font-weight:700;margin-bottom:4px}
 .agenda .ev{white-space:normal;font-size:14.5px;padding:5px 8px;margin-bottom:4px}
-.agenda .empty{color:var(--muted)}
 @media (max-width:700px){ .grid7{display:none} .agenda{display:block} }
 
 /* chat */
@@ -130,7 +137,9 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 .msg{max-width:92%;padding:9px 12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.u{align-self:flex-end;background:var(--ink);color:var(--surface);border-bottom-right-radius:4px}
 .msg.a{align-self:flex-start;background:var(--sunk);border-bottom-left-radius:4px}
-.msg .ch{display:block;margin-top:6px;font-size:13px;color:var(--muted)}
+.msg .ch{display:flex;gap:8px;align-items:baseline;justify-content:space-between;margin-top:6px;font-size:13px;color:var(--muted);white-space:normal}
+.msg .ch .undo{background:none;border:0;padding:0;color:var(--focus);cursor:pointer;font-size:13px;white-space:nowrap}
+.msg .ch .undone{white-space:nowrap}
 .hint{color:var(--muted);font-size:14px}
 .hint button{display:block;margin-top:8px;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer;width:100%;font-size:14px;color:var(--ink)}
 .composer{border-top:1px solid var(--line);padding:10px;display:flex;gap:8px;align-items:flex-end}
@@ -143,17 +152,18 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 .fab{display:none}
 
 /* dialog */
-dialog{border:0;border-radius:14px;padding:0;background:var(--surface);color:var(--ink);width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 40px)}
+dialog{border:0;border-radius:14px;padding:0;background:var(--surface);color:var(--ink);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 40px)}
 dialog::backdrop{background:rgba(10,14,13,.45)}
 .dlg{padding:20px;display:grid;gap:12px}
 .dlg h3{font-size:20px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 label{display:grid;gap:4px;font-size:14px;color:var(--muted)}
 label input,label select,label textarea{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);color:var(--ink);width:100%}
+.dlg .meta{font-size:13px;color:var(--muted);margin:0}
 .actions{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:4px}
 .actions div{display:flex;gap:8px}
 
-@media (max-width:1100px){
+@media (max-width:1180px){
   .main{grid-template-columns:minmax(0,1fr)} /* minmax: let the sideways-scrolling board shrink instead of widening the page */
   .chat{position:fixed;inset:0;height:100%;border-radius:0;z-index:20;display:none;
     padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -162,17 +172,18 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
   .fab{display:block;position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:10;
     box-shadow:0 6px 18px rgba(0,0,0,.25);border-radius:30px;padding:12px 20px}
 }
-@media (max-width:820px){
+@media (max-width:860px){
   header.top{grid-template-columns:1fr}
   .board{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-bottom:8px}
   .col{flex:0 0 84%;scroll-snap-align:start}
 }
+@media (max-width:520px){ .grid2{grid-template-columns:1fr} }
 @media (prefers-reduced-motion:no-preference){
-  .card,.chip{transition:border-color .15s}
+  .card,.col{transition:border-color .15s}
 }
 </style>
 <style>
-/* additions to the reference: chat header buttons, model line, settings drawer */
+/* chat header buttons, model line, settings drawer */
 .chat header .hbtns{display:flex;align-items:center;gap:6px}
 .gear{background:none;border:0;cursor:pointer;color:var(--muted);padding:4px;border-radius:8px;display:flex}
 .gear:hover{color:var(--ink)}
@@ -192,7 +203,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .drawer .row input{width:auto}
 .drawer .sub{font-size:13px;color:var(--muted);margin:0}
 .drawer .result{font-size:14px;border-radius:8px;padding:8px 10px;background:var(--sunk);margin:0}
-.drawer .result.ok{border-left:4px solid var(--reno)}
+.drawer .result.ok{border-left:4px solid var(--ok)}
 .drawer .result.bad{border-left:4px solid var(--danger)}
 .drawer .result:empty{display:none}
 .drawer .foot2{border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
@@ -203,16 +214,26 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 </head>
 <body>
 <div class="wrap">
-  <div class="banner" id="banner" role="status">Loading the board…</div>
+  <div class="banner" id="banner" role="status">Loading…</div>
   <header class="top">
     <div class="title">
       <h1>Project LTM</h1>
       <div class="money" id="money"></div>
-      <a class="link" href="#calendar" style="display:inline-block;margin-top:6px">Jump to calendar</a>
+      <div class="toplinks">
+        <button class="link" id="newEntry" type="button">New entry</button>
+        <a class="link" href="#calendar">Jump to calendar</a>
+      </div>
     </div>
     <button class="keytag" id="keytag" type="button" aria-label="Set move-in date"></button>
   </header>
-  <div class="nextup" id="nextup" aria-label="Coming up"></div>
+  <div class="filters" id="filters" aria-label="Filters">
+    <select id="fRoom" aria-label="Filter by room"></select>
+    <select id="fKind" aria-label="Filter by kind"></select>
+    <select id="fCat" aria-label="Filter by category"></select>
+    <input id="fText" type="search" placeholder="Search" aria-label="Search entries">
+    <button class="link" id="fClear" type="button" hidden>Clear filters</button>
+    <span class="count" id="fCount"></span>
+  </div>
   <div class="main">
     <section>
       <div class="board" id="board"></div>
@@ -228,7 +249,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
       </div>
     </section>
     <aside class="chat" id="chat" aria-label="Chat">
-      <header><h2>Tell the board</h2>
+      <header><h2>Ask or tell</h2>
         <div class="hbtns">
           <button class="gear" id="openSettings" type="button" aria-label="Chat settings" title="Chat settings">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -238,14 +259,14 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
       </header>
       <div class="log" id="log"></div>
       <div class="composer">
-        <textarea id="input" rows="1" placeholder="e.g. Carpentry quote 18k from Lim, 30% deposit due Friday"></textarea>
+        <textarea id="input" rows="1" placeholder="e.g. Lim quoted 18k for carpentry, paid 30% today"></textarea>
         <button class="btn" id="send" type="button">Send</button>
       </div>
       <div class="modelline" id="modelLine"></div>
     </aside>
   </div>
 </div>
-<button class="btn fab" id="fab" type="button">Tell the board</button>
+<button class="btn fab" id="fab" type="button">Ask or tell</button>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Chat settings" aria-hidden="true">
@@ -273,20 +294,26 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
   </div>
 </aside>
 
-<dialog id="itemDlg">
-  <form class="dlg" method="dialog" id="itemForm">
-    <h3 id="dlgTitle">Edit item</h3>
+<dialog id="entryDlg">
+  <form class="dlg" method="dialog" id="entryForm">
+    <h3 id="dlgTitle">Edit entry</h3>
     <label>What<input name="title" required maxlength="200"></label>
     <div class="grid2">
-      <label>Category<select name="cat"></select></label>
-      <label>Status<select name="status"><option value="todo">To do</option><option value="doing">In progress</option><option value="done">Done</option></select></label>
-      <label>Date<input type="date" name="due"></label>
+      <label>Kind<select name="kind"></select></label>
+      <label>Status<select name="status"></select></label>
+      <label>Room<select name="room"></select></label>
+      <label>Category<input name="category" list="catList" maxlength="40"></label>
+      <label>Date<input type="date" name="date"></label>
       <label>Time<input type="time" name="time"></label>
-      <label>Price or quote (S$)<input type="number" name="quoted" min="0" step="0.01" inputmode="decimal"></label>
-      <label>Paid (S$)<input type="number" name="paid" min="0" step="0.01" inputmode="decimal"></label>
+      <label>Estimate or quote (S$)<input type="number" name="estimate" min="0" step="0.01" inputmode="decimal"></label>
+      <label>Paid so far (S$)<input type="number" name="actual" min="0" step="0.01" inputmode="decimal"></label>
     </div>
+    <datalist id="catList"></datalist>
     <label>Vendor or contact<input name="vendor" maxlength="200"></label>
+    <label>Source<input name="source" maxlength="500" placeholder="link, shop, site visit…"></label>
+    <label>Tags<input name="tags" placeholder="comma separated"></label>
     <label>Notes<textarea name="notes" rows="3" maxlength="4000"></textarea></label>
+    <p class="meta" id="dlgMeta"></p>
     <div class="actions">
       <div><button class="btn danger" type="button" id="delBtn">Delete</button><button class="btn ghost" type="button" id="archBtn">Archive</button></div>
       <div><button class="btn ghost" type="button" id="cancelBtn">Cancel</button><button class="btn" type="submit" id="saveBtn">Save</button></div>
@@ -307,15 +334,26 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 </dialog>
 
 <script>
-const CATS = [
-  {id:"admin", name:"Admin", hint:"utilities, MCST, GIRO, insurance, tax, access cards, defects inspection and claims, movers, lift booking, deliveries"},
-  {id:"reno", name:"Renovation", hint:"ID, contractors, quotes, permits, works"},
-  {id:"shopping", name:"Shopping list", hint:"furniture, appliances, household items to buy; put the price in quoted"}
+/* Keep in step with internal/entries/model.go and internal/agent/prompt.go. */
+const KINDS = [
+  {id:"idea", name:"Idea"}, {id:"decision", name:"Decision"}, {id:"task", name:"Task"},
+  {id:"note", name:"Note"}, {id:"question", name:"Question"}
 ];
-const CATIDS = CATS.map(c=>c.id);
-const STATUS = {todo:"To do", doing:"In progress", done:"Done"};
-const NEXT = {todo:"doing", doing:"done", done:"todo"};
-const S = {items:[], meta:{}, etag:"", showArchived:false, loaded:false};
+const KINDIDS = KINDS.map(k=>k.id);
+const ROOMS = ["living","dining","dry kitchen","wet kitchen","flex","master bedroom","bedroom 2","bedroom 3","master bathroom","bathroom 2","balcony","whole-house"];
+const CATEGORIES = ["carpentry","electrical","lighting","plumbing","flooring","painting","aircon","windows & doors","appliances","furniture","admin","other"];
+const TASK_ST = ["todo","doing","done"], PLAN_ST = ["idea","shortlisted","decided","done"];
+const ST_NAME = {todo:"To do", doing:"Doing", done:"Done", idea:"Idea", shortlisted:"Shortlisted", decided:"Decided"};
+/* Four kanban columns; tasks have no "decided" stage. */
+const COLS = [
+  {name:"Ideas & to do", task:"todo",  plan:"idea"},
+  {name:"Shortlisted & doing", task:"doing", plan:"shortlisted"},
+  {name:"Decided", task:null, plan:"decided"},
+  {name:"Done", task:"done", plan:"done"}
+];
+const DONE_SHOWN = 12;
+const S = {doc:{entries:[], meta:{}, changes:[]}, etag:"", showArchived:false, showAllDone:false, loaded:false,
+  f:{room:"", kind:"", cat:"", text:""}};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money = n => "S$" + Number(n||0).toLocaleString("en-SG",{maximumFractionDigits:2});
@@ -327,23 +365,46 @@ const days = (a,b) => Math.round((parse(b)-parse(a))/864e5);
 const isDate = s => typeof s==="string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const isTime = s => typeof s==="string" && /^\d{2}:\d{2}$/.test(s);
 const num = v => (v===""||v==null||isNaN(Number(v))) ? null : Math.max(0, Number(v));
-const catOf = i => CATIDS.includes(i.cat) ? i.cat : "admin";
-const catColor = id => `var(--${CATIDS.includes(id)?id:"admin"})`;
-function fmtDate(due,time){
-  if(!isDate(due)) return "";
-  const d = parse(due);
-  const s = d.toLocaleDateString("en-SG",{weekday:"short", day:"numeric", month:"short"});
+const kindOf = e => KINDIDS.includes(e.kind) ? e.kind : "note";
+const kindColor = k => `var(--${KINDIDS.includes(k)?k:"note"})`;
+const kindName = k => (KINDS.find(x=>x.id===k)||KINDS[3]).name;
+const statusesFor = k => k==="task" ? TASK_ST : PLAN_ST;
+const colOf = e => { const st = e.status; return COLS.findIndex(c => (kindOf(e)==="task" ? c.task : c.plan) === st); };
+const statusForCol = (kind, i) => kind==="task" ? COLS[i].task : COLS[i].plan;
+function remap(status, toKind){
+  if(statusesFor(toKind).includes(status)) return status;
+  if(toKind==="task") return status==="shortlisted" ? "doing" : status==="done" ? "done" : "todo";
+  return status==="doing" ? "shortlisted" : status==="done" ? "done" : "idea";
+}
+const cost = e => e.cost || {};
+function fmtDate(d,time){
+  if(!isDate(d)) return "";
+  const s = parse(d).toLocaleDateString("en-SG",{weekday:"short", day:"numeric", month:"short"});
   return time ? `${s}, ${time}` : s;
 }
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch{ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} }
+};
+
+/* ---------- banner ---------- */
+let bannerTimer = null;
 function banner(msg){ $("banner").textContent = msg || ""; }
+function flash(msg, undoID){
+  const b = $("banner");
+  b.innerHTML = esc(msg) + (undoID ? ` <button class="undo" type="button" data-undo="${esc(undoID)}">Undo</button>` : "");
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(()=>{ if(b.textContent.startsWith(msg)) b.textContent = ""; }, undoID ? 10000 : 6000);
+}
 
 /* ---------- server sync ---------- */
 const CONFLICT = "Someone else just changed this. Showing the latest.";
-let pending = 0, pushedWhileBusy = false, bannerTimer = null;
-function flash(msg){ banner(msg); clearTimeout(bannerTimer); bannerTimer = setTimeout(()=>{ if($("banner").textContent===msg) banner(""); }, 6000); }
+let pending = 0, pushedWhileBusy = false;
 function applyServer(snap){
-  if(!snap || !snap.board) return;
-  S.items = snap.board.items || []; S.meta = snap.board.meta || {}; S.etag = snap.etag || ""; S.loaded = true;
+  if(!snap || !snap.doc) return;
+  const d = snap.doc;
+  S.doc = {entries:d.entries||[], meta:d.meta||{}, changes:d.changes||[]};
+  S.etag = snap.etag || ""; S.loaded = true;
   render();
 }
 async function api(method, path, body){
@@ -352,19 +413,20 @@ async function api(method, path, body){
   if(!r.ok){ const e = new Error((data && data.error) || `HTTP ${r.status}`); e.status = r.status; e.data = data; throw e; }
   return data;
 }
-async function resync(){ try{ applyServer(await api("GET","/api/board")); }catch{} }
-/* Optimistic write: change local state now, send, then take the server's board.
-   While writes are in flight, pushed boards are held back so the change does
-   not flicker; once they settle we fetch the latest if anything was pushed. */
+async function resync(){ try{ applyServer(await api("GET","/api/entries")); }catch{} }
+/* Optimistic write: change local state now, send, then take the server's doc.
+   While writes are in flight, pushed docs are held back so the change does not
+   flicker; once they settle we fetch the latest if anything was pushed. */
 async function write(localChange, method, path, body){
   localChange(); render();
   pending++;
   try{
     const res = await api(method, path, body);
     if(pending===1) applyServer(res);
+    if(res && res.change) flash(res.change.text, res.change.id);
     return res;
   }catch(e){
-    if(e.status===409){ flash(CONFLICT); if(e.data && e.data.board) applyServer(e.data); }
+    if(e.status===409){ flash(e.message || CONFLICT); if(e.data && e.data.doc) applyServer(e.data); }
     else if(e.status===400 || e.status===404){ flash(e.message); await resync(); }
     else { flash("That change didn't save. Check your connection and try again."); await resync(); }
     throw e;
@@ -376,51 +438,97 @@ async function write(localChange, method, path, body){
 function clean(f){
   const o = {};
   if("title" in f) o.title = String(f.title||"").trim().slice(0,200) || "Untitled";
-  if("cat" in f) o.cat = CATIDS.includes(f.cat) ? f.cat : "admin";
-  if("status" in f) o.status = STATUS[f.status] ? f.status : "todo";
-  if("due" in f) o.due = isDate(f.due) ? f.due : null;
-  if("time" in f) o.time = isTime(f.time) ? f.time : null;
-  if("quoted" in f) o.quoted = num(f.quoted);
-  if("paid" in f) o.paid = num(f.paid);
+  if("kind" in f) o.kind = KINDIDS.includes(f.kind) ? f.kind : "note";
+  if("status" in f) o.status = f.status;
+  if("room" in f) o.room = ROOMS.includes(f.room) ? f.room : null;
+  if("category" in f) o.category = String(f.category||"").trim().toLowerCase().slice(0,40);
+  if("date" in f) o.date = isDate(f.date) ? f.date : null;
+  if("time" in f) o.time = isTime(f.time) && isDate(f.date) ? f.time : null;
+  if("estimate" in f || "actual" in f) o.cost = {estimate:num(f.estimate), actual:num(f.actual)};
   if("vendor" in f) o.vendor = String(f.vendor||"").slice(0,200);
+  if("source" in f) o.source = String(f.source||"").slice(0,500);
+  if("tags" in f) o.tags = String(f.tags||"").split(",").map(t=>t.trim().toLowerCase()).filter(Boolean).slice(0,20);
   if("notes" in f) o.notes = String(f.notes||"").slice(0,4000);
   if("archived" in f) o.archived = !!f.archived;
   return o;
 }
-async function addItem(f){
+function merge(e, body){ return {...e, ...body, cost: body.cost ? {...cost(e), ...body.cost} : e.cost}; }
+async function addEntry(f){
   const body = clean({title:"", ...f});
-  const tmp = {id:"tmp-"+Math.random().toString(36).slice(2), cat:"admin", status:"todo", due:null, time:null, quoted:null, paid:null, vendor:"", notes:"", archived:false,
-    ...body, created:new Date().toISOString()};
-  const res = await write(()=>S.items.push(tmp), "POST", "/api/items", body);
-  return res.item.id;
+  const tmp = merge({id:"tmp-"+Math.random().toString(36).slice(2), kind:"note", status:"idea", room:null, category:"", cost:{}, vendor:"", date:null, time:null,
+    source:"", notes:"", tags:[], archived:false, created:new Date().toISOString(), updated:new Date().toISOString()}, body);
+  await write(()=>S.doc.entries.push(tmp), "POST", "/api/entries", body);
 }
-async function updateItem(id, f){
-  if(!S.items.some(i=>i.id===id)) throw new Error("No item with id " + id);
+async function updateEntry(id, f){
+  if(!S.doc.entries.some(e=>e.id===id)) throw new Error("No entry with id " + id);
   const body = clean(f);
-  await write(()=>{ S.items = S.items.map(i=>i.id===id ? {...i, ...body} : i); }, "PATCH", "/api/items/"+encodeURIComponent(id), body);
+  await write(()=>{ S.doc.entries = S.doc.entries.map(e=>e.id===id ? merge(e, body) : e); }, "PATCH", "/api/entries/"+encodeURIComponent(id), body);
 }
-async function deleteItem(id){
-  await write(()=>{ S.items = S.items.filter(i=>i.id!==id); }, "DELETE", "/api/items/"+encodeURIComponent(id));
+async function deleteEntry(id){
+  await write(()=>{ S.doc.entries = S.doc.entries.filter(e=>e.id!==id); }, "DELETE", "/api/entries/"+encodeURIComponent(id));
 }
 async function setDates(f){
   const body = {};
   if("moveDate" in f) body.moveDate = isDate(f.moveDate) ? f.moveDate : null;
   if("keyDate" in f) body.keyDate = isDate(f.keyDate) ? f.keyDate : null;
-  await write(()=>{ S.meta = {...S.meta, ...body}; }, "PUT", "/api/meta", body);
+  await write(()=>{ S.doc.meta = {...S.doc.meta, ...body}; }, "PUT", "/api/meta", body);
 }
+async function undo(id, el){
+  try{
+    const res = await api("POST", "/api/changes/"+encodeURIComponent(id)+"/undo");
+    applyServer(res);
+    flash(res.change ? res.change.text : "Undone.", res.change && res.change.id);
+    if(el) el.outerHTML = `<span class="undone">Undone</span>`;
+  }catch(e){
+    flash(e.message);
+    if(e.data && e.data.doc) applyServer(e.data);
+  }
+}
+
+/* ---------- filters ---------- */
+function matches(e){
+  const f = S.f;
+  if(f.room && e.room !== f.room) return false;
+  if(f.kind && kindOf(e) !== f.kind) return false;
+  if(f.cat && (e.category||"") !== f.cat) return false;
+  if(f.text){
+    const hay = [e.title, e.notes, e.vendor, e.category, e.source, e.room, (e.tags||[]).join(" ")].join("\n").toLowerCase();
+    if(!f.text.toLowerCase().split(/\s+/).filter(Boolean).every(w=>hay.includes(w))) return false;
+  }
+  return true;
+}
+const filtering = () => !!(S.f.room || S.f.kind || S.f.cat || S.f.text);
+function renderFilters(){
+  const opt = (v, label, cur) => `<option value="${esc(v)}" ${v===cur?"selected":""}>${esc(label)}</option>`;
+  $("fRoom").innerHTML = opt("", "All rooms", S.f.room) + ROOMS.map(r=>opt(r, r, S.f.room)).join("");
+  $("fKind").innerHTML = opt("", "All kinds", S.f.kind) + KINDS.map(k=>opt(k.id, k.name, S.f.kind)).join("");
+  const cats = [...new Set([...CATEGORIES, ...S.doc.entries.map(e=>e.category).filter(Boolean)])].sort();
+  $("fCat").innerHTML = opt("", "All categories", S.f.cat) + cats.map(c=>opt(c, c, S.f.cat)).join("");
+  $("catList").innerHTML = cats.map(c=>`<option value="${esc(c)}">`).join("");
+  $("fRoom").classList.toggle("on", !!S.f.room); $("fKind").classList.toggle("on", !!S.f.kind); $("fCat").classList.toggle("on", !!S.f.cat);
+  $("fClear").hidden = !filtering();
+}
+function setFilter(k, v){ S.f[k] = v; store.set("movin.filters", S.f); render(); }
+$("fRoom").onchange = e=>setFilter("room", e.target.value);
+$("fKind").onchange = e=>setFilter("kind", e.target.value);
+$("fCat").onchange = e=>setFilter("cat", e.target.value);
+$("fText").oninput = e=>setFilter("text", e.target.value.trim());
+$("fClear").onclick = ()=>{ S.f = {room:"", kind:"", cat:"", text:""}; $("fText").value = ""; store.set("movin.filters", S.f); render(); };
 
 /* ---------- render ---------- */
 function render(){
-  const live = S.items.filter(i=>!i.archived);
-  const t = today();
+  const all = S.doc.entries, live = all.filter(e=>!e.archived), t = today();
 
-  // money
-  const q = live.reduce((a,i)=>a+(i.quoted||0),0), p = live.reduce((a,i)=>a+(i.paid||0),0);
-  $("money").innerHTML = (q||p) ? `<span>Quoted <b>${money(q)}</b></span><span>Paid <b>${money(p)}</b></span><span>Still to pay <b>${money(Math.max(0,q-p))}</b></span>`
-    : "";
+  // money: only commitments count (tasks, and anything decided or done)
+  const counted = live.filter(e => kindOf(e)==="task" || e.status==="decided" || e.status==="done");
+  let q = 0, p = 0, due = 0;
+  counted.forEach(e=>{ const c = cost(e), est = c.estimate||0, act = c.actual||0; q += est; p += act; if(c.estimate!=null) due += Math.max(0, est-act); });
+  const ideas = live.filter(e => !counted.includes(e) && cost(e).estimate!=null).reduce((a,e)=>a+cost(e).estimate, 0);
+  $("money").innerHTML = (q||p||ideas) ? `<span>Quoted <b>${money(q)}</b></span><span>Paid <b>${money(p)}</b></span><span>Still to pay <b>${money(due)}</b></span>`
+    + (ideas ? `<span><small>Not yet decided ${money(ideas)}</small></span>` : "") : "";
 
   // key tag
-  const m = S.meta.moveDate;
+  const m = S.doc.meta.moveDate;
   if(isDate(m)){
     const n = days(t,m);
     if(n>0) $("keytag").innerHTML = `<span class="n">${n}</span><span class="l">${n===1?"day":"days"} to move in<span>${fmtDate(m)}</span></span>`;
@@ -428,48 +536,100 @@ function render(){
     else $("keytag").innerHTML = `<span class="n">${-n}</span><span class="l">${n===-1?"day":"days"} in the new place<span>Since ${fmtDate(m)}</span></span>`;
   } else $("keytag").innerHTML = `<span class="n">?</span><span class="l">Set your<span>move-in date</span></span>`;
 
-  // next up
-  const dated = live.filter(i=>i.status!=="done" && isDate(i.due)).sort((a,b)=>(a.due+(a.time||"")).localeCompare(b.due+(b.time||""))).slice(0,10);
-  $("nextup").innerHTML = dated.map(i=>{
-    const late = i.due < t;
-    return `<button class="chip" style="--c:${catColor(i.cat)}" data-edit="${esc(i.id)}"><div class="d ${late?"late":""}">${late?"Overdue, ":""}${esc(fmtDate(i.due,i.time))}</div><div class="t">${esc(i.title)}</div></button>`;
-  }).join("");
+  renderFilters();
 
   // board
-  const shown = S.items.filter(i=>S.showArchived || !i.archived);
-  const order = {doing:0,todo:1,done:2};
-  $("board").innerHTML = CATS.map(c=>{
-    const list = shown.filter(i=>catOf(i)===c.id).sort((a,b)=>
-      (order[a.status]-order[b.status]) || ((a.due||"9999")).localeCompare(b.due||"9999") || String(a.created||"").localeCompare(String(b.created||"")));
-    const open = list.filter(i=>i.status!=="done" && !i.archived).length;
-    return `<div class="col" style="--c:${catColor(c.id)}">
-      <div class="colhead"><h2>${c.name}</h2><span class="count">${open} open</span></div>
+  const shown = all.filter(e => (S.showArchived || !e.archived) && matches(e));
+  $("fCount").textContent = filtering() ? `${shown.length} of ${all.filter(e=>S.showArchived||!e.archived).length} entries` : "";
+  $("board").innerHTML = COLS.map((c, ci)=>{
+    let list = shown.filter(e=>colOf(e)===ci);
+    if(ci===3) list.sort((a,b)=>String(b.updated||"").localeCompare(String(a.updated||"")));
+    else list.sort((a,b)=>(a.date||"9999").localeCompare(b.date||"9999") || String(b.updated||"").localeCompare(String(a.updated||"")));
+    const total = list.length;
+    const cut = ci===3 && !S.showAllDone && total > DONE_SHOWN;
+    if(cut) list = list.slice(0, DONE_SHOWN);
+    const addKind = ci===0 ? "idea" : ci===1 ? "idea" : ci===2 ? "decision" : null;
+    return `<div class="col" data-col="${ci}">
+      <div class="colhead"><h2>${c.name}</h2><span class="count">${total}</span></div>
       ${list.map(card).join("")}
-      ${S.loaded ? `<button class="add" data-add="${c.id}">Add to ${c.name}</button>` : ""}
+      ${!list.length && S.loaded ? `<p class="empty">${filtering() ? "Nothing matches." : "Nothing here yet."}</p>` : ""}
+      ${cut ? `<button class="link" type="button" data-alldone="1">Show all ${total}</button>` : ""}
+      ${ci===3 && S.showAllDone && total > DONE_SHOWN ? `<button class="link" type="button" data-alldone="0">Show fewer</button>` : ""}
+      ${S.loaded && addKind ? `<button class="add" type="button" data-add="${ci}">Add</button>` : ""}
     </div>`;
   }).join("");
 
-  const archived = S.items.filter(i=>i.archived).length;
+  const archived = all.filter(e=>e.archived).length;
   $("toggleArchived").hidden = !archived;
   $("toggleArchived").textContent = S.showArchived ? "Hide archived" : `Show archived (${archived})`;
   renderCal();
 }
+function card(e){
+  const t = today(), k = kindOf(e);
+  const late = isDate(e.date) && e.date < t && e.status!=="done" && (k==="task" || k==="question");
+  const where = [e.room, e.category].filter(Boolean).map(esc).join(" · ");
+  const bits = [];
+  if(e.vendor) bits.push(esc(e.vendor));
+  const c = cost(e);
+  if(c.estimate!=null || c.actual!=null){
+    const m=[]; if(c.estimate!=null) m.push(money(c.estimate)+" est"); if(c.actual!=null) m.push(money(c.actual)+" paid"); bits.push(m.join(", "));
+  }
+  const sts = statusesFor(k), next = sts[(sts.indexOf(e.status)+1) % sts.length];
+  return `<div class="card ${e.status==="done"?"done":""} ${e.archived?"archived":""}" style="--c:${kindColor(k)}" ${e.archived||String(e.id).startsWith("tmp-")?"":`draggable="true"`} data-id="${esc(e.id)}">
+    <div class="kind">${kindName(k)}</div>
+    <button class="ct" type="button" data-edit="${esc(e.id)}">${esc(e.title)}</button>
+    ${where ? `<div class="cm">${where}</div>` : ""}
+    ${isDate(e.date) ? `<div class="cm ${late?"late":""}">${late?"Overdue, ":""}${esc(fmtDate(e.date,e.time))}</div>` : ""}
+    ${bits.length ? `<div class="cm">${bits.join("<br>")}</div>` : ""}
+    <div class="crow">
+      ${e.archived ? `<button class="restore" type="button" data-restore="${esc(e.id)}">Restore</button>`
+        : `<button class="status" type="button" data-s="${esc(e.status)}" data-cycle="${esc(e.id)}" data-next="${esc(next)}" aria-label="Status: ${ST_NAME[e.status]||e.status}. Change to ${ST_NAME[next]}">${ST_NAME[e.status]||esc(e.status)}</button>`}
+      ${e.channel==="telegram" ? `<span class="via" title="Added or last changed in Telegram">via Telegram</span>` : ""}
+    </div>
+  </div>`;
+}
+
+/* ---------- drag between columns (desktop) ---------- */
+let dragID = null;
+$("board").addEventListener("dragstart", ev=>{
+  const c = ev.target.closest(".card[draggable]"); if(!c) return;
+  dragID = c.dataset.id; c.classList.add("dragging");
+  ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", dragID);
+});
+$("board").addEventListener("dragend", ev=>{
+  ev.target.closest?.(".card")?.classList.remove("dragging"); dragID = null;
+  document.querySelectorAll(".col.drop").forEach(c=>c.classList.remove("drop"));
+});
+$("board").addEventListener("dragover", ev=>{
+  const col = ev.target.closest(".col"); if(!col || !dragID) return;
+  ev.preventDefault();
+  document.querySelectorAll(".col.drop").forEach(c=>{ if(c!==col) c.classList.remove("drop"); });
+  col.classList.add("drop");
+});
+$("board").addEventListener("drop", ev=>{
+  const col = ev.target.closest(".col"); if(!col || !dragID) return;
+  ev.preventDefault(); col.classList.remove("drop");
+  const e = S.doc.entries.find(x=>x.id===dragID); if(!e) return;
+  const st = statusForCol(kindOf(e), Number(col.dataset.col));
+  if(!st){ flash("Tasks have no Decided stage. Change the kind to Decision first."); return; }
+  if(st !== e.status) updateEntry(e.id, {status:st}).catch(()=>{});
+});
 
 /* ---------- calendar ---------- */
 let calMonth = (()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
 function eventsByDay(){
   const map = {};
   const push = (d,e) => { (map[d] = map[d] || []).push(e); };
-  if(isDate(S.meta.keyDate)) push(S.meta.keyDate, {ms:true, title:"Key collection", sort:"0"});
-  if(isDate(S.meta.moveDate)) push(S.meta.moveDate, {ms:true, title:"Move in", sort:"0"});
-  S.items.filter(i=>!i.archived && isDate(i.due)).forEach(i=>push(i.due, {item:i, title:i.time?`${i.time} ${i.title}`:i.title, sort:i.time||"99"}));
+  if(isDate(S.doc.meta.keyDate)) push(S.doc.meta.keyDate, {ms:true, title:"Key collection", sort:"0"});
+  if(isDate(S.doc.meta.moveDate)) push(S.doc.meta.moveDate, {ms:true, title:"Move in", sort:"0"});
+  S.doc.entries.filter(e=>!e.archived && isDate(e.date) && matches(e)).forEach(e=>push(e.date, {entry:e, title:e.time?`${e.time} ${e.title}`:e.title, sort:e.time||"99"}));
   Object.values(map).forEach(l=>l.sort((a,b)=>a.sort.localeCompare(b.sort)));
   return map;
 }
-function evHtml(e){
-  if(e.ms) return `<button class="ev ms" type="button" data-dates="1">${esc(e.title)}</button>`;
-  const i = e.item;
-  return `<button class="ev ${i.status==="done"?"done":""}" type="button" style="--c:${catColor(i.cat)}" data-edit="${esc(i.id)}">${esc(e.title)}</button>`;
+function evHtml(x){
+  if(x.ms) return `<button class="ev ms" type="button" data-dates="1">${esc(x.title)}</button>`;
+  const e = x.entry;
+  return `<button class="ev ${e.status==="done"?"done":""}" type="button" style="--c:${kindColor(kindOf(e))}" data-edit="${esc(e.id)}">${esc(x.title)}</button>`;
 }
 function renderCal(){
   const y = calMonth.getFullYear(), mo = calMonth.getMonth();
@@ -493,66 +653,66 @@ function renderCal(){
 $("calPrev").onclick = ()=>{ calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth()-1, 1); renderCal(); };
 $("calNext").onclick = ()=>{ calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth()+1, 1); renderCal(); };
 $("calToday").onclick = ()=>{ const d=new Date(); calMonth = new Date(d.getFullYear(), d.getMonth(), 1); renderCal(); };
-function openDay(key){ if(S.loaded) openItem(null, "admin", key); }
+function openDay(key){ if(S.loaded) openEntry(null, {kind:"task", status:"todo", date:key}); }
 $("calGrid").addEventListener("keydown", e=>{ const c=e.target.closest(".cell"); if(c && (e.key==="Enter"||e.key===" ") && e.target===c){ e.preventDefault(); openDay(c.dataset.day); } });
-function card(i){
-  const t = today();
-  const late = isDate(i.due) && i.due < t && i.status!=="done";
-  const bits = [];
-  if(i.vendor) bits.push(esc(i.vendor));
-  if(i.quoted!=null || i.paid!=null){
-    const m=[]; if(i.quoted!=null) m.push(money(i.quoted)+" quoted"); if(i.paid!=null) m.push(money(i.paid)+" paid"); bits.push(m.join(", "));
-  }
-  return `<div class="card ${i.status==="done"?"done":""} ${i.archived?"archived":""}">
-    <button class="ct" data-edit="${esc(i.id)}">${esc(i.title)}</button>
-    ${isDate(i.due) ? `<div class="cm ${late?"late":""}">${late?"Overdue, ":""}${esc(fmtDate(i.due,i.time))}</div>` : ""}
-    ${bits.length ? `<div class="cm">${bits.join("<br>")}</div>` : ""}
-    <div class="crow">
-      ${i.archived ? `<button class="restore" data-restore="${esc(i.id)}">Restore</button>`
-        : `<button class="status" data-s="${i.status}" data-cycle="${esc(i.id)}" aria-label="Status: ${STATUS[i.status]}. Change">${STATUS[i.status]}</button>`}
-    </div>
-  </div>`;
-}
 
 /* ---------- board interactions ---------- */
 let editing = null;
 document.addEventListener("click", e=>{
   const b = e.target.closest("button");
   if(!b){ const c = e.target.closest(".cell"); if(c && c.dataset.day) openDay(c.dataset.day); return; }
-  if(b.dataset.dates) openDates();
-  else if(b.dataset.edit) openItem(b.dataset.edit);
-  else if(b.dataset.add) openItem(null, b.dataset.add);
-  else if(b.dataset.cycle){ const i=S.items.find(x=>x.id===b.dataset.cycle); if(i) updateItem(i.id,{status:NEXT[i.status]||"todo"}).catch(()=>{}); }
-  else if(b.dataset.restore) updateItem(b.dataset.restore,{archived:false}).catch(()=>{});
+  if(b.dataset.undo){ undo(b.dataset.undo, b.closest(".ch") ? b : null); }
+  else if(b.dataset.dates) openDates();
+  else if(b.dataset.edit) openEntry(b.dataset.edit);
+  else if(b.dataset.add){
+    const ci = Number(b.dataset.add), kind = S.f.kind || (ci===2 ? "decision" : "idea");
+    openEntry(null, {kind, status: statusForCol(kind, ci) || statusesFor(kind)[0], room: S.f.room || null, category: S.f.cat || ""});
+  }
+  else if(b.dataset.cycle) updateEntry(b.dataset.cycle, {status:b.dataset.next}).catch(()=>{});
+  else if(b.dataset.restore) updateEntry(b.dataset.restore, {archived:false}).catch(()=>{});
+  else if(b.dataset.alldone){ S.showAllDone = b.dataset.alldone==="1"; render(); }
 });
-$("itemForm").cat.innerHTML = CATS.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
-function openItem(id, cat, due){
+const EF = $("entryForm");
+EF.kind.innerHTML = KINDS.map(k=>`<option value="${k.id}">${k.name}</option>`).join("");
+EF.room.innerHTML = `<option value="">No room</option>` + ROOMS.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join("");
+function fillStatus(kind, cur){
+  EF.status.innerHTML = statusesFor(kind).map(s=>`<option value="${s}">${ST_NAME[s]}</option>`).join("");
+  EF.status.value = statusesFor(kind).includes(cur) ? cur : remap(cur, kind);
+}
+EF.kind.addEventListener("change", ()=>fillStatus(EF.kind.value, EF.status.value));
+EF.date.addEventListener("change", ()=>{ EF.time.disabled = !EF.date.value; if(!EF.date.value) EF.time.value = ""; });
+$("newEntry").onclick = ()=>openEntry(null, {kind:S.f.kind||"note", room:S.f.room||null, category:S.f.cat||""});
+function openEntry(id, preset){
   if(!S.loaded) return;
   if(id && id.startsWith("tmp-")) return; // still saving
   editing = id;
-  const i = id ? S.items.find(x=>x.id===id) : {cat, status:"todo", due:due||null};
-  if(!i) return;
-  const f = $("itemForm");
-  $("dlgTitle").textContent = id ? "Edit item" : "New item";
-  f.title.value = i.title||""; f.cat.value = catOf(i); f.status.value = i.status||"todo";
-  f.due.value = i.due||""; f.time.value = i.time||""; f.quoted.value = i.quoted ?? ""; f.paid.value = i.paid ?? "";
-  f.vendor.value = i.vendor||""; f.notes.value = i.notes||"";
+  const e = id ? S.doc.entries.find(x=>x.id===id) : {kind:"note", ...preset};
+  if(!e) return;
+  const k = kindOf(e), c = cost(e);
+  $("dlgTitle").textContent = id ? "Edit entry" : "New entry";
+  EF.title.value = e.title||""; EF.kind.value = k; fillStatus(k, e.status || statusesFor(k)[0]);
+  EF.room.value = e.room||""; EF.category.value = e.category||"";
+  EF.date.value = e.date||""; EF.time.value = e.time||""; EF.time.disabled = !e.date;
+  EF.estimate.value = c.estimate ?? ""; EF.actual.value = c.actual ?? "";
+  EF.vendor.value = e.vendor||""; EF.source.value = e.source||""; EF.tags.value = (e.tags||[]).join(", "); EF.notes.value = e.notes||"";
+  $("dlgMeta").textContent = id && e.updated ? `Last changed ${new Date(e.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${e.by||"?"}${e.channel==="telegram"?" in Telegram":""}.` : "";
   $("delBtn").hidden = $("archBtn").hidden = !id;
-  $("archBtn").textContent = i.archived ? "Restore" : "Archive";
-  $("itemDlg").showModal();
+  $("archBtn").textContent = e.archived ? "Restore" : "Archive";
+  $("entryDlg").showModal();
+  EF.title.focus();
 }
-$("itemForm").addEventListener("submit", e=>{
-  e.preventDefault();
-  const f = e.target;
-  const data = {title:f.title.value, cat:f.cat.value, status:f.status.value, due:f.due.value, time:f.time.value,
-    quoted:f.quoted.value, paid:f.paid.value, vendor:f.vendor.value, notes:f.notes.value};
-  (editing ? updateItem(editing, data) : addItem(data)).catch(()=>{});
-  $("itemDlg").close();
+EF.addEventListener("submit", ev=>{
+  ev.preventDefault();
+  const data = {title:EF.title.value, kind:EF.kind.value, status:EF.status.value, room:EF.room.value, category:EF.category.value,
+    date:EF.date.value, time:EF.time.value, estimate:EF.estimate.value, actual:EF.actual.value,
+    vendor:EF.vendor.value, source:EF.source.value, tags:EF.tags.value, notes:EF.notes.value};
+  (editing ? updateEntry(editing, data) : addEntry(data)).catch(()=>{});
+  $("entryDlg").close();
 });
-$("cancelBtn").onclick = ()=>$("itemDlg").close();
-$("archBtn").onclick = ()=>{ const i=S.items.find(x=>x.id===editing); if(i) updateItem(editing,{archived:!i.archived}).catch(()=>{}); $("itemDlg").close(); };
-$("delBtn").onclick = ()=>{ if(confirm("Delete this item for good? Archive keeps it recoverable.")){ deleteItem(editing).catch(()=>{}); $("itemDlg").close(); } };
-function openDates(){ if(!S.loaded) return; const f=$("keyForm"); f.keyDate.value = S.meta.keyDate||""; f.moveDate.value = S.meta.moveDate||""; $("keyDlg").showModal(); }
+$("cancelBtn").onclick = ()=>$("entryDlg").close();
+$("archBtn").onclick = ()=>{ const e=S.doc.entries.find(x=>x.id===editing); if(e) updateEntry(editing,{archived:!e.archived}).catch(()=>{}); $("entryDlg").close(); };
+$("delBtn").onclick = ()=>{ if(confirm("Delete this entry? You can undo right after; Archive keeps it out of the way instead.")){ deleteEntry(editing).catch(()=>{}); $("entryDlg").close(); } };
+function openDates(){ if(!S.loaded) return; const f=$("keyForm"); f.keyDate.value = S.doc.meta.keyDate||""; f.moveDate.value = S.doc.meta.moveDate||""; $("keyDlg").showModal(); }
 $("keytag").onclick = openDates;
 $("keyForm").addEventListener("submit", e=>{ e.preventDefault(); setDates({moveDate:e.target.moveDate.value, keyDate:e.target.keyDate.value}).catch(()=>{}); $("keyDlg").close(); });
 $("keyCancel").onclick = ()=>$("keyDlg").close();
@@ -566,11 +726,19 @@ function bubble(role, text){
   $("log").appendChild(d); $("log").scrollTop = $("log").scrollHeight; return d;
 }
 function showHints(){
-  const ex = ["We move in on 5 Dec", "Add a 3-seater sofa, budget 2k, to the shopping list", "Lim Carpentry quoted 18k, paid 30% deposit today", "What's still unpaid?"];
+  const ex = ["Thinking of fluted glass for the dry kitchen sliding door", "Lim quoted 18k for carpentry, paid 30% today", "Electrician coming Friday 2pm to check the DB", "What did we decide for the kitchen and what did it cost?"];
   const h = document.createElement("div"); h.className="hint"; h.id="hints";
-  h.innerHTML = `Say what happened or what's coming up, and the board updates itself. Try:` + ex.map(x=>`<button type="button">${esc(x)}</button>`).join("");
+  h.innerHTML = `Tell it an idea, a decision, a quote or a date, or ask what you decided. Try:` + ex.map(x=>`<button type="button">${esc(x)}</button>`).join("");
   h.addEventListener("click", e=>{ const b=e.target.closest("button"); if(b){ $("input").value=b.textContent; send(); } });
   $("log").appendChild(h);
+}
+function changeLines(a, changes){
+  for(const c of changes){
+    const row = document.createElement("span"); row.className = "ch";
+    const t = document.createElement("span"); t.textContent = c.text; row.appendChild(t);
+    if(c.id){ const u = document.createElement("button"); u.type = "button"; u.className = "undo"; u.dataset.undo = c.id; u.textContent = "Undo"; row.appendChild(u); }
+    a.appendChild(row);
+  }
 }
 // Reads a text/event-stream response body and calls on(event, data) per event.
 async function readSSE(resp, on){
@@ -612,7 +780,7 @@ async function send(){
       await readSSE(resp, (ev, d)=>{
         if(ev==="delta"){ streamed += d.text; a.textContent = streamed; }
         else if(ev==="reset"){ streamed = ""; a.textContent = "Thinking…"; }
-        else if(ev==="change"){ changes.push(d.text); }
+        else if(ev==="change"){ changes.push({id:d.id, text:d.text}); }
         else if(ev==="done"){ reply = d.reply; changes = d.changes || changes; if(d.model) setModelLine(d.model); }
         else if(ev==="error"){ failed = d.error; changes = d.changes || changes; }
       });
@@ -627,7 +795,7 @@ async function send(){
   }finally{
     if(failed){ a.textContent = (streamed ? streamed+"\n" : "") + failed; turns.pop(); }
     else { a.textContent = reply; turns.push({role:"assistant", content:reply}); }
-    if(changes.length){ const c=document.createElement("span"); c.className="ch"; c.textContent=changes.join("\n"); a.appendChild(c); }
+    if(changes.length) changeLines(a, changes);
     busy = false; ctl = null; $("send").textContent = "Send"; $("log").scrollTop = $("log").scrollHeight;
   }
 }
@@ -715,23 +883,28 @@ $("setSave").onclick = async ()=>{
 };
 
 /* ---------- boot ---------- */
+{
+  const f = store.get("movin.filters");
+  if(f && typeof f === "object") S.f = {room:f.room||"", kind:f.kind||"", cat:f.cat||"", text:f.text||""};
+  $("fText").value = S.f.text;
+}
 render();
 showHints();
 api("GET","/api/settings/llm").then(v=>setModelLine(v.model)).catch(()=>{});
 (function connect(){
   let opened = false, downTimer = null;
   const es = new EventSource("/api/events");
-  es.addEventListener("board", e=>{
+  es.addEventListener("entries", e=>{
     const snap = JSON.parse(e.data);
     if(!S.loaded) banner("");
     if(pending > 0){ pushedWhileBusy = true; return; }
     applyServer(snap);
   });
-  es.onopen = ()=>{ opened = true; clearTimeout(downTimer); if($("banner").textContent.startsWith("The board stopped syncing")) banner(""); };
+  es.onopen = ()=>{ opened = true; clearTimeout(downTimer); if($("banner").textContent.startsWith("Stopped syncing")) banner(""); };
   es.onerror = ()=>{
     // EventSource reconnects by itself; only say something if it stays down.
     clearTimeout(downTimer);
-    downTimer = setTimeout(()=>{ if(es.readyState!==EventSource.OPEN) banner(opened ? "The board stopped syncing. Reconnecting…" : "Couldn't reach the board. Reload to try again."); }, 4000);
+    downTimer = setTimeout(()=>{ if(es.readyState!==EventSource.OPEN) banner(opened ? "Stopped syncing. Reconnecting…" : "Couldn't reach the server. Reload to try again."); }, 4000);
   };
 })();
 </script>
