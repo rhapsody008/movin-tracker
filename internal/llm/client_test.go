@@ -59,3 +59,20 @@ func TestThinkOnDemandKwargs(t *testing.T) {
 		}
 	}
 }
+
+// Only api.anthropic.com gets the native headers; the key goes nowhere
+// else as x-api-key.
+func TestAnthropicHeadersOnlyForAnthropic(t *testing.T) {
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		w.Write([]byte(`{"data":[{"id":"m1"}]}`))
+	}))
+	defer srv.Close()
+	if _, err := llm.New(settings.LLM{BaseURL: srv.URL + "/v1", APIKey: "k", TimeoutSec: 5}).Models(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got.Get("x-api-key") != "" || got.Get("anthropic-version") != "" || got.Get("Authorization") != "Bearer k" {
+		t.Fatalf("other endpoint got %v", got)
+	}
+}

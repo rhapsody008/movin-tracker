@@ -155,6 +155,8 @@ A key is only ever sent to the endpoint it belongs to. If you switch to a **diff
 
 **Think only when asked** is for thinking models such as Qwen3 on vMLX or vLLM. Thinking makes every reply minutes slower, so with this ticked the model answers straight away, and thinks only when a message starts with `/think` (Telegram or the web chat), e.g. `/think compare the two zip blind quotes`. Under the hood every other request sends `chat_template_kwargs: {"enable_thinking": false}`. Leave it off for OpenAI and other endpoints that reject that field (Test connection fails with a 400 if so). With it off, the model server decides, and `/think` makes no difference.
 
+**Claude (Anthropic)**: endpoint `https://api.anthropic.com/v1/`, a Claude API key from the Claude Console, model e.g. `claude-sonnet-5-5`. Anthropic's OpenAI layer handles the chat; for the model list the app adds the headers Anthropic's own Models API needs. Leave "Think only when asked" off: Claude 5 models always think and `/think` changes nothing there.
+
 ### Settings → Telegram
 
 - **Status**: "Running as @yourbot" with the time of the last message, or why it isn't running.

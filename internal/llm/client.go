@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -97,6 +98,14 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 	if c.cfg.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 	}
+	if c.anthropic() {
+		// Anthropic's OpenAI layer covers /chat/completions only; /models
+		// is its native Models API, which wants these headers instead.
+		req.Header.Set("anthropic-version", "2023-06-01")
+		if c.cfg.APIKey != "" {
+			req.Header.Set("x-api-key", c.cfg.APIKey)
+		}
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, c.scrub(err)
@@ -129,9 +138,19 @@ func (c *Client) scrub(err error) error {
 	return fmt.Errorf("%s", strings.ReplaceAll(err.Error(), c.cfg.APIKey, "[redacted]"))
 }
 
+// anthropic reports whether the endpoint is Anthropic's own API.
+func (c *Client) anthropic() bool {
+	u, err := url.Parse(c.cfg.BaseURL)
+	return err == nil && strings.EqualFold(u.Hostname(), "api.anthropic.com")
+}
+
 // Models lists the model ids the endpoint offers.
 func (c *Client) Models(ctx context.Context) ([]string, error) {
-	resp, err := c.do(ctx, http.MethodGet, "/models", nil)
+	path := "/models"
+	if c.anthropic() {
+		path += "?limit=1000" // it pages, 20 by default
+	}
+	resp, err := c.do(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
