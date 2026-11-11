@@ -68,3 +68,6 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 
 ## Admin operation guide (2026-11-11)
 - ZY needs an **admin operation guide** as a Phase 1 deliverable (step 1.12), written at the end of Phase 1 so it matches what was built. Audience: ZY operating the app. Covers: first-time setup (BotFather, privacy off, GitHub OAuth App, Fernet key, IAM user, GHCR token), the NKP secrets and what each is for, deploy/release/rollback/pause (OCI + Flux, once D.* lands), the admin page (Storage, LLM, Telegram tabs), adding people and the group (rejected list), rotating secrets and restarting, local dev (`make dev`, `.env`, vMLX via host.docker.internal), and troubleshooting (409 second poller, saved LLM endpoint down, storage test failures, supergroup ID change).
+
+## Review timing (2026-11-11)
+- No separate code review while steps are still being built. Run one review (strict-reviewer) once all planned code is complete; per-step lint/tests/UI checks continue as usual.
