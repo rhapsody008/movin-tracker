@@ -24,8 +24,9 @@ type Converter interface {
 	Text(ctx context.Context, pdf []byte) ([]Page, error)
 }
 
-// Notifier hears about syncs that changed something (not the first import,
-// not no-op runs). It must not block for long.
+// Notifier hears about syncs that changed something: not no-op runs, and
+// not the first import (while no document was readable yet). It must not
+// block for long.
 type Notifier interface {
 	DocsChanged(ctx context.Context, result Sync, changed []Doc)
 }
@@ -212,7 +213,15 @@ func (s *Syncer) run(ctx context.Context, reason string) (Sync, error) {
 		if err != nil {
 			return s.fail(res, err)
 		}
-		firstImport = len(ix.Docs) == 0
+		// First import: nothing was readable before (an empty index, or one
+		// where every document failed, e.g. before poppler was installed).
+		firstImport = true
+		for _, d := range ix.Docs {
+			if d.Status == StatusOK {
+				firstImport = false
+				break
+			}
+		}
 		objs, err := s.Store.List(ctx, RawPrefix)
 		if err != nil {
 			return s.fail(res, err)
@@ -243,10 +252,11 @@ func (s *Syncer) run(ctx context.Context, reason string) (Sync, error) {
 				d.Status, d.Reason, d.ETag, d.Size, d.RemovedAt = StatusSkipped, why, o.ETag, o.Size, ""
 				continue
 			}
-			if known && d.Status == StatusOK && d.ETag == o.ETag {
+			if known && d.Status == StatusOK && d.ETag == o.ETag && d.Version == ConvertVersion {
 				continue // unchanged
 			}
 			wasOK := known && d.Status == StatusOK
+			refresh := wasOK && d.ETag == o.ETag // same file, older reader
 			if c, ok := done[o.Key]; ok && c.ETag == o.ETag {
 				id := d.ID // converted in an earlier attempt of this run
 				*d = c
@@ -257,11 +267,15 @@ func (s *Syncer) run(ctx context.Context, reason string) (Sync, error) {
 				s.Log.Warn("document sync failed", "key", o.Key, "err", err)
 				continue
 			}
-			d.SyncedAt, d.RemovedAt = now, ""
+			d.SyncedAt, d.RemovedAt, d.Version = now, "", ConvertVersion
 			done[o.Key] = *d
-			if wasOK {
+			switch {
+			case refresh:
+				res.Refreshed++ // not announced
+				continue
+			case wasOK:
 				res.Changed++
-			} else {
+			default:
 				res.Added++
 			}
 			changedDocs = append(changedDocs, *d)
@@ -296,7 +310,7 @@ func (s *Syncer) run(ctx context.Context, reason string) (Sync, error) {
 		break
 	}
 	s.Log.Info("documents synced", "reason", reason, "added", res.Added, "changed", res.Changed,
-		"removed", res.Removed, "failed", res.Failed, "skipped", res.Skipped, "firstImport", firstImport)
+		"removed", res.Removed, "failed", res.Failed, "skipped", res.Skipped, "refreshed", res.Refreshed, "firstImport", firstImport)
 	if res.Changes() && !firstImport && s.Notify != nil {
 		s.Notify.DocsChanged(ctx, res, changedDocs)
 	}

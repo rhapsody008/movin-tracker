@@ -26,6 +26,8 @@ import (
 	movintracker "github.com/rhapsody008/movin-tracker"
 	"github.com/rhapsody008/movin-tracker/internal/agent"
 	"github.com/rhapsody008/movin-tracker/internal/config"
+	"github.com/rhapsody008/movin-tracker/internal/docs"
+	"github.com/rhapsody008/movin-tracker/internal/docs/convert"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/server"
@@ -112,10 +114,14 @@ func serve() error {
 		guide = func() ([]byte, error) { return os.ReadFile(guidePath) }
 		log.Info("serving frontend and admin guide from disk", "dir", c.StaticDir, "guide", guidePath)
 	}
-	runner := &agent.Runner{Entries: ents, Loc: c.Location, Log: log, Now: time.Now}
+	// Documents: index + text under docs/, synced from docs/raw/.
+	syncer := &docs.Syncer{Store: store, Conv: &convert.Poppler{}, Log: log, Now: time.Now}
+	library := &docs.Library{Sync: syncer}
+	runner := &agent.Runner{Entries: ents, Docs: library, Loc: c.Location, Log: log, Now: time.Now}
 	var bot *telegram.Bot
 	if c.TelegramToken != "" {
-		bot = &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Log: log}
+		bot = &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Docs: syncer, Log: log}
+		syncer.Notify = bot
 		go func() {
 			if err := bot.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Error("telegram bot stopped", "err", err)
@@ -154,7 +160,18 @@ func serve() error {
 		log.Warn("listening beyond loopback; the app trusts "+c.AuthHeader+", so only the auth proxy may be able to reach this port", "addr", c.ListenAddr)
 	}
 	log.Info("listening", "addr", c.ListenAddr, "bucket", c.S3Bucket, "prefix", c.S3Prefix, "authHeader", c.AuthHeader, "devEmail", c.DevEmail != "")
-	if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	ln, err := net.Listen("tcp", c.ListenAddr)
+	if err != nil {
+		return err
+	}
+	// The first document sync starts once the listener is up, so readiness
+	// and the web page don't wait for it.
+	go func() {
+		if err := syncer.Background(ctx, c.DocsSync, c.Location); err != nil {
+			log.Error("document sync schedule", "err", err)
+		}
+	}()
+	if err := hs.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	<-shutdown

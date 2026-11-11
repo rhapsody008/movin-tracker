@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/agent"
+	"github.com/rhapsody008/movin-tracker/internal/docs"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
@@ -26,6 +27,7 @@ type Bot struct {
 	Agent    *agent.Runner
 	Entries  *entries.Service
 	Settings *settings.Service
+	Docs     *docs.Syncer // nil: documents are off
 	Log      *slog.Logger
 
 	// PollSeconds is how long getUpdates may wait for news (default 50).

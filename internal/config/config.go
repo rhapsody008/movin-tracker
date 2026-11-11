@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rhapsody008/movin-tracker/internal/docs"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
 
@@ -26,6 +27,8 @@ type Config struct {
 	SettingsSecret string
 	LLM            settings.LLM // env-level defaults; settings.json overrides
 	ClaudeBaseURL  string       // LLM_CLAUDE_BASE_URL: tests and stubs only
+
+	DocsSync string // DOCS_SYNC_SCHEDULE: HH:MM in TZ, or off; default 03:00
 
 	TelegramToken string            // empty: the bot does not start
 	Telegram      settings.Telegram // env-level allowlist; settings.json overrides
@@ -94,6 +97,10 @@ func Load() (Config, error) {
 		if c.LLM.ThinkOnDemand, err = strconv.ParseBool(v); err != nil {
 			return c, fmt.Errorf("LLM_THINK_ON_DEMAND: %w", err)
 		}
+	}
+	c.DocsSync = env("DOCS_SYNC_SCHEDULE", "03:00")
+	if _, _, _, err := docs.ParseSchedule(c.DocsSync); err != nil {
+		return c, err
 	}
 	c.TelegramToken = env("TELEGRAM_BOT_TOKEN", "")
 	if c.Telegram, err = settings.ParseTelegramEnv(env("TELEGRAM_ALLOWED_IDS", ""), env("TELEGRAM_ALLOWED_CHATS", "")); err != nil {

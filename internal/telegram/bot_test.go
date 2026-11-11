@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/agent"
+	"github.com/rhapsody008/movin-tracker/internal/docs"
+	"github.com/rhapsody008/movin-tracker/internal/docs/convert"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
@@ -245,7 +247,7 @@ type botRig struct {
 	logs *testutil.SyncBuffer
 }
 
-func startBot(t *testing.T) *botRig {
+func startBot(t *testing.T, opts ...func(*telegram.Bot)) *botRig {
 	t.Helper()
 	logs := &testutil.SyncBuffer{}
 	log := testutil.Logger(logs)
@@ -269,6 +271,9 @@ func startBot(t *testing.T) *botRig {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	for _, o := range opts {
+		o(bot)
+	}
 	go func() { bot.Run(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
 	// Wait until it is polling.
@@ -498,7 +503,7 @@ func TestCommands(t *testing.T) {
 	r.tg.push(inGroup(groupID, zyID, "Zhou", "/recent@some_other_bot", 30), inGroup(groupID, zyID, "Zhou", "/sync@movin_test_bot", 31))
 	s = r.tg.waitSent(t, 4)
 	time.Sleep(200 * time.Millisecond)
-	if s = r.tg.sentCopy(); len(s) != 4 || s[3].ReplyTo != 31 || !strings.Contains(s[3].Text, "Drawings") {
+	if s = r.tg.sentCopy(); len(s) != 4 || s[3].ReplyTo != 31 || !strings.Contains(s[3].Text, "Documents aren't switched on") {
 		t.Fatalf("group commands: %+v", s[3:])
 	}
 }
@@ -671,5 +676,50 @@ func TestThinkCommandOnClaude(t *testing.T) {
 	defer mu.Unlock()
 	if strings.Join(efforts, ",") != "low,high" {
 		t.Fatalf("efforts %v, want low then high", efforts)
+	}
+}
+
+// The first import is silent; a later change is posted to the group once;
+// /sync answers in its chat with counts, without a second notice there.
+func TestDocumentSyncAndNotices(t *testing.T) {
+	store := objstore.NewMemory()
+	pad := strings.Repeat(" text of the manual", 10)
+	conv := &convert.Fake{Pages: map[string][]docs.Page{
+		"pdf-a": {{N: 1, W: 595, H: 842, Text: "Fridge manual" + pad}},
+		"pdf-b": {{N: 1, W: 595, H: 842, Text: "Oven manual" + pad}},
+	}}
+	syncer := &docs.Syncer{Store: store, Conv: conv, Log: testutil.Logger(nil)}
+	r := startBot(t, func(b *telegram.Bot) { b.Docs = syncer; syncer.Notify = b })
+	ctx := context.Background()
+	store.PutBlob(ctx, "docs/raw/Fridge.pdf", []byte("pdf-a"), "application/pdf")
+
+	r.tg.push(inGroup(groupID, zyID, "Zhou", "/sync", 50))
+	s := r.tg.waitSent(t, 2) // "Syncing…" + the result
+	if !strings.Contains(s[0].Text, "Syncing") || !strings.Contains(s[1].Text, "Synced: 1 added") || !strings.Contains(s[1].Text, "Fridge.pdf") {
+		t.Fatalf("/sync replies %+v", s)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 2 {
+		t.Fatalf("first import must be silent; %d messages", n)
+	}
+
+	// A new document found by the nightly sync: one notice to the group.
+	store.PutBlob(ctx, "docs/raw/Oven.pdf", []byte("pdf-b"), "application/pdf")
+	if _, err := syncer.Sync(ctx, "daily"); err != nil {
+		t.Fatal(err)
+	}
+	s = r.tg.waitSent(t, 3)
+	if s[2].ChatID != groupID || !strings.Contains(s[2].Text, "Documents updated: 1 added") || !strings.Contains(s[2].Text, "Oven.pdf") {
+		t.Fatalf("notice %+v", s[2])
+	}
+	// Nothing changed: /sync says so and the group gets no notice.
+	r.tg.push(private(zyID, "Zhou", "/sync"))
+	s = r.tg.waitSent(t, 5)
+	if !strings.Contains(s[4].Text, "No changes. 2 documents are readable.") {
+		t.Fatalf("no-op /sync %+v", s[4])
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 5 {
+		t.Fatalf("no-op sync sent a notice; %d messages", n)
 	}
 }

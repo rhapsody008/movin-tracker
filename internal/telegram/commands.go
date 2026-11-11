@@ -16,7 +16,7 @@ var Commands = []BotCommand{
 	{Command: "think", Description: "Think it through first (slower), e.g. /think compare the quotes"},
 	{Command: "recent", Description: "Show the last 10 changes"},
 	{Command: "undo", Description: "Undo my last change"},
-	{Command: "sync", Description: "Re-read the drawings"},
+	{Command: "sync", Description: "Re-read the documents now"},
 	{Command: "help", Description: "What I can do"},
 }
 
@@ -32,6 +32,7 @@ Every change comes back with an Undo button.
 /think   start a message with it when I should think it through first (slower), e.g. /think compare the two zip blind quotes
 /recent  the last 10 changes
 /undo    undo your last change
+/sync    re-read the documents now (they also sync every night)
 /help    this message`
 
 // command handles a /command. In groups, "/cmd@otherbot" is for another bot
@@ -60,7 +61,7 @@ func (b *Bot) command(ctx context.Context, m *Message, name, text string) {
 	case "undo":
 		b.undoLast(ctx, m, name)
 	case "sync":
-		b.reply(ctx, m, "Drawings aren't switched on yet, so there's nothing to sync.", nil)
+		b.syncCommand(ctx, m)
 	default:
 		b.reply(ctx, m, "I don't know /"+cmd+". Send /help to see what I can do.", nil)
 	}

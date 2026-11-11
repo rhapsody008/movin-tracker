@@ -39,6 +39,11 @@ const (
 	StatusSkipped = "skipped" // not a document we read (Reason says why)
 )
 
+// ConvertVersion goes up when how documents are read or classified
+// changes; documents read with an older version are read again at the next
+// sync ("refreshed", which is not announced).
+const ConvertVersion = 2
+
 // MinTextChars is how many non-space characters a page needs to count as
 // having text; below it the page is treated as an image.
 const MinTextChars = 100
@@ -68,19 +73,21 @@ type Doc struct {
 	TextPages int    `json:"textPages,omitempty"` // pages with at least MinTextChars
 	Summary   string `json:"summary,omitempty"`   // one line, from the model
 	SyncedAt  string `json:"syncedAt,omitempty"`
+	Version   int    `json:"v,omitempty"` // ConvertVersion it was read with
 	RemovedAt string `json:"removedAt,omitempty"`
 }
 
 // Sync is the outcome of one sync run, kept as lastSync.
 type Sync struct {
-	At      string `json:"at"`
-	Reason  string `json:"reason"` // startup, daily, /sync, web
-	Added   int    `json:"added"`
-	Changed int    `json:"changed"`
-	Removed int    `json:"removed"`
-	Failed  int    `json:"failed"`
-	Skipped int    `json:"skipped"`
-	Error   string `json:"error,omitempty"`
+	At        string `json:"at"`
+	Reason    string `json:"reason"` // startup, daily, /sync, web
+	Added     int    `json:"added"`
+	Changed   int    `json:"changed"`
+	Removed   int    `json:"removed"`
+	Failed    int    `json:"failed"`
+	Skipped   int    `json:"skipped"`
+	Refreshed int    `json:"refreshed,omitempty"` // re-read for a new ConvertVersion
+	Error     string `json:"error,omitempty"`
 }
 
 // Changes reports whether the run changed anything worth telling people.
@@ -127,8 +134,8 @@ type PageInfo struct {
 }
 
 // Classify decides a document's class from its pages and counts the pages
-// with text. Drawings win over scans: a big sheet with some text is still a
-// drawing to look at.
+// with text. A big sheet with some text is a drawing to look at; big pages
+// with no text at all (a scanned leaflet) are a scan.
 func Classify(pages []PageInfo) (class string, textPages int) {
 	big := false
 	for _, p := range pages {
@@ -142,7 +149,7 @@ func Classify(pages []PageInfo) (class string, textPages int) {
 	switch {
 	case len(pages) == 0:
 		return ClassScanned, 0
-	case big:
+	case big && textPages > 0:
 		return ClassDrawing, textPages
 	case textPages*2 < len(pages):
 		return ClassScanned, textPages

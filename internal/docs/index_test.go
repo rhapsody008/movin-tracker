@@ -45,6 +45,7 @@ func TestClassify(t *testing.T) {
 		{"half text is still text", []docs.PageInfo{a4, a4scan}, docs.ClassText, 1},
 		{"no pages", nil, docs.ClassScanned, 0},
 		{"landscape A4 is not a drawing", []docs.PageInfo{{W: 842, H: 595, Chars: 900}}, docs.ClassText, 1},
+		{"big pages without text are a scan", []docs.PageInfo{{W: 1464, H: 822, Chars: 0}, {W: 1464, H: 822, Chars: 3}}, docs.ClassScanned, 0},
 	}
 	for _, c := range cases {
 		class, tp := docs.Classify(c.pages)

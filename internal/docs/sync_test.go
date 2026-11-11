@@ -209,7 +209,7 @@ func TestSyncRedoesAfterAnotherWriter(t *testing.T) {
 	otherInfo, _ := r.store.Stat(ctx, other)
 	rs := &racingStore{Memory: r.store}
 	rs.sneak = func() {
-		theirs := &docs.Index{Docs: []docs.Doc{{ID: "abc12345", Key: other, ETag: otherInfo.ETag, Status: docs.StatusOK, Class: docs.ClassText, Pages: 1, Summary: "theirs"}}}
+		theirs := &docs.Index{Docs: []docs.Doc{{ID: "abc12345", Key: other, ETag: otherInfo.ETag, Status: docs.StatusOK, Class: docs.ClassText, Pages: 1, Summary: "theirs", Version: docs.ConvertVersion}}}
 		b, _ := theirs.Encode(time.Now())
 		if _, err := r.store.Put(ctx, docs.IndexKey, b, ""); err != nil {
 			t.Error(err)
@@ -233,5 +233,58 @@ func TestSyncRedoesAfterAnotherWriter(t *testing.T) {
 		if d.Key == other && (d.Summary != "theirs" || d.ID != "abc12345") {
 			t.Fatalf("their document was overwritten: %+v", d)
 		}
+	}
+}
+
+// A first sync where everything failed (no poppler yet) and the fixed one
+// after it are both the first import: no notice for the whole library.
+func TestFailedThenFixedImportStaysSilent(t *testing.T) {
+	r := newRig(t)
+	r.put(t, manual, "pdf-manual-v1")
+	r.put(t, drawing, "pdf-drawing-v1")
+	r.conv.Fail["pdf-manual-v1"] = errors.New("pdfinfo: not installed")
+	r.conv.Fail["pdf-drawing-v1"] = errors.New("pdfinfo: not installed")
+	if res := r.run(t); res.Failed != 2 || r.notes.count() != 0 {
+		t.Fatalf("all failed: %+v", res)
+	}
+	r.conv.Fail = map[string]error{}
+	if res := r.run(t); res.Added != 2 || r.notes.count() != 0 {
+		t.Fatalf("fixed import: %+v, notes %d", res, r.notes.count())
+	}
+	// From now on changes are announced.
+	r.put(t, manual, "pdf-manual-v2")
+	if res := r.run(t); res.Changed != 1 || r.notes.count() != 1 {
+		t.Fatalf("later change: %+v, notes %d", res, r.notes.count())
+	}
+}
+
+// Documents read by an older ConvertVersion are read again, counted as
+// refreshed, and not announced.
+func TestOlderVersionIsRefreshedQuietly(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	r.put(t, manual, "pdf-manual-v1")
+	r.put(t, drawing, "pdf-drawing-v1")
+	r.run(t)
+	// Pretend the index was written by an older build.
+	ix, _ := r.sync.Index(ctx)
+	for i := range ix.Docs {
+		ix.Docs[i].Version = docs.ConvertVersion - 1
+	}
+	b, _ := ix.Encode(time.Now())
+	_, etag, _ := r.store.Get(ctx, docs.IndexKey)
+	if _, err := r.store.Put(ctx, docs.IndexKey, b, etag); err != nil {
+		t.Fatal(err)
+	}
+	calls := r.conv.CallCount()
+	res := r.run(t)
+	if res.Refreshed != 2 || res.Changes() || r.conv.CallCount() != calls+2 || r.notes.count() != 0 {
+		t.Fatalf("refresh %+v (calls +%d, notes %d)", res, r.conv.CallCount()-calls, r.notes.count())
+	}
+	if d := r.doc(t, manual); d.Version != docs.ConvertVersion {
+		t.Fatalf("version %d", d.Version)
+	}
+	if res := r.run(t); res.Refreshed != 0 || r.conv.CallCount() != calls+2 {
+		t.Fatalf("second run refreshed again: %+v", res)
 	}
 }
