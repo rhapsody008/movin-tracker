@@ -37,7 +37,7 @@ Do these once. They produce the values that go into the Secrets in the next sect
 ### 3. AWS bucket and access key
 
 1. Create the bucket in `ap-southeast-1` with **versioning on** and default encryption (SSE-S3). Versioning is your backup and undo-of-last-resort.
-2. Create an IAM user for the app and attach [deploy/iam-policy.json](../deploy/iam-policy.json), changing the bucket name and prefix if yours differ. It allows read/write under `prod/`, delete only under `prod/_probe/` (the storage test's scratch files), and listing the bucket.
+2. Create an IAM user for the app and attach [deploy/iam-policy.json](../deploy/iam-policy.json), changing the bucket name to yours. It allows read/write on the bucket's objects, delete only under `_probe/` (the storage test's scratch files), and listing the bucket. The same bucket and key serve your Mac (`make dev`) and production: there is one copy of the data.
 3. Create an **access key** for that user. NKP clusters have no IRSA, so the pod uses this static key pair.
 
 ### 4. Two random secrets
@@ -97,7 +97,7 @@ kubectl -n <namespace> rollout restart deploy/movin
 These are not secret and live in [deploy/k8s/overlays/prod/kustomization.yaml](../deploy/k8s/overlays/prod/kustomization.yaml):
 
 - **Host name**: the Ingress host, its TLS host and the oauth2-proxy redirect URL (three places, all in that file).
-- **Bucket and prefix**: `S3_BUCKET`, `S3_PREFIX`.
+- **Bucket**: `S3_BUCKET` (the same bucket as `.env`; `S3_PREFIX` stays empty).
 - **Image and version**: `images:` (today; replaced by the OCI artifact when Flux lands).
 
 ### Who can open the web page
@@ -188,7 +188,7 @@ When Telegram upgrades a group to a "supergroup", its ID changes. The new ID sho
 
 ### Recover older data
 
-The bucket keeps every version of `entries.json`. In the AWS console, open the object → **Versions**, download the version you want, and upload it as the current version (or use `aws s3api copy-object` with `--copy-source bucket/prod/entries.json?versionId=...`). The app notices within 5 seconds and the web page updates.
+The bucket keeps every version of `entries.json`. In the AWS console, open the object → **Versions**, download the version you want, and upload it as the current version (or use `aws s3api copy-object` with `--copy-source <bucket>/entries.json?versionId=...`). The app notices within 5 seconds and the web page updates.
 
 ### Rotate a secret
 
@@ -225,21 +225,22 @@ PDFs, photos and voice notes get "I can only read text for now" until those feat
 You need Docker and make.
 
 ```sh
-make dev       # app + MinIO, live reload, http://localhost:8080
-make seed      # load fixtures/entries.sample.json
-make test      # all tests (MinIO, race detector)
+make dev       # the app with live reload, http://localhost:8080, on the real bucket
+make test      # all tests (their own MinIO, race detector)
 make lint      # gofmt + go vet
 make run       # the production image, read-only filesystem, as in k8s
 make down      # stop
-make clean     # stop and delete the local data
+make clean     # stop and delete the test MinIO's data (never the bucket)
 ```
 
-- `make dev` creates `.env` from `.env.example` the first time. Locally there's no sign-in; you act as `DEV_EMAIL`.
+- `make dev` creates `.env` from `.env.example` the first time. Locally there's no sign-in; you act as `DEV_EMAIL`, so the page is published on 127.0.0.1 only.
+- **Local is live**: `make dev` and `make run` use the bucket and keys in `.env`, the same data production uses. Edits, undo and Settings changes made locally are real. `make test` never touches the bucket.
+- **Same `SETTINGS_SECRET` everywhere**: `settings.json` is shared, so the saved LLM key only decrypts with the key that saved it.
 - **LLM on your Mac**: from inside Docker use `http://host.docker.internal:<port>/v1`, not `localhost`. Check the port isn't also used by another container: `lsof -nP -iTCP:<port> -sTCP:LISTEN`.
 - **Saved settings win over `.env`**: if the chat uses an unexpected endpoint, check Settings → LLM; it was saved there earlier.
-- **Bot locally**: put a test bot's token in `TELEGRAM_BOT_TOKEN` in `.env`, then `docker compose up -d app`. Don't run the same token locally and in production at the same time (409).
+- **Bot locally**: put a test bot's token in `TELEGRAM_BOT_TOKEN` in `.env`, then `docker compose up -d app`. Only one copy may run the bot per token (otherwise 409): once production runs the bot, leave `TELEGRAM_BOT_TOKEN` empty in `.env`.
 - `make chat-eval` runs 10 real messages through the agent against the model in `.env` and prints PASS/FAIL for each.
-- Ports in use? Run `APP_PORT=8088 make dev` (likewise `MINIO_PORT`, `MINIO_CONSOLE_PORT`). The MinIO console is at http://localhost:9001 (minioadmin / minioadmin).
+- Ports in use? Run `APP_PORT=8088 make dev` (likewise `MINIO_PORT`, `MINIO_CONSOLE_PORT` for the test MinIO).
 
 ## Troubleshooting
 
@@ -254,7 +255,7 @@ make clean     # stop and delete the local data
 | Chat uses a model you didn't expect | An endpoint saved on the page overrides env | Change it in Settings → LLM |
 | Storage test fails at "create" | No write permission, wrong bucket or prefix | Check the IAM policy and `S3_BUCKET` / `S3_PREFIX` |
 | Storage test fails at "refuse stale write" | The storage ignores conditional writes | Use AWS S3 (or MinIO); concurrent edits are not safe otherwise |
-| Storage test fails only at "delete" | IAM policy lacks DeleteObject on `prod/_probe/*` | Add that statement; the app still works without it |
+| Storage test fails only at "delete" | IAM policy lacks DeleteObject on `<bucket>/_probe/*` | Add that statement; the app still works without it |
 | Web page 403 "not on the list" | Email missing in one of the two lists | Add it to `authenticated-emails.txt` and `ALLOWED_EMAILS` |
 | Web page shows "Couldn't reach the server" | Pod not ready, usually S3 unreachable | `kubectl -n <namespace> get pods`; check the app logs and Secrets |
 | Saved LLM key "could not be decrypted" in the logs | `SETTINGS_SECRET` changed | Re-enter the key in Settings → LLM |
@@ -270,9 +271,9 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `S3_BUCKET` | (required) | Bucket name |
-| `S3_PREFIX` | empty | Key prefix, e.g. `prod` |
+| `S3_PREFIX` | empty | Key prefix. Leave empty: dev and production share the bucket root |
 | `AWS_REGION` | `ap-southeast-1` | Bucket region |
-| `S3_ENDPOINT_URL` | empty | Local MinIO only |
+| `S3_ENDPOINT_URL` | empty | Only for a non-AWS store such as MinIO |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS chain | Secret `movin-secrets` |
 | `SETTINGS_SECRET` | empty | Fernet key for the saved LLM key (Secret) |
 | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | empty | Defaults; Settings → LLM overrides |
@@ -290,10 +291,10 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 
 | Key | Content |
 | --- | --- |
-| `<prefix>/entries.json` | Entries, key dates, last 200 changes |
-| `<prefix>/settings.json` | LLM connection (key encrypted), Telegram allowlist |
-| `<prefix>/_probe/...` | Storage test scratch files, deleted right after |
-| `<prefix>/docs/...` | Drawings (planned) |
+| `entries.json` | Entries, key dates, last 200 changes |
+| `settings.json` | LLM connection (key encrypted), Telegram allowlist |
+| `_probe/...` | Storage test scratch files, deleted right after |
+| `docs/raw/...` | Your documents: drawings, contracts, developer and management-office papers (upload here; reading them is planned) |
 
 ## Not built yet
 

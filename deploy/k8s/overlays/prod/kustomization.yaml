@@ -16,7 +16,7 @@ configMapGenerator:
     behavior: merge
     literals:
       - S3_BUCKET=zy-condo-board
-      - S3_PREFIX=prod
+      - S3_PREFIX=
       - ALLOWED_EMAILS=zy@example.com,partner@example.com
       # Optional Telegram allowlist defaults; the web page (Settings →
       # Telegram) replaces them, so these can stay empty.

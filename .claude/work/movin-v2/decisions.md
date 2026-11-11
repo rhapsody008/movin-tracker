@@ -71,3 +71,11 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 
 ## Review timing (2026-11-11)
 - No separate code review while steps are still being built. Run one review (strict-reviewer) once all planned code is complete; per-step lint/tests/UI checks continue as usual.
+
+## One bucket for everything (2026-11-11)
+- Production isn't ready, so ZY uses the real AWS bucket now. **Dev and production share one bucket and no prefix**: one copy of the data; later only where the containers run changes.
+- So: `make dev` / `make run` read S3 from `.env`; MinIO is for `make test` only (fixed values in compose, never from `.env`). The dev port is published on 127.0.0.1 only (real data, no sign-in).
+- **Same SETTINGS_SECRET in dev and production** (replaces "separate from dev" above): settings.json is shared.
+- One bot poller per token: once production runs the bot, `.env` drops TELEGRAM_BOT_TOKEN.
+- IAM policy covers the bucket root (`<bucket>/*`, delete on `_probe/*`); kustomize `S3_PREFIX=` empty. Documents go to `docs/raw/` (and the 1.5 caches to `docs/pages/`, `docs/text/`, no prefix).
+- Latency: thinking stays on for now; prompt caching on the model server is ZY's, later.

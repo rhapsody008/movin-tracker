@@ -1,5 +1,6 @@
 # Everything runs in Docker; the only prerequisites are Docker and make.
-# Host ports: APP_PORT (8080), MINIO_PORT (9000), MINIO_CONSOLE_PORT (9001).
+# Host ports: APP_PORT (8080, on 127.0.0.1), MINIO_PORT (9000) and
+# MINIO_CONSOLE_PORT (9001) for the test MinIO.
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -7,7 +8,7 @@ COMPOSE := docker compose
 TOOLS   := $(COMPOSE) --profile tools run --rm test
 IMAGE   ?= movin:local
 
-.PHONY: help dev down seed test conflict-test chat-eval lint build run clean
+.PHONY: help dev down test conflict-test chat-eval lint build run clean
 
 help: ## List the targets
 	@awk 'BEGIN{FS=":.*## "} /^[a-z-]+:.*## /{printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -18,17 +19,13 @@ help: ## List the targets
 	  sed -i.bak "s|^SETTINGS_SECRET=.*|SETTINGS_SECRET=$$secret|" .env && rm -f .env.bak
 	@echo "Created .env with a new SETTINGS_SECRET. Add your LLM_* values there."
 
-dev: .env ## Compose up app + MinIO with live reload, at http://localhost:8080
+dev: .env ## Run the app with live reload at http://localhost:8080, on the real S3 bucket from .env
 	$(COMPOSE) up --build -d app
-	@echo "Board:          http://localhost:$${APP_PORT:-8080}"
-	@echo "MinIO console:  http://localhost:$${MINIO_CONSOLE_PORT:-9001}  (minioadmin / minioadmin)"
-	@echo "Logs:           docker compose logs -f app"
+	@echo "Web page: http://localhost:$${APP_PORT:-8080}"
+	@echo "Logs:     docker compose logs -f app"
 
 down: ## Stop the stack
 	$(COMPOSE) --profile tools --profile prod down
-
-seed: ## Load fixtures/entries.sample.json into MinIO
-	$(COMPOSE) run --rm --build -v ./fixtures:/fixtures:ro bucket-init seed /fixtures/entries.sample.json
 
 test: ## Unit + API tests in the container, against MinIO, with a stubbed LLM
 	$(TOOLS) go test -race -count=1 ./...
@@ -45,10 +42,10 @@ lint: ## gofmt + go vet
 build: ## Build the production image
 	docker build -t $(IMAGE) .
 
-run: build .env ## Run the production image locally against MinIO, read-only rootfs, as in k8s
+run: build .env ## Run the production image locally on the real bucket from .env, read-only rootfs, as in k8s
 	-$(COMPOSE) stop app
 	$(COMPOSE) --profile prod up -d prod
 	@echo "Production image on http://localhost:$${APP_PORT:-8080} (read-only rootfs, uid 65532). Stop with: make down"
 
-clean: ## Remove containers, volumes and the MinIO bucket
+clean: ## Remove containers and volumes (the test MinIO's data; never the real bucket)
 	$(COMPOSE) --profile tools --profile prod down -v --remove-orphans

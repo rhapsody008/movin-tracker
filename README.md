@@ -13,32 +13,30 @@ It runs as one stateless Go container behind an auth proxy, keeps all state in o
 You need Docker and make.
 
 ```sh
-make dev     # app + MinIO with live reload at http://localhost:8080
-make seed    # load fixtures/entries.sample.json
-make test    # unit + API tests against MinIO, stubbed LLM and fake Telegram
+make dev     # the app with live reload at http://localhost:8080, on the real bucket in .env
+make test    # unit + API tests against their own MinIO, stubbed LLM and fake Telegram
 make help    # every target
 ```
 
-`make dev` creates `.env` from [.env.example](.env.example) on first run, with a fresh `SETTINGS_SECRET`. For the chat, set the LLM endpoint on the web page (Settings → LLM) or in `.env`; a model on this Mac is reachable from Docker at `http://host.docker.internal:<port>/v1`. For the bot, put a token from @BotFather in `TELEGRAM_BOT_TOKEN` and your Telegram user ID in `TELEGRAM_ALLOWED_IDS` (or add yourself later from Settings → Telegram → Recently refused).
+`make dev` creates `.env` from [.env.example](.env.example) on first run, with a fresh `SETTINGS_SECRET`. Fill in the bucket and AWS keys: dev and production share one bucket (no prefix), so local edits are real. For the chat, set the LLM endpoint on the web page (Settings → LLM) or in `.env`; a model on this Mac is reachable from Docker at `http://host.docker.internal:<port>/v1`. For the bot, put a token from @BotFather in `TELEGRAM_BOT_TOKEN` and your Telegram user ID in `TELEGRAM_ALLOWED_IDS` (or add yourself later from Settings → Telegram → Recently refused).
 
 If port 8080, 9000 or 9001 is taken, set `APP_PORT=8088` (and likewise `MINIO_PORT` / `MINIO_CONSOLE_PORT`) on the make command.
 
 | Target | Does |
 | --- | --- |
-| `make dev` | Compose up app + MinIO with live reload |
+| `make dev` | Run the app with live reload on the bucket in `.env` (port on 127.0.0.1) |
 | `make down` | Stop the stack |
-| `make seed` | Load `fixtures/entries.sample.json` into MinIO |
 | `make test` | Unit + API tests in the container, against MinIO (race detector on) |
 | `make conflict-test` | Two writers on one ETag; both changes must survive |
 | `make chat-eval` | Run the agent eval messages against the real endpoint in `.env`; prints the entry diff and PASS/FAIL per message |
 | `make lint` | gofmt + go vet |
 | `make build` | Build the production image (`movin:local`, distroless, non-root) |
-| `make run` | Run the production image against MinIO with a read-only root filesystem, as in k8s |
-| `make clean` | Remove containers, volumes and the MinIO bucket |
+| `make run` | Run the production image on the bucket in `.env` with a read-only root filesystem, as in k8s |
+| `make clean` | Remove containers and volumes (the test MinIO; never the real bucket) |
 
 ## How it works
 
-- **Entries.** Everything is in `s3://$S3_BUCKET/$S3_PREFIX/entries.json`: the entries, the move-in and key dates, and a journal of the last 200 changes (the undo history). Every write reads, changes, then writes with `PutObject If-Match: <etag>`; a `412` means someone else wrote first, so the app re-reads, re-applies and retries up to 3 times before answering `409`. Reads come from memory; a `HEAD` every 5 s picks up writes made elsewhere. Undo restores an entry only if nobody changed it since.
+- **Entries.** Everything is in `s3://$S3_BUCKET/entries.json`: the entries, the move-in and key dates, and a journal of the last 200 changes (the undo history). Every write reads, changes, then writes with `PutObject If-Match: <etag>`; a `412` means someone else wrote first, so the app re-reads, re-applies and retries up to 3 times before answering `409`. Reads come from memory; a `HEAD` every 5 s picks up writes made elsewhere. Undo restores an entry only if nobody changed it since.
 - **Agent.** One tool-calling loop serves both the web chat and Telegram. Tools: `add_entry`, `update_entry`, `search_entries` (structured filters plus keywords; no vector search), `set_dates`, `undo_change`. The server, not the model, builds the confirmation lines, so every change is reported and carries its undo handle.
 - **Telegram.** The bot long-polls from inside the app (outbound only, no webhook, no extra ingress), which is why the Deployment must stay at one replica. Private chats need an allowed person; groups need an allowed group and an allowed person. Each chat has its own queue, so two people typing at once never race; the group history is shared and labelled by speaker, and ordinary chatter gets no reply.
 - **Web page.** `GET /api/events` is a server-sent events stream that pushes the document after every change, including the bot's. The page applies its own edits immediately and then takes the server's copy.

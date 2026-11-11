@@ -5,13 +5,13 @@
       "Sid": "AppObjects",
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": "arn:aws:s3:::zy-condo-board/prod/*"
+      "Resource": "arn:aws:s3:::zy-condo-board/*"
     },
     {
       "Sid": "StorageTestCleanup",
       "Effect": "Allow",
       "Action": "s3:DeleteObject",
-      "Resource": "arn:aws:s3:::zy-condo-board/prod/_probe/*"
+      "Resource": "arn:aws:s3:::zy-condo-board/_probe/*"
     },
     {
       "Sid": "ListForHeadAnd404",

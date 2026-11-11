@@ -13,7 +13,7 @@ configMapGenerator:
   - name: movin-config
     literals:
       - S3_BUCKET=zy-condo-board
-      - S3_PREFIX=prod
+      - S3_PREFIX=
       - AWS_REGION=ap-southeast-1
       - AUTH_HEADER=X-Forwarded-Email
       - ALLOWED_EMAILS=zy@example.com,partner@example.com
