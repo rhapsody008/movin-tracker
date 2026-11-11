@@ -127,6 +127,27 @@ Phase 1.5: 1.5.0 (spike, gate) → 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5
 
 **1.5.10 Deploy (files only)** — memory limit + GOMEMLIMIT from the spike (start 64Mi/512Mi; A1 may need 768Mi–1Gi); IAM DeleteObject on `prod/docs/pages/*` and `prod/docs/text/*` (+ lifecycle rule for noncurrent versions); compose mem_limit; .env.example; README. Verify: `make run`, upload the sample through the bot.
 
+## Phase 1.5 inputs (2026-11-11; for the planner, not yet planned)
+- Scope widens from drawings to all documents under `docs/raw/` (ZY). What is there now: 8 drawings (1.0, vector with text; 3 × A1, 5 × A3), checklists (2.0), Novade defects letter + guide (3.0), 24 manuals (4.0), e-voucher guides (5.0), letters (6.0), PPVC/PBU manual (7.0), useful contacts (8.0). 448 pages, ~343k chars of text.
+- Text is too long for the prompt: needs a page-level text search tool (keyword is enough at this size; still no vector DB) plus a page/crop image tool for drawings.
+- Converter: poppler (pdftoppm/pdftotext) worked as-is; the PDFium WASM spike may be unnecessary. Planner to decide (poppler means leaving distroless, ~+30 MB image).
+- Memory: one A1 page at 6000 px peaks at 584 MB; consider ~4000 px, one page at a time, and a 768 Mi–1 Gi limit.
+- Model: Claude via the OpenAI layer (vision, tool calling); the layer has no prompt caching and no thinking output.
+- Upload path: ZY uploads in the S3 console; Telegram upload (1.5.7) becomes optional. Folders are part of each document's identity; skip `._*` and non-PDFs (report as skipped).
+- 1.5.10 IAM paths are at the bucket root now (`docs/pages/*`, `docs/text/*`), not `prod/`.
+
+## Later phase: scanned documents (vision or OCR; not in 1.5)
+Documents whose pages have no usable text layer. Phase 1.5 indexes them as 'no text' and leaves them out of text search; reading them needs vision on every page or OCR, planned later.
+| Document | Pages | Why |
+|---|---|---|
+| 4.4 Gas Water Heater / Gas Water Heater.pdf | 16 | no text on any page |
+| 4.3 … / Ceiling Fan Operation Manual.pdf | 7 | no text on any page |
+| 4.1 … / Main Door Digital Lock User Guide (YDM7116A).pdf | 2 | no text on any page |
+| 4.5 Smart Home System / Yale Lockset Smart Control.pdf | 30 | 19 pages without text |
+| 4.5 Smart Home System / Lighting Module, Mitsubishi Aircon, Motion Sensor, IoT Gateway guides | 24–28 each | mostly app screenshots, ~80–100 chars of text per page |
+| 5.0 … / 5.1 Video on redemption of Guocoland e-Voucher.mp4 | – | video, not a document |
+A few pages inside text manuals are also image-only (e.g. fridge 4 of 60, washer 2 of 32); text search simply misses them.
+
 ## Deployment via OCI + NKP (potential; not yet planned in detail)
 Status: decided in principle (see decisions.md, "Deployment / GitOps"). Needs a planner pass and a read-only cluster check once ZY's NKP cluster is available. Likely shape:
 - D.1 `.github/workflows/image.yml`: on `v*` tags, after the image push, `kustomize edit set image` with the digest in the workspace and `flux push artifact oci://ghcr.io/<owner>/movin-tracker-deploy:<version>`; optional cosign signing of image + artifact.

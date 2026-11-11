@@ -55,5 +55,5 @@ Single-replica Deployment (`Recreate`, no PVC) with the app and an oauth2-proxy 
 
 - **Go modules are vendored**, so building and testing need no network beyond Docker Hub (the one exception is installing `air` for `make dev`).
 - **MinIO image.** Upstream `minio/minio` images are no longer published, so compose uses the community build `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`. It honours `If-Match` and `If-None-Match` on PUT, which `TestConditionalWrites` checks on every `make test`.
-- **Max tool rounds** counts rounds that may call tools; if the model is still calling tools after that, one more round is forced to answer in words. The default of 5 means at most 6 LLM calls.
+- **Model limits are fixed in code, not settings**: at most 5 rounds that may call tools per message (then one more forced to answer in words, so at most 6 model calls), 10 minutes per model call, 15 minutes per Telegram message. Temperature and reply length are left to the model server.
 - **Public paths.** The manifest and home-screen icons are served without sign-in, because iOS fetches them without the cookie.

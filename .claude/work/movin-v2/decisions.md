@@ -86,3 +86,10 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 ## Documents in the bucket (2026-11-11)
 - Raw documents live under `docs/raw/`, and ZY may organise them in subfolders (`docs/raw/<folder>/.../<file>.pdf`). Phase 1.5 must list `docs/raw/` recursively and treat the full key (folder path included) as the document's identity; derived caches mirror that path under `docs/pages/` and `docs/text/`.
 - First upload: `docs/raw/1.1 Type C5 Unit Layout Plan.pdf` (2026-11-11).
+
+## Checkpoint before the Phase 1.5 planner (2026-11-11)
+- LLM: **Claude** is the plan for now (may switch later), through the OpenAI-compatible endpoint `https://api.anthropic.com/v1/`. Recommendation given: `claude-opus-5-5` (best on dense drawings and tool use); `claude-sonnet-5-5` is the faster, cheaper option. ZY picks in Settings → LLM.
+- Scanned / image-only documents (list in plan.md 'Later phase: scanned documents') go to a later phase; 1.5 covers documents with a text layer plus drawing images.
+- Deleted the 20 `._*` files from `docs/raw/` (ZY OK).
+- Entries from the documents: broadband + router (ZY: needed before smart home works), Fermax activation, ask Fermax before renovation, defects via Novade, contacts.
+- Novade password in 3.1: ZY already changed it; no special handling needed for that document.

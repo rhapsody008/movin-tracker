@@ -303,7 +303,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 
 ## Not built yet
 
-- **Drawings**: send PDFs to the bot; it stores them, renders pages and answers questions about them. Will add a Drawings tab, `/sync` and a daily re-sync.
+- **Documents**: the bot reading what is under `docs/raw/` (drawings, checklists, letters, manuals): search their text, look at drawing pages, a daily re-sync, `/sync` and a Documents tab. Upload through the S3 console for now. Scanned documents (no text layer) come after that, in a later phase.
 - **Photos and voice notes** on entries.
 - **OCI + Flux deployment** in the NKP project, replacing the manual apply.
 
