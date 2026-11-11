@@ -19,7 +19,7 @@ import (
 // v1File is settings.json as the board version wrote it: no telegram section.
 const v1File = `{
   "schema": 1,
-  "llm": {"baseUrl": "https://llm.example/v1", "model": "qwen", "temperature": 0.1, "maxTokens": 2048, "timeoutSec": 90, "maxToolRounds": 4, "streaming": false},
+  "llm": {"baseUrl": "https://llm.example/v1", "model": "qwen", "temperature": 0.1, "maxTokens": 2048, "streaming": false},
   "updated": "2026-10-14T00:00:00Z",
   "by": "zy@example.com"
 }`
@@ -74,7 +74,7 @@ func envTG(t *testing.T) settings.Telegram {
 	return tg
 }
 
-var llmIn = settings.Input{BaseURL: "https://new.example/v1", APIKey: "sk-new-secret-7f3a", Model: "m2", Temperature: 0.3, MaxTokens: 1024, TimeoutSec: 60, MaxToolRounds: 5}
+var llmIn = settings.Input{BaseURL: "https://new.example/v1", APIKey: "sk-new-secret-7f3a", Model: "m2"}
 
 func TestV1FileReadsAsBefore(t *testing.T) {
 	r := newRig(t, v1File, envTG(t))
@@ -82,7 +82,7 @@ func TestV1FileReadsAsBefore(t *testing.T) {
 	l := r.svc.Resolve(ctx)
 	// The env key belongs to LLM_BASE_URL (env.example); the file points at
 	// llm.example, so the env key must not be sent there.
-	if l.BaseURL != "https://llm.example/v1" || l.Model != "qwen" || l.Temperature != 0.1 || l.MaxTokens != 2048 || l.TimeoutSec != 90 || l.MaxToolRounds != 4 || l.Streaming || l.APIKey != "" {
+	if l.BaseURL != "https://llm.example/v1" || l.Model != "qwen" || l.Streaming || l.APIKey != "" {
 		t.Fatalf("v1 llm resolved differently: %+v", l)
 	}
 	v := r.svc.View(ctx)

@@ -202,6 +202,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .drawer form{flex:1;overflow-y:auto;padding:16px;display:grid;gap:12px;align-content:start}
 .drawer form[hidden]{display:none}
 .drawer .row{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.drawer [hidden]{display:none !important}
 .drawer .row input{width:auto}
 .drawer .sub{font-size:13px;color:var(--muted);margin:0}
 .drawer .result{font-size:14px;border-radius:8px;padding:8px 10px;background:var(--sunk);margin:0}
@@ -348,23 +349,18 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     <label>Endpoint URL<input name="baseUrl" type="url" placeholder="https://…/v1" required></label>
     <label>API key<input name="apiKey" type="password" autocomplete="new-password"></label>
     <p class="sub" id="keyNote"></p>
-    <label>Model<input name="model" list="modelList" required placeholder="Pick or type a model name"></label>
-    <datalist id="modelList"></datalist>
-    <div class="grid2">
-      <label>Temperature<input name="temperature" type="number" min="0" max="1" step="0.05" required></label>
-      <label>Max tokens<input name="maxTokens" type="number" min="128" max="8192" step="1" required></label>
-      <label>Timeout (s)<input name="timeoutSec" type="number" min="10" max="300" step="1" required></label>
-      <label>Max tool rounds<input name="maxToolRounds" type="number" min="1" max="8" step="1" required></label>
-    </div>
+    <div><button class="btn ghost" type="button" id="testBtn">Test connection</button></div>
+    <p class="result" id="connResult" aria-live="polite"></p>
+    <label>Model<select name="model" required disabled><option value="">Test the connection first</option></select></label>
     <label class="row"><input name="streaming" type="checkbox"> Stream replies</label>
     <label class="row"><input name="thinkOnDemand" type="checkbox"> Think only when asked: start a message with /think</label>
     <p class="sub">Faster replies from thinking models (Qwen3 on vMLX, vLLM). Leave off for OpenAI and other endpoints that reject <code>chat_template_kwargs</code>.</p>
     <p class="result" id="testResult" aria-live="polite"></p>
-    <label class="row" id="saveAnywayRow" hidden><input type="checkbox" id="saveAnyway"> Save without a passing test</label>
+    <label class="row" id="saveAnywayRow" hidden><input type="checkbox" id="saveAnyway"> Save even though the tool-calling check failed</label>
     <p class="sub" id="setMeta"></p>
   </form>
   <div class="foot2" id="llmFoot" hidden>
-    <button class="btn ghost" type="button" id="testBtn">Test connection</button>
+    <span></span>
     <div><button class="btn ghost" type="button" id="setCancel">Cancel</button><button class="btn" type="button" id="setSave" disabled>Save</button></div>
   </div>
 </aside>
@@ -903,17 +899,45 @@ function setModelLine(model){ $("modelLine").textContent = model ? "Answering: "
 
 /* ---------- LLM settings drawer ---------- */
 const SF = $("setForm");
-let setState = null, testedSig = null, clearKey = false;
+// Order on the LLM tab: endpoint + key -> Test connection (lists the
+// models) -> pick a model -> Save (checks tool calling first).
+// connSig is the endpoint + key the model list belongs to; changing either
+// locks the model list until the connection is tested again. failedSig is
+// the form a tool-calling check failed for ("Save anyway" applies to it).
+let setState = null, connSig = null, failedSig = null, clearKey = false;
 function formVals(){
-  return {baseUrl:SF.baseUrl.value.trim(), apiKey:SF.apiKey.value, clearKey: clearKey && !SF.apiKey.value, model:SF.model.value.trim(),
-    temperature:Number(SF.temperature.value), maxTokens:Number(SF.maxTokens.value), timeoutSec:Number(SF.timeoutSec.value),
-    maxToolRounds:Number(SF.maxToolRounds.value), streaming:SF.streaming.checked, thinkOnDemand:SF.thinkOnDemand.checked};
+  return {baseUrl:SF.baseUrl.value.trim(), apiKey:SF.apiKey.value, clearKey: clearKey && !SF.apiKey.value, model:SF.model.value,
+    streaming:SF.streaming.checked, thinkOnDemand:SF.thinkOnDemand.checked};
 }
 const sig = v => JSON.stringify(v);
+const connOf = () => sig({u:SF.baseUrl.value.trim(), k:SF.apiKey.value, c:clearKey});
 function updateSaveBtn(){
-  const passed = testedSig !== null && testedSig === sig(formVals());
-  $("setSave").disabled = !(passed || $("saveAnyway").checked) || !SF.checkValidity();
-  $("saveAnywayRow").hidden = passed;
+  const connected = connSig !== null && connSig === connOf();
+  SF.model.disabled = !connected;
+  const failed = failedSig !== null && failedSig === sig(formVals());
+  $("saveAnywayRow").hidden = !failed;
+  $("setSave").disabled = !connected || !SF.model.value || (failed && !$("saveAnyway").checked);
+}
+function fillModels(list, keep){
+  const ids = [...new Set(list||[])];
+  if(keep && !ids.includes(keep)) ids.unshift(keep);
+  SF.model.innerHTML = ids.length ? `<option value="">Pick a model</option>` + ids.map(m=>`<option value="${esc(m)}"${m===keep?" selected":""}>${esc(m)}${(list||[]).includes(m)?"":" (saved)"}</option>`).join("")
+    : `<option value="">The endpoint listed no models</option>`;
+}
+async function testConnection(){
+  const r = $("connResult"), u = SF.baseUrl.value.trim(), keep = SF.model.value || (setState && setState.model) || "";
+  connSig = null; updateSaveBtn();
+  if(!u || !SF.baseUrl.checkValidity()){ r.className = "result bad"; r.textContent = "Enter the endpoint URL first (http:// or https://)."; return; }
+  r.className = "result"; r.textContent = "Connecting…"; $("testBtn").disabled = true;
+  const asked = connOf();
+  try{
+    const d = await api("POST", "/api/settings/llm/models", {baseUrl:u, apiKey:SF.apiKey.value});
+    if(asked !== connOf()) return; // the URL or key changed meanwhile
+    fillModels(d.models, keep); connSig = asked;
+    const n = (d.models||[]).length;
+    r.className = "result ok"; r.textContent = n ? `Connected. ${n} model${n>1?"s":""} available; pick one below.` : "Connected, but the endpoint listed no models.";
+  }catch(e){ fillModels([], ""); SF.model.innerHTML = `<option value="">Test the connection first</option>`; r.className = "result bad"; r.textContent = "Couldn't connect: " + e.message; }
+  finally{ $("testBtn").disabled = false; updateSaveBtn(); }
 }
 function keyNote(){
   const v = setState || {};
@@ -927,11 +951,6 @@ function keyNote(){
   SF.apiKey.placeholder = v.keySet && !clearKey ? `Saved, ending ${v.keyLast4||"····"}` : "sk-…";
 }
 SF.addEventListener("click", e=>{ if(e.target.id==="clearKey"){ clearKey = true; keyNote(); updateSaveBtn(); } });
-async function loadModels(){
-  const u = SF.baseUrl.value.trim(); if(!u) return;
-  try{ const d = await api("POST", "/api/settings/llm/models", {baseUrl:u, apiKey:SF.apiKey.value}); fillModels(d.models); }catch{}
-}
-function fillModels(list){ $("modelList").innerHTML = (list||[]).map(m=>`<option value="${esc(m)}">`).join(""); }
 /* ---------- settings: tabs ---------- */
 const TABS = ["storage","llm","telegram"]; // same order as on screen; drawings joins in phase 1.5
 let curTab = "llm", opener = null;
@@ -1079,15 +1098,15 @@ $("tgUseEnv").onclick = ()=>{ if(confirm("Drop the list saved here and use the s
 
 /* ---------- settings: LLM ---------- */
 async function loadLLM(){
-  clearKey = false; testedSig = null; $("saveAnyway").checked = false; $("testResult").textContent = ""; $("testResult").className = "result";
+  clearKey = false; connSig = null; failedSig = null; $("saveAnyway").checked = false;
+  for(const id of ["testResult","connResult"]){ $(id).textContent = ""; $(id).className = "result"; }
   try{ setState = await api("GET", "/api/settings/llm"); }catch(e){ $("testResult").className = "result bad"; $("testResult").textContent = "Couldn't load chat settings: " + e.message; return; }
   const v = setState;
-  SF.baseUrl.value = v.baseUrl||""; SF.apiKey.value = ""; SF.model.value = v.model||"";
-  SF.temperature.value = v.temperature; SF.maxTokens.value = v.maxTokens; SF.timeoutSec.value = v.timeoutSec;
-  SF.maxToolRounds.value = v.maxToolRounds; SF.streaming.checked = !!v.streaming; SF.thinkOnDemand.checked = !!v.thinkOnDemand;
+  SF.baseUrl.value = v.baseUrl||""; SF.apiKey.value = ""; SF.model.innerHTML = `<option value="">Test the connection first</option>`;
+  SF.streaming.checked = !!v.streaming; SF.thinkOnDemand.checked = !!v.thinkOnDemand;
   $("setMeta").textContent = v.updated ? `Last saved ${new Date(v.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${v.by}.` : "Not saved yet; using the server's defaults.";
   keyNote(); updateSaveBtn();
-  loadModels();
+  if(v.baseUrl) testConnection(); // a saved endpoint: connect straight away so its models show
 }
 function closeSettings(){
   clearInterval(tgTimer); tgTimer = null;
@@ -1101,26 +1120,22 @@ $("setCancel").onclick = closeSettings;
 $("scrim").onclick = closeSettings;
 document.addEventListener("keydown", e=>{ if(e.key==="Escape" && $("drawer").classList.contains("open")) closeSettings(); });
 SF.addEventListener("input", updateSaveBtn);
-SF.baseUrl.addEventListener("change", loadModels);
+SF.addEventListener("change", updateSaveBtn);
 $("saveAnyway").addEventListener("change", updateSaveBtn);
 SF.addEventListener("submit", e=>e.preventDefault());
-$("testBtn").onclick = async ()=>{
-  if(!SF.reportValidity()) return;
-  const v = formVals(), r = $("testResult");
-  r.className = "result"; r.textContent = "Testing…"; $("testBtn").disabled = true;
-  try{
-    const d = await api("POST", "/api/settings/llm/test", v);
-    if(d.models && d.models.length) fillModels(d.models);
-    if(d.ok){ testedSig = sig(v); r.className = "result ok"; r.textContent = `Tool calling works. ${d.latencyMs} ms.` + (d.modelsError ? ` (Model list unavailable: ${d.modelsError})` : ""); }
-    else { testedSig = null; r.className = "result bad"; r.textContent = d.error + (d.latencyMs ? ` (${d.latencyMs} ms)` : ""); }
-  }catch(e){ testedSig = null; r.className = "result bad"; r.textContent = e.message; }
-  finally{ $("testBtn").disabled = false; updateSaveBtn(); }
-};
+$("testBtn").onclick = testConnection;
 $("setSave").onclick = async ()=>{
   if($("setSave").disabled) return;
+  const v = formVals(), r = $("testResult");
   $("setSave").disabled = true;
   try{
-    setState = await api("PUT", "/api/settings/llm", formVals());
+    if(!(failedSig === sig(v) && $("saveAnyway").checked)){
+      // Check the chosen model can call tools before saving it.
+      r.className = "result"; r.textContent = "Checking the model can use tools…";
+      const d = await api("POST", "/api/settings/llm/test", v);
+      if(!d.ok){ failedSig = sig(v); r.className = "result bad"; r.textContent = "Not saved: " + d.error + (d.latencyMs ? ` (${d.latencyMs} ms)` : ""); updateSaveBtn(); return; }
+    }
+    setState = await api("PUT", "/api/settings/llm", v);
     setModelLine(setState.model); closeSettings(); flash("Chat settings saved. The next message uses " + setState.model + ".");
   }catch(e){ const r=$("testResult"); r.className="result bad"; r.textContent = e.message; updateSaveBtn(); }
 };

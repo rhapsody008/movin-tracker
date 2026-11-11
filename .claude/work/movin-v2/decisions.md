@@ -79,3 +79,6 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - One bot poller per token: once production runs the bot, `.env` drops TELEGRAM_BOT_TOKEN.
 - IAM policy covers the bucket root (`<bucket>/*`, delete on `_probe/*`); kustomize `S3_PREFIX=` empty. Documents go to `docs/raw/` (and the 1.5 caches to `docs/pages/`, `docs/text/`, no prefix).
 - Latency: thinking stays on for now; prompt caching on the model server is ZY's, later.
+
+## LLM settings kept minimal (2026-11-11)
+- ZY: no temperature, max tokens, timeout or tool-round settings; leave them to the model. The page has endpoint, key, model, streaming and 'Think only when asked'. Test connection comes before picking a model.

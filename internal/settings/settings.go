@@ -24,11 +24,12 @@ const Key = "settings.json"
 
 // LLM is a fully resolved connection, ready to call.
 type LLM struct {
-	BaseURL       string
-	APIKey        string
-	Model         string
-	Temperature   float64
-	MaxTokens     int
+	BaseURL string
+	APIKey  string
+	Model   string
+	// TimeoutSec and MaxToolRounds are the app's own limits, not settings:
+	// they come from Defaults (tests may lower them). Temperature and the
+	// output length are left to the model server.
 	TimeoutSec    int
 	MaxToolRounds int
 	Streaming     bool
@@ -40,8 +41,9 @@ type LLM struct {
 }
 
 // Defaults are the built-in values, used when neither settings.json nor
-// the LLM_* env vars set a field.
-var Defaults = LLM{Temperature: 0.2, MaxTokens: 1024, TimeoutSec: 60, MaxToolRounds: 5, Streaming: true}
+// the LLM_* env vars set a field. TimeoutSec is per model call and allows
+// for long thinking.
+var Defaults = LLM{TimeoutSec: 600, MaxToolRounds: 5, Streaming: true}
 
 // stored is the decoded settings.json. Top-level updated/by mean "LLM last
 // saved" (kept for files written before the telegram section existed).
@@ -54,48 +56,36 @@ type stored struct {
 }
 
 type storedLLM struct {
-	BaseURL       *string  `json:"baseUrl,omitempty"`
-	APIKeyEnc     *string  `json:"apiKeyEnc,omitempty"`
-	Model         *string  `json:"model,omitempty"`
-	Temperature   *float64 `json:"temperature,omitempty"`
-	MaxTokens     *int     `json:"maxTokens,omitempty"`
-	TimeoutSec    *int     `json:"timeoutSec,omitempty"`
-	MaxToolRounds *int     `json:"maxToolRounds,omitempty"`
-	Streaming     *bool    `json:"streaming,omitempty"`
-	ThinkOnDemand *bool    `json:"thinkOnDemand,omitempty"`
+	BaseURL       *string `json:"baseUrl,omitempty"`
+	APIKeyEnc     *string `json:"apiKeyEnc,omitempty"`
+	Model         *string `json:"model,omitempty"`
+	Streaming     *bool   `json:"streaming,omitempty"`
+	ThinkOnDemand *bool   `json:"thinkOnDemand,omitempty"`
 }
 
 // Input is what the settings drawer sends to save or test.
 type Input struct {
-	BaseURL       string  `json:"baseUrl"`
-	APIKey        string  `json:"apiKey"`   // empty keeps the stored key
-	ClearKey      bool    `json:"clearKey"` // explicit removal
-	Model         string  `json:"model"`
-	Temperature   float64 `json:"temperature"`
-	MaxTokens     int     `json:"maxTokens"`
-	TimeoutSec    int     `json:"timeoutSec"`
-	MaxToolRounds int     `json:"maxToolRounds"`
-	Streaming     bool    `json:"streaming"`
-	ThinkOnDemand bool    `json:"thinkOnDemand"`
+	BaseURL       string `json:"baseUrl"`
+	APIKey        string `json:"apiKey"`   // empty keeps the stored key
+	ClearKey      bool   `json:"clearKey"` // explicit removal
+	Model         string `json:"model"`
+	Streaming     bool   `json:"streaming"`
+	ThinkOnDemand bool   `json:"thinkOnDemand"`
 }
 
 // View is what GET /api/settings/llm returns. It has no field that could
 // carry the key; only whether one is set and its last four characters.
 type View struct {
-	BaseURL       string  `json:"baseUrl"`
-	Model         string  `json:"model"`
-	Temperature   float64 `json:"temperature"`
-	MaxTokens     int     `json:"maxTokens"`
-	TimeoutSec    int     `json:"timeoutSec"`
-	MaxToolRounds int     `json:"maxToolRounds"`
-	Streaming     bool    `json:"streaming"`
-	ThinkOnDemand bool    `json:"thinkOnDemand"`
-	KeySet        bool    `json:"keySet"`
-	KeyLast4      string  `json:"keyLast4,omitempty"`
-	KeyFromEnv    bool    `json:"keyFromEnv"`
-	CanStoreKey   bool    `json:"canStoreKey"`
-	Updated       string  `json:"updated,omitempty"`
-	By            string  `json:"by,omitempty"`
+	BaseURL       string `json:"baseUrl"`
+	Model         string `json:"model"`
+	Streaming     bool   `json:"streaming"`
+	ThinkOnDemand bool   `json:"thinkOnDemand"`
+	KeySet        bool   `json:"keySet"`
+	KeyLast4      string `json:"keyLast4,omitempty"`
+	KeyFromEnv    bool   `json:"keyFromEnv"`
+	CanStoreKey   bool   `json:"canStoreKey"`
+	Updated       string `json:"updated,omitempty"`
+	By            string `json:"by,omitempty"`
 }
 
 type ValidationError struct{ Msg string }
@@ -270,18 +260,6 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 	if l.Model != nil {
 		out.Model = *l.Model
 	}
-	if l.Temperature != nil {
-		out.Temperature = *l.Temperature
-	}
-	if l.MaxTokens != nil {
-		out.MaxTokens = *l.MaxTokens
-	}
-	if l.TimeoutSec != nil {
-		out.TimeoutSec = *l.TimeoutSec
-	}
-	if l.MaxToolRounds != nil {
-		out.MaxToolRounds = *l.MaxToolRounds
-	}
 	if l.Streaming != nil {
 		out.Streaming = *l.Streaming
 	}
@@ -332,8 +310,7 @@ func (s *Service) View(ctx context.Context) View {
 	st := s.current(ctx)
 	l, fromEnv := s.resolve(st)
 	v := View{
-		BaseURL: l.BaseURL, Model: l.Model, Temperature: l.Temperature, MaxTokens: l.MaxTokens,
-		TimeoutSec: l.TimeoutSec, MaxToolRounds: l.MaxToolRounds, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
+		BaseURL: l.BaseURL, Model: l.Model, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
 		KeySet: l.APIKey != "", KeyFromEnv: fromEnv && l.APIKey != "", CanStoreKey: s.fkey != nil,
 		Updated: st.Updated, By: st.By,
 	}
@@ -351,14 +328,6 @@ func (in Input) validate() error {
 	switch {
 	case strings.TrimSpace(in.Model) == "":
 		return &ValidationError{"model is required"}
-	case in.Temperature < 0 || in.Temperature > 1:
-		return &ValidationError{"temperature must be between 0 and 1"}
-	case in.MaxTokens < 128 || in.MaxTokens > 8192:
-		return &ValidationError{"max tokens must be between 128 and 8192"}
-	case in.TimeoutSec < 10 || in.TimeoutSec > 300:
-		return &ValidationError{"timeout must be between 10 and 300 seconds"}
-	case in.MaxToolRounds < 1 || in.MaxToolRounds > 8:
-		return &ValidationError{"max tool rounds must be between 1 and 8"}
 	}
 	return nil
 }
@@ -379,8 +348,8 @@ func (s *Service) ForTest(ctx context.Context, in Input) (LLM, error) {
 	}
 	return LLM{
 		BaseURL: base, APIKey: key, Model: strings.TrimSpace(in.Model),
-		Temperature: in.Temperature, MaxTokens: in.MaxTokens, TimeoutSec: in.TimeoutSec,
-		MaxToolRounds: in.MaxToolRounds, Streaming: in.Streaming, ThinkOnDemand: in.ThinkOnDemand,
+		TimeoutSec: s.env.TimeoutSec, MaxToolRounds: s.env.MaxToolRounds,
+		Streaming: in.Streaming, ThinkOnDemand: in.ThinkOnDemand,
 	}, nil
 }
 
@@ -420,9 +389,8 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 			keep = enc
 		}
 		setJSON(raw, "llm", storedLLM{
-			BaseURL: &baseURL, APIKeyEnc: keep, Model: &model, Temperature: &in.Temperature,
-			MaxTokens: &in.MaxTokens, TimeoutSec: &in.TimeoutSec, MaxToolRounds: &in.MaxToolRounds, Streaming: &in.Streaming,
-			ThinkOnDemand: &in.ThinkOnDemand,
+			BaseURL: &baseURL, APIKeyEnc: keep, Model: &model,
+			Streaming: &in.Streaming, ThinkOnDemand: &in.ThinkOnDemand,
 		})
 		setJSON(raw, "updated", s.now().UTC().Format(time.RFC3339))
 		setJSON(raw, "by", by)

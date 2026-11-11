@@ -80,8 +80,9 @@ const (
 	maxMessage     = 4000 // Telegram allows 4096; leave room
 	maxUndoButtons = 8
 	// turnTimeout bounds one message's work, which is not cancelled on
-	// shutdown (Telegram won't redeliver an update once polled past).
-	turnTimeout = 3 * time.Minute
+	// shutdown (Telegram won't redeliver an update once polled past). A
+	// local thinking model can take minutes per round.
+	turnTimeout = 15 * time.Minute
 )
 
 func (b *Bot) now() time.Time {

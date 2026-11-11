@@ -363,7 +363,7 @@ func TestChatToolLoop(t *testing.T) {
 		t.Run(fmt.Sprintf("stream=%v", stream), func(t *testing.T) {
 			e := setup(t, objstore.NewMemory(), nil)
 			// Save settings with the wanted streaming mode.
-			body := fmt.Sprintf(`{"baseUrl":%q,"model":"model-a","temperature":0.2,"maxTokens":1024,"timeoutSec":30,"maxToolRounds":5,"streaming":%v}`, e.llm.srv.URL+"/v1", stream)
+			body := fmt.Sprintf(`{"baseUrl":%q,"model":"model-a","streaming":%v}`, e.llm.srv.URL+"/v1", stream)
 			if code, _, b := e.do(t, "PUT", "/api/settings/llm", body); code != 200 {
 				t.Fatalf("save settings: %d %s", code, b)
 			}
@@ -406,7 +406,7 @@ func TestChatToolLoop(t *testing.T) {
 
 func TestChatForcedAnswerWhenModelKeepsCallingTools(t *testing.T) {
 	e := setup(t, objstore.NewMemory(), nil)
-	e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"m","temperature":0,"maxTokens":256,"timeoutSec":30,"maxToolRounds":1,"streaming":false}`, e.llm.srv.URL+"/v1"))
+	e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"m","streaming":false}`, e.llm.srv.URL+"/v1"))
 	code, m, raw := e.do(t, "POST", "/api/chat", `{"turns":[{"role":"user","content":"We move in on 5 Dec"}]}`)
 	if code != 200 || m["reply"] == "" {
 		t.Fatalf("%d %s", code, raw)
@@ -422,7 +422,7 @@ func TestSettingsKeyNeverLeaks(t *testing.T) {
 			var bodies []string
 			rec := func(code int, _ map[string]any, raw string) { bodies = append(bodies, raw) }
 
-			save := fmt.Sprintf(`{"baseUrl":%q,"apiKey":%q,"model":"model-b","temperature":0.3,"maxTokens":2048,"timeoutSec":45,"maxToolRounds":4,"streaming":false}`, e.llm.srv.URL+"/v1", storedKey)
+			save := fmt.Sprintf(`{"baseUrl":%q,"apiKey":%q,"model":"model-b","streaming":false}`, e.llm.srv.URL+"/v1", storedKey)
 			code, m, raw := e.do(t, "PUT", "/api/settings/llm", save)
 			rec(code, m, raw)
 			if code != 200 || m["keySet"] != true || m["keyLast4"] != "7f3a" || m["by"] != "zy@example.com" {
@@ -481,11 +481,11 @@ func TestSettingsKeyNeverLeaks(t *testing.T) {
 func TestSettingsEnvFallbackAndBounds(t *testing.T) {
 	e := setup(t, objstore.NewMemory(), nil)
 	code, m, _ := e.do(t, "GET", "/api/settings/llm", "")
-	if code != 200 || m["model"] != "env-model" || m["keyFromEnv"] != true || m["temperature"] != 0.2 || m["maxToolRounds"] != float64(5) {
+	if code != 200 || m["model"] != "env-model" || m["keyFromEnv"] != true {
 		t.Fatalf("env fallback: %v", m)
 	}
-	base := map[string]any{"baseUrl": e.llm.srv.URL + "/v1", "model": "m", "temperature": 0.2, "maxTokens": 1024, "timeoutSec": 60, "maxToolRounds": 5, "streaming": true}
-	for field, bad := range map[string]any{"temperature": 1.5, "maxTokens": 100, "timeoutSec": 301, "maxToolRounds": 9, "baseUrl": "ftp://x", "model": ""} {
+	base := map[string]any{"baseUrl": e.llm.srv.URL + "/v1", "model": "m", "streaming": true}
+	for field, bad := range map[string]any{"baseUrl": "ftp://x", "model": ""} {
 		in := map[string]any{}
 		for k, v := range base {
 			in[k] = v
@@ -519,7 +519,7 @@ func TestModelSwitchTakesEffectNextMessage(t *testing.T) {
 	if got := chatOnce(); got != "env-model" {
 		t.Fatalf("before save: %q", got)
 	}
-	e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"model-b","temperature":0.2,"maxTokens":1024,"timeoutSec":30,"maxToolRounds":5,"streaming":false}`, e.llm.srv.URL+"/v1"))
+	e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"model-b","streaming":false}`, e.llm.srv.URL+"/v1"))
 	if got := chatOnce(); got != "model-b" {
 		t.Fatalf("after save: %q", got)
 	}
@@ -527,7 +527,7 @@ func TestModelSwitchTakesEffectNextMessage(t *testing.T) {
 
 func TestSettingsTestEndpoint(t *testing.T) {
 	e := setup(t, objstore.NewMemory(), nil)
-	in := fmt.Sprintf(`{"baseUrl":%q,"model":"model-a","temperature":0.2,"maxTokens":1024,"timeoutSec":30,"maxToolRounds":5,"streaming":true}`, e.llm.srv.URL+"/v1")
+	in := fmt.Sprintf(`{"baseUrl":%q,"model":"model-a","streaming":true}`, e.llm.srv.URL+"/v1")
 	code, m, raw := e.do(t, "POST", "/api/settings/llm/test", in)
 	if code != 200 || m["ok"] != true || m["toolCalls"] != true || len(m["models"].([]any)) != 2 {
 		t.Fatalf("test ok: %d %s", code, raw)
@@ -727,7 +727,7 @@ func TestAdminGuide(t *testing.T) {
 func TestStoredKeyOnlyGoesToItsOwnEndpoint(t *testing.T) {
 	e := setup(t, objstore.NewMemory(), nil)
 	other := newFakeLLM(t) // a different host:port, e.g. someone else's server
-	save := fmt.Sprintf(`{"baseUrl":%q,"apiKey":%q,"model":"m","temperature":0.2,"maxTokens":1024,"timeoutSec":30,"maxToolRounds":3,"streaming":false}`, e.llm.srv.URL+"/v1", storedKey)
+	save := fmt.Sprintf(`{"baseUrl":%q,"apiKey":%q,"model":"m","streaming":false}`, e.llm.srv.URL+"/v1", storedKey)
 	if code, _, raw := e.do(t, "PUT", "/api/settings/llm", save); code != 200 {
 		t.Fatalf("save: %d %s", code, raw)
 	}
@@ -842,7 +842,7 @@ func TestChatInputErrorsAre400(t *testing.T) {
 	if code, _, raw := e.do(t, "POST", "/api/chat", `{"turns":[{"role":"assistant","content":"hi"}]}`); code != 400 {
 		t.Fatalf("bad turns: want 400, got %d %s", code, raw)
 	}
-	e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"m","temperature":0.2,"maxTokens":1024,"timeoutSec":30,"maxToolRounds":3,"streaming":false}`, e.llm.srv.URL+"/v1"))
+	e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"m","streaming":false}`, e.llm.srv.URL+"/v1"))
 	e.llm.srv.Close() // endpoint down: that one is the gateway's fault
 	if code, _, raw := e.do(t, "POST", "/api/chat", `{"turns":[{"role":"user","content":"hi"}]}`); code != 502 {
 		t.Fatalf("endpoint down: want 502, got %d %s", code, raw)

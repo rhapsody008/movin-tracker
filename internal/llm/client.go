@@ -48,13 +48,11 @@ type FunctionDecl struct {
 }
 
 type request struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Tools       []Tool    `json:"tools,omitempty"`
-	ToolChoice  string    `json:"tool_choice,omitempty"`
-	Temperature float64   `json:"temperature"`
-	MaxTokens   int       `json:"max_tokens"`
-	Stream      bool      `json:"stream,omitempty"`
+	Model      string    `json:"model"`
+	Messages   []Message `json:"messages"`
+	Tools      []Tool    `json:"tools,omitempty"`
+	ToolChoice string    `json:"tool_choice,omitempty"`
+	Stream     bool      `json:"stream,omitempty"`
 	// ChatTemplateKwargs carries enable_thinking=false when thinking is
 	// on demand and this turn didn't ask for it.
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
@@ -160,7 +158,7 @@ func (c *Client) Models(ctx context.Context) ([]string, error) {
 func (c *Client) Complete(ctx context.Context, msgs []Message, tools []Tool, forceAnswer, stream bool, onText func(string)) (Message, error) {
 	req := request{
 		Model: c.cfg.Model, Messages: msgs, Tools: tools,
-		Temperature: c.cfg.Temperature, MaxTokens: c.cfg.MaxTokens, Stream: stream,
+		Stream: stream,
 	}
 	if forceAnswer && len(tools) > 0 {
 		req.ToolChoice = "none"

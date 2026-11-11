@@ -149,7 +149,7 @@ Shows where the data is (bucket, region, prefix, endpoint), what kind of AWS cre
 
 ### Settings → LLM
 
-Endpoint URL, API key, model and tuning. **Test connection** must show "Tool calling works" before **Save** is allowed (or tick "Save without a passing test"). The key is stored encrypted; the page only ever shows its last four characters. Saving here overrides the `LLM_*` env vars, and the bot uses the new model from its next message.
+In order: type the **endpoint URL** and **API key**, press **Test connection** (it lists the endpoint's models), **pick a model**, then **Save**. Save first checks that the model can call tools; if it can't, nothing is saved and you can tick "Save even though the tool-calling check failed". Temperature and reply length are left to the model server; each model call may take up to 10 minutes and a message up to 5 tool rounds (fixed in the app). The key is stored encrypted; the page only ever shows its last four characters. Saving here overrides the `LLM_*` env vars, and the bot uses the new model from its next message.
 
 A key is only ever sent to the endpoint it belongs to. If you switch to a **different host**, type that host's key: the saved key is dropped rather than sent to the new host, and the server's `LLM_API_KEY` only goes to `LLM_BASE_URL`.
 
@@ -280,7 +280,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS chain | Secret `movin-secrets` |
 | `SETTINGS_SECRET` | empty | Fernet key for the saved LLM key (Secret) |
 | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | empty | Defaults; Settings → LLM overrides |
-| `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SEC`, `LLM_MAX_TOOL_ROUNDS`, `LLM_STREAMING`, `LLM_THINK_ON_DEMAND` | 0.2, 1024, 60, 5, true, false | Defaults; Settings → LLM overrides |
+| `LLM_STREAMING`, `LLM_THINK_ON_DEMAND` | true, false | Defaults; Settings → LLM overrides |
 | `TELEGRAM_BOT_TOKEN` | empty | Bot token (Secret); empty = bot off |
 | `TELEGRAM_ALLOWED_IDS`, `TELEGRAM_ALLOWED_CHATS` | empty | Defaults; Settings → Telegram replaces them |
 | `LISTEN_ADDR` | `127.0.0.1:8080` | Keep on loopback in k8s: the app trusts the auth header, so only the proxy beside it may reach it |

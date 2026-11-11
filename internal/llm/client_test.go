@@ -29,13 +29,19 @@ func TestStripSpecialTokens(t *testing.T) {
 }
 
 // enable_thinking=false goes out only when thinking is on demand and this
-// turn didn't ask for it; otherwise the field is absent.
+// turn didn't ask for it; otherwise the field is absent. Temperature and
+// max_tokens are never sent.
 func TestThinkOnDemandKwargs(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var raw map[string]json.RawMessage
 		json.NewDecoder(r.Body).Decode(&raw)
 		got = append(got, string(raw["chat_template_kwargs"]))
+		for _, k := range []string{"temperature", "max_tokens"} {
+			if _, ok := raw[k]; ok {
+				t.Errorf("request sends %s; it is left to the model server", k)
+			}
+		}
 		w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
 	}))
 	defer srv.Close()

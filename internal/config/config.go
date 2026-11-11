@@ -76,18 +76,6 @@ func Load() (Config, error) {
 	c.LLM.BaseURL = strings.TrimRight(env("LLM_BASE_URL", ""), "/")
 	c.LLM.APIKey = env("LLM_API_KEY", "")
 	c.LLM.Model = env("LLM_MODEL", "")
-	if v := env("LLM_TEMPERATURE", ""); v != "" {
-		if c.LLM.Temperature, err = strconv.ParseFloat(v, 64); err != nil {
-			return c, fmt.Errorf("LLM_TEMPERATURE: %w", err)
-		}
-	}
-	for k, dst := range map[string]*int{"LLM_MAX_TOKENS": &c.LLM.MaxTokens, "LLM_TIMEOUT_SEC": &c.LLM.TimeoutSec, "LLM_MAX_TOOL_ROUNDS": &c.LLM.MaxToolRounds} {
-		if v := env(k, ""); v != "" {
-			if *dst, err = strconv.Atoi(v); err != nil {
-				return c, fmt.Errorf("%s: %w", k, err)
-			}
-		}
-	}
 	if v := env("LLM_STREAMING", ""); v != "" {
 		if c.LLM.Streaming, err = strconv.ParseBool(v); err != nil {
 			return c, fmt.Errorf("LLM_STREAMING: %w", err)
