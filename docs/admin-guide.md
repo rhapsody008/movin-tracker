@@ -299,7 +299,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `entries.json` | Entries, key dates, last 200 changes |
 | `settings.json` | LLM connection (key encrypted), Telegram allowlist |
 | `_probe/...` | Storage test scratch files, deleted right after |
-| `docs/raw/...` | Your documents: drawings, contracts, developer and management-office papers (upload here; reading them is planned) |
+| `docs/raw/...` | Your documents: drawings, contracts, developer and management-office papers (upload here, subfolders welcome, e.g. `docs/raw/contracts/...`; reading them is planned) |
 
 ## Not built yet
 

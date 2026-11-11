@@ -82,3 +82,7 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 
 ## LLM settings kept minimal (2026-11-11)
 - ZY: no temperature, max tokens, timeout or tool-round settings; leave them to the model. The page has endpoint, key, model, streaming and 'Think only when asked'. Test connection comes before picking a model.
+
+## Documents in the bucket (2026-11-11)
+- Raw documents live under `docs/raw/`, and ZY may organise them in subfolders (`docs/raw/<folder>/.../<file>.pdf`). Phase 1.5 must list `docs/raw/` recursively and treat the full key (folder path included) as the document's identity; derived caches mirror that path under `docs/pages/` and `docs/text/`.
+- First upload: `docs/raw/1.1 Type C5 Unit Layout Plan.pdf` (2026-11-11).
