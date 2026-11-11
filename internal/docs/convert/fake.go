@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/docs"
 )
@@ -16,9 +17,11 @@ type Fake struct {
 	Fail    map[string]error
 	Calls   int
 	Renders int
+	Delay   time.Duration // each Text call sleeps this long (single-flight tests)
 }
 
 func (f *Fake) Text(_ context.Context, pdf []byte) ([]docs.Page, error) {
+	time.Sleep(f.Delay)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Calls++
