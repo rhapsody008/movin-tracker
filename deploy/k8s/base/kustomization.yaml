@@ -20,3 +20,7 @@ configMapGenerator:
       - TZ=Asia/Singapore
       - LLM_BASE_URL=
       - LLM_MODEL=
+      # Telegram allowlist defaults (Settings → Telegram replaces them):
+      # people as id=name, groups as negative chat IDs.
+      - TELEGRAM_ALLOWED_IDS=
+      - TELEGRAM_ALLOWED_CHATS=

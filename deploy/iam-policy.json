@@ -2,10 +2,16 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "BoardObjects",
+      "Sid": "AppObjects",
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject"],
       "Resource": "arn:aws:s3:::zy-condo-board/prod/*"
+    },
+    {
+      "Sid": "StorageTestCleanup",
+      "Effect": "Allow",
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::zy-condo-board/prod/_probe/*"
     },
     {
       "Sid": "ListForHeadAnd404",

@@ -4,8 +4,9 @@ metadata:
   name: movin
   labels: { app: movin }
 spec:
-  # One replica: S3 conditional writes would keep two correct, but SSE
-  # fan-out is per process. Recreate so two never overlap during a rollout.
+  # One replica, and it must stay one: Telegram allows a single getUpdates
+  # poller per bot token (a second gets 409), and SSE fan-out is per
+  # process. Recreate so two never overlap during a rollout.
   replicas: 1
   strategy: { type: Recreate }
   selector:

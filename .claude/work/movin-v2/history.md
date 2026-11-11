@@ -16,5 +16,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Step 1.8a done.
 - Step 1.9 done (automated). Manual check waits for ZY: BotFather /newbot, /setprivacy → Disable, TELEGRAM_BOT_TOKEN in .env, own Telegram user ID in TELEGRAM_ALLOWED_IDS (find it from the 'telegram message ignored' log line, or the rejected list once 1.9a lands).
 - Step 1.9a done. Admin guide recorded as step 1.12 (ZY: 'I need an admin operation guide at the end of the day').
-- Next: 1.10 config + manifests (files only), then 1.11 retire old code (needs ZY approval), then 1.12 admin guide.
+- Step 1.10 done (files only; nothing applied).
+- Next: 1.11 retire old code — needs ZY's explicit OK (deletes internal/board, internal/chat, cmd/import, fixtures/board.sample.json, build-plan.md); then 1.12 admin guide.
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.

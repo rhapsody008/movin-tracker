@@ -1,74 +1,61 @@
 # movin-tracker
 
-"Our new place": a self-hosted board for two people moving into a new condo, covering admin, renovation and shopping lists. It has a countdown to move-in, a calendar, and a chat panel that edits the board through an OpenAI-compatible LLM. It runs as one stateless Go container, keeps all its state in one S3 bucket, and syncs live between your phones.
+A renovation assistant for two people fitting out a new condo. You tell it things in a Telegram group ("Lim quoted 18k for carpentry, paid 30% today", "thinking of fluted glass for the dry kitchen door") and it keeps a structured record: ideas, decisions, tasks, notes and open questions, each with room, category, status, cost, vendor and date. Ask it later ("what did we decide for the kitchen and what did it cost?") and it answers from that record. Every change comes back with an Undo button.
 
-The design comes from [build-plan.md](build-plan.md). The visual reference, the original Claude-hosted board, is in [reference/condo-board.html](reference/condo-board.html).
+The web page is for seeing everything: a kanban board by status, a calendar, the move-in countdown and cost totals, a secondary chat, and a Settings panel to run the app (storage, LLM endpoint, Telegram allowlist).
 
-## Quick start
+It runs as one stateless Go container behind an auth proxy, keeps all state in one S3 bucket, and talks to any OpenAI-compatible LLM endpoint that supports tool calling.
 
-You need Docker and make, and nothing else.
+**Operating it** (setup, secrets, deploy, adding people, troubleshooting): see the admin guide, `docs/admin-guide.md` (being written as the last Phase 1 step).
+
+## Quick start (local)
+
+You need Docker and make.
 
 ```sh
 make dev     # app + MinIO with live reload at http://localhost:8080
-make seed    # load fixtures/board.sample.json
-make test    # unit + API tests against MinIO, stubbed LLM
+make seed    # load fixtures/entries.sample.json
+make test    # unit + API tests against MinIO, stubbed LLM and fake Telegram
 make help    # every target
 ```
 
-`make dev` creates `.env` from [.env.example](.env.example) on first run and puts a fresh `SETTINGS_SECRET` in it. To use the chat, either add your `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` to `.env`, or open the gear in the chat panel and set them there.
+`make dev` creates `.env` from [.env.example](.env.example) on first run, with a fresh `SETTINGS_SECRET`. For the chat, set the LLM endpoint on the web page (Settings → LLM) or in `.env`; a model on this Mac is reachable from Docker at `http://host.docker.internal:<port>/v1`. For the bot, put a token from @BotFather in `TELEGRAM_BOT_TOKEN` and your Telegram user ID in `TELEGRAM_ALLOWED_IDS` (or add yourself later from Settings → Telegram → Recently refused).
 
-If port 8080, 9000 or 9001 is already in use, set `APP_PORT=8088` (and likewise `MINIO_PORT` / `MINIO_CONSOLE_PORT`) on the make command.
+If port 8080, 9000 or 9001 is taken, set `APP_PORT=8088` (and likewise `MINIO_PORT` / `MINIO_CONSOLE_PORT`) on the make command.
 
 | Target | Does |
 | --- | --- |
 | `make dev` | Compose up app + MinIO with live reload |
 | `make down` | Stop the stack |
-| `make seed` | Load `fixtures/board.sample.json` into MinIO |
-| `make test` | Unit + API tests in the container, against MinIO, with a stubbed LLM (race detector on) |
+| `make seed` | Load `fixtures/entries.sample.json` into MinIO |
+| `make test` | Unit + API tests in the container, against MinIO (race detector on) |
 | `make conflict-test` | Two writers on one ETag; both changes must survive |
-| `make chat-eval` | Sends the four Phase 3 messages to the real endpoint in `.env` and prints the board diff and PASS/FAIL for each |
+| `make chat-eval` | Run the agent eval messages against the real endpoint in `.env`; prints the entry diff and PASS/FAIL per message |
 | `make lint` | gofmt + go vet |
-| `make build` | Build the production image (`movin:local`, about 22 MB, distroless, non-root) |
+| `make build` | Build the production image (`movin:local`, distroless, non-root) |
 | `make run` | Run the production image against MinIO with a read-only root filesystem, as in k8s |
 | `make clean` | Remove containers, volumes and the MinIO bucket |
 
 ## How it works
 
-- **Storage.** The whole board is `s3://$S3_BUCKET/$S3_PREFIX/board.json`. Every write reads, changes, then writes the object with `PutObject If-Match: <etag>`. A `412` means someone else wrote first: the app re-reads, re-applies the change, and retries up to 3 times before answering `409`. The first run creates the object with `If-None-Match: *`. Reads come from memory, and a `HEAD` every 5 s picks up writes made elsewhere. LLM settings live next to the board in `settings.json`.
-- **Live sync.** `GET /api/events` is a server-sent events stream that sends the full board after every change. The browser applies its own edits immediately, then reconciles with the board the server returns.
-- **Chat.** `POST /api/chat` sends the model the board plus four tools (`add_items`, `update_item`, `archive_item`, `set_dates`), the same as the reference. It then runs the tool loop through the same service layer as the REST API, streams the reply, and returns the change lines ("Added: Sofa"). Every tool call is logged at INFO.
-- **Settings drawer.** The gear in the chat panel sets the endpoint, key, model and tuning. Save stays disabled until "Test connection" confirms that tool calling works. The key is Fernet-encrypted with `SETTINGS_SECRET`, and the API only ever says whether a key is set and its last 4 characters. Each field falls back to `settings.json`, then the `LLM_*` env vars, then built-in defaults.
-- **Auth.** This is done in front of the app, not inside it. oauth2-proxy (Google) sets `X-Forwarded-Email`, and the app checks it against `ALLOWED_EMAILS` (anyone else gets 403). In k8s the app listens on `127.0.0.1` and only its oauth2-proxy sidecar can reach it, so the header can be trusted. For local dev, `DEV_EMAIL` stands in for the proxy.
+- **Entries.** Everything is in `s3://$S3_BUCKET/$S3_PREFIX/entries.json`: the entries, the move-in and key dates, and a journal of the last 200 changes (the undo history). Every write reads, changes, then writes with `PutObject If-Match: <etag>`; a `412` means someone else wrote first, so the app re-reads, re-applies and retries up to 3 times before answering `409`. Reads come from memory; a `HEAD` every 5 s picks up writes made elsewhere. Undo restores an entry only if nobody changed it since.
+- **Agent.** One tool-calling loop serves both the web chat and Telegram. Tools: `add_entry`, `update_entry`, `search_entries` (structured filters plus keywords; no vector search), `set_dates`, `undo_change`. The server, not the model, builds the confirmation lines, so every change is reported and carries its undo handle.
+- **Telegram.** The bot long-polls from inside the app (outbound only, no webhook, no extra ingress), which is why the Deployment must stay at one replica. Private chats need an allowed person; groups need an allowed group and an allowed person. Each chat has its own queue, so two people typing at once never race; the group history is shared and labelled by speaker, and ordinary chatter gets no reply.
+- **Web page.** `GET /api/events` is a server-sent events stream that pushes the document after every change, including the bot's. The page applies its own edits immediately and then takes the server's copy.
+- **Settings.** `settings.json` next to the entries holds the LLM connection (the key Fernet-encrypted with `SETTINGS_SECRET`; the API only says whether one is set and its last 4 characters) and the Telegram allowlist. Each section is saved on its own, so saving one never touches another. Env vars are the defaults; the web page overrides them. Storage settings are read-only on the page: they come from env and Secrets.
+- **Auth.** In front of the app, not inside it: oauth2-proxy (GitHub sign-in) sets `X-Forwarded-Email`, and the app checks it against `ALLOWED_EMAILS`. In k8s the app listens on `127.0.0.1`, so only its oauth2-proxy sidecar can reach it. For local dev, `DEV_EMAIL` stands in for the proxy.
 
-Code map: [cmd/movin](cmd/movin) (server, `healthcheck`, `init-bucket`, `seed`), [internal/board](internal/board) (model, rules, ETag write path), [internal/chat](internal/chat), [internal/llm](internal/llm), [internal/settings](internal/settings), [internal/server](internal/server) (HTTP), [static/index.html](static/index.html) (frontend, no build step).
+Code map: [cmd/movin](cmd/movin) (server, `healthcheck`, `init-bucket`, `seed`), [cmd/chateval](cmd/chateval) (agent eval against a real model), [internal/entries](internal/entries) (model, rules, search, journal, ETag write path), [internal/agent](internal/agent) (tool loop, prompt, change lines), [internal/telegram](internal/telegram) (Bot API client and bot), [internal/llm](internal/llm), [internal/settings](internal/settings), [internal/objstore](internal/objstore), [internal/server](internal/server) (HTTP and admin API), [static/index.html](static/index.html) (frontend, no build step).
 
-## Deploy (Phase 4)
+Plan, progress and decisions for the current work: [.claude/work/movin-v2](.claude/work/movin-v2).
 
-1. **Bucket.** Create it in `ap-southeast-1` with versioning and default encryption (SSE-S3) on. Give the app an IAM user or role with [deploy/iam-policy.json](deploy/iam-policy.json), changing the bucket and prefix names.
-2. **Google OAuth client.** Create one (type Web) with the redirect URI `https://<host>/oauth2/callback`.
-3. **Secrets.** Fill in [deploy/k8s/base/secrets.example.yaml](deploy/k8s/base/secrets.example.yaml) and apply it out of band. It is deliberately not part of the kustomization.
-4. **Config.** Put the real host, image and emails in [deploy/k8s/overlays/prod/kustomization.yaml](deploy/k8s/overlays/prod/kustomization.yaml) and [deploy/auth/authenticated-emails.txt](deploy/auth/authenticated-emails.txt).
-5. **Apply.** Build and push the image (`make build`, then tag and push), then run `kubectl apply -k deploy/k8s/overlays/prod`.
+## Deployment, in short
 
-The Deployment runs 1 replica with the `Recreate` strategy and no PVC. The app container has a read-only root filesystem with a 16 Mi `/tmp` emptyDir. Readiness goes through oauth2-proxy to the app's `/readyz`, which checks S3.
+Single-replica Deployment (`Recreate`, no PVC) with the app and an oauth2-proxy sidecar; read-only root filesystem, 16 Mi `/tmp`. Manifests are in [deploy/k8s](deploy/k8s); the Secrets to create by hand are described in [deploy/k8s/base/secrets.example.yaml](deploy/k8s/base/secrets.example.yaml); the S3 permissions are in [deploy/iam-policy.json](deploy/iam-policy.json). The target is an NKP project with Flux pulling a versioned OCI artifact that CI publishes on each `v*` tag (planned; CI never commits to the repo). The admin guide has the step-by-step.
 
-### Migrating the current board
+## Notes
 
-Export the Claude board's `items` collection and `meta/settings` document to JSON, then:
-
-```sh
-go run ./cmd/import -in export.json -out board.import.json -by zy@example.com
-# local:  docker compose run --rm -v $PWD:/x bucket-init seed /x/board.import.json
-# prod:   S3_BUCKET=… S3_PREFIX=prod go run ./cmd/movin seed board.import.json
-```
-
-The importer accepts `{items, meta}`, `{items: [{id, data}]}`, or a bare item array. It converts millisecond timestamps and runs every item through the same field rules as the API.
-
-## Changes from the build plan
-
-- **Go instead of Python + FastAPI.** The plan listed this as the alternative. Pydantic became explicit validation in [internal/board/model.go](internal/board/model.go), ruff became gofmt + go vet, and `python:3.12-slim` became `distroless/static:nonroot`. Go modules are vendored, so building and testing need no network beyond Docker Hub. The one exception is installing `air` for `make dev`.
-- **MinIO image.** Upstream `minio/minio` images are no longer published, so compose uses the community build `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`. It honours `If-Match` and `If-None-Match` on PUT, which `TestConditionalWrites` checks in every `make test` run.
-- **Max tool rounds.** This counts rounds that may call tools. If the model is still calling tools after that, one more round is forced to answer in words. So the default of 5 means at most 6 LLM calls, and a setting of 1 can still edit the board.
-- **Validation.** The API rejects bad values with 400 (the reference silently truncated them). An unknown category is still read as `admin`, and an empty date or time string clears the field.
-- **Public paths.** The manifest and home-screen icons are served without sign-in, because iOS can fetch them without the cookie.
-- **Narrow-screen fix.** One CSS fix over the reference: below 1100 px the main grid uses `minmax(0,1fr)`, so the sideways-scrolling board no longer widens the page on phones.
+- **Go modules are vendored**, so building and testing need no network beyond Docker Hub (the one exception is installing `air` for `make dev`).
+- **MinIO image.** Upstream `minio/minio` images are no longer published, so compose uses the community build `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`. It honours `If-Match` and `If-None-Match` on PUT, which `TestConditionalWrites` checks on every `make test`.
+- **Max tool rounds** counts rounds that may call tools; if the model is still calling tools after that, one more round is forced to answer in words. The default of 5 means at most 6 LLM calls.
+- **Public paths.** The manifest and home-screen icons are served without sign-in, because iOS fetches them without the cookie.

@@ -98,7 +98,7 @@ func serve() error {
 		log.Warn("SETTINGS_SECRET is not set; the settings drawer cannot store an API key")
 	}
 	if len(c.AllowedEmails) == 0 {
-		log.Warn("ALLOWED_EMAILS is empty; every user the proxy lets through can use the board")
+		log.Warn("ALLOWED_EMAILS is empty; every user the proxy lets through can use the web page")
 	}
 
 	var static fs.FS = movintracker.Static()

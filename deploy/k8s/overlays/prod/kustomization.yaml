@@ -1,5 +1,6 @@
-# Production overlay. Set the image, host and emails here. A Flux
-# Kustomization pointing at this directory is a drop-in later.
+# Production overlay. Set the image, host and emails here. The planned
+# OCI + Flux deployment (see .claude/work/movin-v2/plan.md, "Deployment")
+# drops namespace.yaml here because the NKP project owns the namespace.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: movin
@@ -17,6 +18,10 @@ configMapGenerator:
       - S3_BUCKET=zy-condo-board
       - S3_PREFIX=prod
       - ALLOWED_EMAILS=zy@example.com,partner@example.com
+      # Optional Telegram allowlist defaults; the web page (Settings →
+      # Telegram) replaces them, so these can stay empty.
+      # - TELEGRAM_ALLOWED_IDS=111111111=ZY,222222222=Partner
+      # - TELEGRAM_ALLOWED_CHATS=-1001234567890
 patches:
   - target: { kind: Ingress, name: movin }
     patch: |-
