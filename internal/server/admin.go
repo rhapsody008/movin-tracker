@@ -187,3 +187,21 @@ func (s *Server) putTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: v})
 }
+
+// ---------- admin: guide ----------
+
+func (s *Server) getGuide(w http.ResponseWriter, r *http.Request) {
+	if s.Guide == nil {
+		writeErr(w, http.StatusNotFound, "no admin guide in this build")
+		return
+	}
+	b, err := s.Guide()
+	if err != nil {
+		s.Log.Warn("admin guide unreadable", "err", err)
+		writeErr(w, http.StatusInternalServerError, "The admin guide could not be read.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(b)
+}

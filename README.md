@@ -6,7 +6,7 @@ The web page is for seeing everything: a kanban board by status, a calendar, the
 
 It runs as one stateless Go container behind an auth proxy, keeps all state in one S3 bucket, and talks to any OpenAI-compatible LLM endpoint that supports tool calling.
 
-**Operating it** (setup, secrets, deploy, adding people, troubleshooting): see the admin guide, `docs/admin-guide.md` (being written as the last Phase 1 step).
+**Operating it** (setup, secrets, deploy, adding people, troubleshooting): see the [admin guide](docs/admin-guide.md). The same guide is on the web page under **Admin guide** (`/guide.html`).
 
 ## Quick start (local)
 
@@ -45,7 +45,7 @@ If port 8080, 9000 or 9001 is taken, set `APP_PORT=8088` (and likewise `MINIO_PO
 - **Settings.** `settings.json` next to the entries holds the LLM connection (the key Fernet-encrypted with `SETTINGS_SECRET`; the API only says whether one is set and its last 4 characters) and the Telegram allowlist. Each section is saved on its own, so saving one never touches another. Env vars are the defaults; the web page overrides them. Storage settings are read-only on the page: they come from env and Secrets.
 - **Auth.** In front of the app, not inside it: oauth2-proxy (GitHub sign-in) sets `X-Forwarded-Email`, and the app checks it against `ALLOWED_EMAILS`. In k8s the app listens on `127.0.0.1`, so only its oauth2-proxy sidecar can reach it. For local dev, `DEV_EMAIL` stands in for the proxy.
 
-Code map: [cmd/movin](cmd/movin) (server, `healthcheck`, `init-bucket`, `seed`), [cmd/chateval](cmd/chateval) (agent eval against a real model), [internal/entries](internal/entries) (model, rules, search, journal, ETag write path), [internal/agent](internal/agent) (tool loop, prompt, change lines), [internal/telegram](internal/telegram) (Bot API client and bot), [internal/llm](internal/llm), [internal/settings](internal/settings), [internal/objstore](internal/objstore), [internal/server](internal/server) (HTTP and admin API), [static/index.html](static/index.html) (frontend, no build step).
+Code map: [cmd/movin](cmd/movin) (server, `healthcheck`, `init-bucket`, `seed`), [cmd/chateval](cmd/chateval) (agent eval against a real model), [internal/entries](internal/entries) (model, rules, search, journal, ETag write path), [internal/agent](internal/agent) (tool loop, prompt, change lines), [internal/telegram](internal/telegram) (Bot API client and bot), [internal/llm](internal/llm), [internal/settings](internal/settings), [internal/objstore](internal/objstore), [internal/server](internal/server) (HTTP and admin API), [static/index.html](static/index.html) and [static/guide.html](static/guide.html) (frontend, no build step; the guide page renders the embedded [docs/admin-guide.md](docs/admin-guide.md)).
 
 Plan, progress and decisions for the current work: [.claude/work/movin-v2](.claude/work/movin-v2).
 

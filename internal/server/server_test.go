@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,8 @@ import (
 	"time"
 
 	"github.com/fernet/fernet-go"
+
+	movintracker "github.com/rhapsody008/movin-tracker"
 
 	"github.com/rhapsody008/movin-tracker/internal/agent"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
@@ -682,5 +685,37 @@ func TestTelegramAdminNeverShowsToken(t *testing.T) {
 		if strings.Contains(b, tok) || strings.Contains(b, "AAsecret") {
 			t.Fatalf("token leaked: %s", b)
 		}
+	}
+}
+
+func TestAdminGuide(t *testing.T) {
+	e := setup(t, objstore.NewMemory(), func(s *server.Server) {
+		s.Guide = func() ([]byte, error) { return movintracker.AdminGuide(), nil }
+	})
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/admin/guide", nil)
+	req.Header.Set("X-Forwarded-Email", "zy@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/markdown") {
+		t.Fatalf("guide: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	// The real guide is embedded in the binary and covers the essentials.
+	for _, want := range []string{"# Admin guide", "## Secrets in the NKP namespace", "## Troubleshooting", "TELEGRAM_BOT_TOKEN"} {
+		if !bytes.Contains(body, []byte(want)) {
+			t.Errorf("embedded guide is missing %q", want)
+		}
+	}
+	// Behind sign-in like everything else.
+	if code, _, _ := e.do(t, "GET", "/api/admin/guide", "", "X-Forwarded-Email", ""); code != 401 {
+		t.Fatalf("guide without sign-in: want 401, got %d", code)
+	}
+	// A build without a guide answers 404.
+	e2 := setup(t, objstore.NewMemory(), nil)
+	if code, _, _ := e2.do(t, "GET", "/api/admin/guide", ""); code != 404 {
+		t.Fatalf("no guide: want 404, got %d", code)
 	}
 }

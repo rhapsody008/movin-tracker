@@ -28,9 +28,11 @@ type Server struct {
 	Settings *settings.Service
 	Agent    *agent.Runner
 	Bot      *telegram.Bot // nil when TELEGRAM_BOT_TOKEN is not set
-	Store    objstore.Store
-	Static   fs.FS
-	Log      *slog.Logger
+	// Guide returns the admin guide (Markdown). Nil serves 404.
+	Guide  func() ([]byte, error)
+	Store  objstore.Store
+	Static fs.FS
+	Log    *slog.Logger
 
 	AuthHeader    string
 	AllowedEmails []string
@@ -62,6 +64,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"email": userOf(r)})
 	})
+	api.HandleFunc("GET /api/admin/guide", s.getGuide)
 	api.HandleFunc("GET /api/admin/storage", s.getStorage)
 	api.HandleFunc("POST /api/admin/storage/test", s.testStorage)
 	api.HandleFunc("GET /api/admin/telegram", s.getTelegram)
@@ -99,7 +102,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 		}
 		if len(s.AllowedEmails) > 0 && !slices.Contains(s.AllowedEmails, email) {
 			s.Log.Warn("rejected user not on ALLOWED_EMAILS", "email", email, "path", r.URL.Path)
-			http.Error(w, "This board is private. "+email+" is not on the list.", http.StatusForbidden)
+			http.Error(w, "This page is private. "+email+" is not on the list.", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, email)))

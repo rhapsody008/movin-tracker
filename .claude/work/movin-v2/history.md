@@ -18,5 +18,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Step 1.9a done. Admin guide recorded as step 1.12 (ZY: 'I need an admin operation guide at the end of the day').
 - Step 1.10 done (files only; nothing applied).
 - ZY stopped the mid-build review: reviews wait until all code is complete (decisions.md). Step 1.11 done with ZY's OK.
-- Next: 1.12 admin guide (docs/admin-guide.md).
+- Step 1.12 done: admin guide in repo + on the web page (/guide.html). Phase 1 coding complete; manual Telegram check still waits for ZY's bot token.
+- Next: ZY reviews the guide; then Phase 1.5 (drawings) — 1.5.1/1.5.2/1.5.4 can start before the dense sheet; 1.5.0 spike needs it. Deployment steps D.* wait for the NKP cluster. One code review after all code is complete.
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.

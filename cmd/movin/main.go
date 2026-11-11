@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -102,9 +103,13 @@ func serve() error {
 	}
 
 	var static fs.FS = movintracker.Static()
+	guide := func() ([]byte, error) { return movintracker.AdminGuide(), nil }
 	if c.StaticDir != "" {
 		static = os.DirFS(c.StaticDir)
-		log.Info("serving frontend from disk", "dir", c.StaticDir)
+		// Live edits in dev: read the guide from the repo next to static/.
+		guidePath := filepath.Join(filepath.Dir(filepath.Clean(c.StaticDir)), "docs", "admin-guide.md")
+		guide = func() ([]byte, error) { return os.ReadFile(guidePath) }
+		log.Info("serving frontend and admin guide from disk", "dir", c.StaticDir, "guide", guidePath)
 	}
 	runner := &agent.Runner{Entries: ents, Loc: c.Location, Log: log, Now: time.Now}
 	var bot *telegram.Bot
@@ -120,7 +125,7 @@ func serve() error {
 	}
 	srv := &server.Server{
 		Entries: ents, Settings: sets, Store: store, Static: static, Log: log,
-		Agent: runner, Bot: bot,
+		Agent: runner, Bot: bot, Guide: guide,
 		AuthHeader: c.AuthHeader, AllowedEmails: c.AllowedEmails, DevEmail: c.DevEmail,
 	}
 	hs := &http.Server{

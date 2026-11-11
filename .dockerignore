@@ -5,6 +5,7 @@
 reference
 deploy
 *.md
+!docs/admin-guide.md
 unitmaterial
 .claude
 tmp

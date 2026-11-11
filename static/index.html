@@ -197,6 +197,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .drawer.open{transform:none;visibility:visible}
 .drawer header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
 .drawer header h2{font-size:18px}
+.drawer header .hbtns{display:flex;align-items:center;gap:14px}
 .drawer .x{display:block}
 .drawer form{flex:1;overflow-y:auto;padding:16px;display:grid;gap:12px;align-content:start}
 .drawer form[hidden]{display:none}
@@ -258,6 +259,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
         <button class="link" id="newEntry" type="button">New entry</button>
         <a class="link" href="#calendar">Jump to calendar</a>
         <button class="link" id="openAdmin" type="button">Settings</button>
+        <a class="link" href="/guide.html">Admin guide</a>
       </div>
     </div>
     <button class="keytag" id="keytag" type="button" aria-label="Set move-in date"></button>
@@ -306,7 +308,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Settings" aria-hidden="true">
-  <header><h2>Settings</h2><button class="x" id="closeSettings" type="button" aria-label="Close settings">×</button></header>
+  <header><h2>Settings</h2><span class="hbtns"><a class="link" href="/guide.html" id="guideLink">Admin guide</a><button class="x" id="closeSettings" type="button" aria-label="Close settings">×</button></span></header>
   <nav class="tabs" role="tablist" aria-label="Settings sections">
     <button type="button" role="tab" id="tab-storage" aria-controls="panel-storage" data-tab="storage">Storage</button>
     <button type="button" role="tab" id="tab-llm" aria-controls="setForm" data-tab="llm">LLM</button>
@@ -1109,6 +1111,7 @@ $("setSave").onclick = async ()=>{
 }
 render();
 showHints();
+if(location.hash === "#settings"){ history.replaceState(null, "", location.pathname); openSettings(null, $("openAdmin")); }
 api("GET","/api/settings/llm").then(v=>setModelLine(v.model)).catch(()=>{});
 (function connect(){
   let opened = false, downTimer = null;
