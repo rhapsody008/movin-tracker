@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go/v2"
@@ -54,6 +55,47 @@ func newClaude(cfg settings.LLM) *claude {
 	return &claude{cfg: cfg, client: anthropic.NewClient(opts...)}
 }
 
+// Refusal fallbacks (ZY: on): when the safety classifiers decline a
+// message, Anthropic re-serves it on a fallback model inside the same call.
+// Only sent for models whose model info lists allowed fallbacks; the
+// answer is cached per origin+model for an hour (a failed lookup for 5
+// minutes, without fallbacks meanwhile).
+var fallbackCache = struct {
+	sync.Mutex
+	m map[string]fallbackEntry
+}{m: map[string]fallbackEntry{}}
+
+type fallbackEntry struct {
+	ok    bool
+	until time.Time
+}
+
+func (c *claude) fallbacksAllowed(ctx context.Context) bool {
+	key := c.cfg.BaseURL + "|" + c.cfg.Model
+	fallbackCache.Lock()
+	e, hit := fallbackCache.m[key]
+	fallbackCache.Unlock()
+	if hit && time.Now().Before(e.until) {
+		return e.ok
+	}
+	lctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	// The list is only filled in when the lookup carries the fallback beta.
+	info, err := c.client.Beta.Models.Get(lctx, c.cfg.Model, anthropic.BetaModelGetParams{
+		Betas: []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01},
+	})
+	e = fallbackEntry{until: time.Now().Add(time.Hour)}
+	if err != nil {
+		e.until = time.Now().Add(5 * time.Minute)
+	} else {
+		e.ok = len(info.AllowedFallbackModels) > 0
+	}
+	fallbackCache.Lock()
+	fallbackCache.m[key] = e
+	fallbackCache.Unlock()
+	return e.ok
+}
+
 // deadline bounds one call, retries included.
 func (c *claude) deadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	if c.cfg.TimeoutSec <= 0 {
@@ -83,6 +125,10 @@ func (c *claude) Complete(ctx context.Context, in Request) (Response, error) {
 	params, err := c.params(in)
 	if err != nil {
 		return Response{}, err
+	}
+	if c.fallbacksAllowed(ctx) {
+		params.Fallbacks = anthropic.BetaFallbacksParamOfDefault()
+		params.Betas = append(params.Betas, anthropic.AnthropicBetaServerSideFallback2026_07_01)
 	}
 	msg, err := c.call(ctx, params, in)
 	if err != nil {

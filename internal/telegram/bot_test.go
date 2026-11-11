@@ -641,6 +641,11 @@ func TestThinkCommandOnClaude(t *testing.T) {
 	var mu sync.Mutex
 	var efforts []string
 	claude := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodGet { // fallback lookup: none
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"id":"claude-opus-5-5","type":"model","allowed_fallback_models":[]}`)
+			return
+		}
 		var body struct {
 			OutputConfig struct {
 				Effort string `json:"effort"`

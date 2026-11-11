@@ -21,10 +21,12 @@ import (
 // fakeClaude is a minimal stand-in for api.anthropic.com: it records every
 // request and answers from a queue of handlers.
 type fakeClaude struct {
-	srv     *httptest.Server
-	mu      sync.Mutex
-	reqs    []recorded
-	replies []func(w http.ResponseWriter)
+	srv       *httptest.Server
+	mu        sync.Mutex
+	reqs      []recorded
+	replies   []func(w http.ResponseWriter)
+	fallbacks []string // allowed_fallback_models in the model lookup
+	lookups   int
 }
 
 type recorded struct {
@@ -37,6 +39,18 @@ type recorded struct {
 func newFakeClaude(t *testing.T, replies ...func(w http.ResponseWriter)) *fakeClaude {
 	f := &fakeClaude{replies: replies}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/models/") { // fallback eligibility lookup
+			f.mu.Lock()
+			f.lookups++
+			fb := f.fallbacks
+			f.mu.Unlock()
+			// Like the real API: without the fallback beta the list is empty.
+			if fb == nil || !strings.Contains(r.Header.Get("Anthropic-Beta"), "server-side-fallback-2026-07-01") {
+				fb = []string{}
+			}
+			jsonReply(map[string]any{"id": strings.TrimPrefix(r.URL.Path, "/v1/models/"), "type": "model", "allowed_fallback_models": fb})(w)
+			return
+		}
 		b, _ := io.ReadAll(r.Body)
 		var m map[string]any
 		json.Unmarshal(b, &m)
@@ -404,5 +418,53 @@ func TestClaudeModels(t *testing.T) {
 	}
 	if strings.Join(ids, ",") != "claude-opus-5-5,claude-sonnet-5-5" || f.req(0).path != "/v1/models" {
 		t.Fatalf("ids %v path %s", ids, f.req(0).path)
+	}
+}
+
+// Fallbacks go out only for models that allow them; a declined message is
+// then re-served inside the same call, and the fallback block is sent back
+// unchanged next round. The eligibility lookup is cached.
+func TestClaudeRefusalFallbacks(t *testing.T) {
+	served := message("end_turn",
+		map[string]any{"type": "fallback", "from": map[string]any{"model": "claude-opus-5-5"}, "to": map[string]any{"model": "claude-opus-5"}, "trigger": map[string]any{"type": "refusal"}},
+		text("Here is the answer."))
+	f := newFakeClaude(t, jsonReply(served), jsonReply(message("end_turn", text("ok"))))
+	f.fallbacks = []string{"claude-opus-5"}
+	p := llm.New(f.cfg())
+	res, err := p.Complete(context.Background(), llm.Request{Messages: []llm.Message{{Role: "user", Content: "q"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Message.Content != "Here is the answer." || res.Stop != llm.StopEnd {
+		t.Fatalf("fallback reply %+v", res)
+	}
+	r := f.req(0)
+	if r.body["fallbacks"] != "default" || !strings.Contains(r.header.Get("Anthropic-Beta"), "server-side-fallback-2026-07-01") {
+		t.Fatalf("fallbacks not requested: %v / %q", r.body["fallbacks"], r.header.Get("Anthropic-Beta"))
+	}
+	msgs := []llm.Message{{Role: "user", Content: "q"}, res.Message, {Role: "user", Content: "and?"}}
+	if _, err := p.Complete(context.Background(), llm.Request{Messages: msgs}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.req(1).raw, `"type":"fallback"`) {
+		t.Errorf("fallback block not sent back: %s", f.req(1).raw)
+	}
+	if f.lookups != 1 {
+		t.Errorf("eligibility looked up %d times, want 1 (cached)", f.lookups)
+	}
+
+	// A model without allowed fallbacks: no parameter, no beta header.
+	g := newFakeClaude(t, jsonReply(message("refusal", text(""))))
+	cfg := g.cfg()
+	cfg.Model = "claude-haiku-5-5"
+	res, err = llm.New(cfg).Complete(context.Background(), llm.Request{Messages: []llm.Message{{Role: "user", Content: "q"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, has := g.req(0).body["fallbacks"]; has || g.req(0).header.Get("Anthropic-Beta") != "" {
+		t.Errorf("fallbacks sent for a model without them")
+	}
+	if res.Stop != llm.StopRefusal {
+		t.Errorf("whole-chain refusal: stop %q", res.Stop)
 	}
 }

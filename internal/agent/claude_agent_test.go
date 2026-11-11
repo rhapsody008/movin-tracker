@@ -36,6 +36,11 @@ func newClaudeScript(t *testing.T, steps ...claudeStep) *claudeScript {
 	s := &claudeScript{steps: steps}
 	n := 0
 	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/models/") { // fallback lookup: none
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"id":"claude-opus-5-5","type":"model","allowed_fallback_models":[]}`)
+			return
+		}
 		b, _ := io.ReadAll(r.Body)
 		var m map[string]json.RawMessage
 		json.Unmarshal(b, &m)
