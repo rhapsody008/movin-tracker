@@ -105,3 +105,4 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 6. Telegram PDF upload: not in 1.5; the S3 console stays.
 7. Prompt-cache TTL: 5 minutes for now; revisit with 1.18's usage logs (1 hour pays off only for messages 5–60 minutes apart).
 - Tool rename: `ask_drawings` → `search_documents`, `read_document_page`, `view_document_page`.
+- 1.15: vendoring `github.com/anthropics/anthropic-sdk-go/v2` approved by ZY at **v2.3.0** (23 Oct 2026; Apache-2.0; Go ≥ 1.25; 17 small indirect modules, no Bedrock/AWS deps; vendor/ +~10 MB). Pinned to a release ≥ 2 weeks old; v2.9.0 (10 Nov) was the newest.

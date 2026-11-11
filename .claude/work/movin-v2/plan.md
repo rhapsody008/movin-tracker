@@ -171,6 +171,10 @@ Status: decided in principle (see decisions.md, "Deployment / GitOps"). Needs a 
 - D.3 New `deploy/flux/`: kustomization.yaml + OCIRepository (semver >=1.0.0, secretRef ghcr-pull) + Flux Kustomization (./overlays/prod, prune, same service account as the NKP project).
 - D.4 README: release, rollback, pause; ZY creates ghcr-pull and app secrets in the project namespace.
 
+## Backlog: ideas for the planner after current work (ZY, 2026-11-11; not planned yet)
+- **Milestones:** a "Checked milestones" record — milestone events with their date — to keep track of what has been done (ZY: "in history"; shape to be decided: likely a new entry kind or a flag on done entries, shown on the web page).
+- **Morning check-in:** every day at 09:30 SGT the bot messages ZY on Telegram with today's tasks and yesterday's tasks, asks whether yesterday's are done, and offers per task: mark done (and add to milestones) or reschedule. Questions for the planner: private chat vs the group, one message vs one per task, buttons vs free text, what counts as "a task for today" (dated tasks, overdue ones), quiet days, and the single-replica scheduler (same constraint as the bot poller; also the document sync's daily schedule).
+
 ## Phase 2 (room left, not built)
 attachments[]{key,mime} on entries + `<prefix>/media/`; agent.Request.Images; Telegram dispatch by message type; settings `stt` section; `docs/facts/<sheet>.json` + reviewed flag.
 
