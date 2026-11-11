@@ -1,5 +1,5 @@
-// Package server wires the HTTP routes: static frontend, REST API, SSE
-// stream, chat and LLM settings.
+// Package server wires the HTTP routes: static frontend, REST API over
+// entries, SSE stream, web chat (through the agent) and LLM settings.
 package server
 
 import (
@@ -14,17 +14,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rhapsody008/movin-tracker/internal/board"
-	"github.com/rhapsody008/movin-tracker/internal/chat"
+	"github.com/rhapsody008/movin-tracker/internal/agent"
+	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/llm"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
 
 type Server struct {
-	Board    *board.Service
+	Entries  *entries.Service
 	Settings *settings.Service
-	Chat     *chat.Runner
+	Agent    *agent.Runner
 	Store    objstore.Store
 	Static   fs.FS
 	Log      *slog.Logger
@@ -41,12 +41,16 @@ type ctxKey struct{}
 
 func userOf(r *http.Request) string { s, _ := r.Context().Value(ctxKey{}).(string); return s }
 
+// actorOf is the web user as the entries journal records them.
+func actorOf(r *http.Request) entries.Actor { return entries.Actor{By: userOf(r), Channel: "web"} }
+
 func (s *Server) Handler() http.Handler {
 	api := http.NewServeMux()
-	api.HandleFunc("GET /api/board", s.getBoard)
-	api.HandleFunc("POST /api/items", s.createItem)
-	api.HandleFunc("PATCH /api/items/{id}", s.patchItem)
-	api.HandleFunc("DELETE /api/items/{id}", s.deleteItem)
+	api.HandleFunc("GET /api/entries", s.getEntries)
+	api.HandleFunc("POST /api/entries", s.createEntry)
+	api.HandleFunc("PATCH /api/entries/{id}", s.patchEntry)
+	api.HandleFunc("DELETE /api/entries/{id}", s.deleteEntry)
+	api.HandleFunc("POST /api/changes/{id}/undo", s.undoChange)
 	api.HandleFunc("PUT /api/meta", s.putMeta)
 	api.HandleFunc("GET /api/events", s.events)
 	api.HandleFunc("POST /api/chat", s.chat)
@@ -129,7 +133,7 @@ func (s *Server) static() http.Handler {
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	if _, err := s.Store.Head(ctx, board.Key); err != nil && !errors.Is(err, objstore.ErrNotFound) {
+	if _, err := s.Store.Head(ctx, entries.Key); err != nil && !errors.Is(err, objstore.ErrNotFound) {
 		s.Log.Warn("readyz: S3 not reachable", "err", err)
 		http.Error(w, "S3 not reachable", http.StatusServiceUnavailable)
 		return
@@ -151,21 +155,26 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 
 const conflictMsg = "Someone else just changed this. Showing the latest."
 
-// fail maps service errors to HTTP answers. A 409 carries the latest board
-// so the browser can re-render without another round trip.
+// fail maps service errors to HTTP answers. A 409 carries the latest
+// document so the browser can re-render without another round trip.
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
-	var ve *board.ValidationError
+	var ve *entries.ValidationError
 	var se *settings.ValidationError
 	switch {
 	case errors.As(err, &ve):
 		writeErr(w, http.StatusBadRequest, ve.Msg)
 	case errors.As(err, &se):
 		writeErr(w, http.StatusBadRequest, se.Msg)
-	case errors.Is(err, board.ErrItemNotFound):
-		writeErr(w, http.StatusNotFound, "That item no longer exists.")
-	case errors.Is(err, board.ErrConflict), errors.Is(err, settings.ErrConflict):
-		snap, _ := s.Board.Current(r.Context())
-		writeJSON(w, http.StatusConflict, map[string]any{"error": conflictMsg, "board": snap.Board, "etag": snap.ETag})
+	case errors.Is(err, entries.ErrEntryNotFound):
+		writeErr(w, http.StatusNotFound, "That entry no longer exists.")
+	case errors.Is(err, entries.ErrChangeNotFound):
+		writeErr(w, http.StatusNotFound, "That change is too old to undo.")
+	case errors.Is(err, entries.ErrUndoStale):
+		snap, _ := s.Entries.Current(r.Context())
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "That entry was changed again since, so it can't be undone.", "doc": snap.Doc, "etag": snap.ETag})
+	case errors.Is(err, entries.ErrConflict), errors.Is(err, settings.ErrConflict):
+		snap, _ := s.Entries.Current(r.Context())
+		writeJSON(w, http.StatusConflict, map[string]any{"error": conflictMsg, "doc": snap.Doc, "etag": snap.ETag})
 	default:
 		s.Log.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "That change didn't save. Try again.")
@@ -181,10 +190,10 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// ---------- board ----------
+// ---------- entries ----------
 
-func (s *Server) getBoard(w http.ResponseWriter, r *http.Request) {
-	snap, err := s.Board.Current(r.Context())
+func (s *Server) getEntries(w http.ResponseWriter, r *http.Request) {
+	snap, err := s.Entries.Current(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -193,46 +202,72 @@ func (s *Server) getBoard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snap)
 }
 
-type itemResp struct {
-	Item  *board.Item  `json:"item,omitempty"`
-	Board *board.Board `json:"board"`
-	ETag  string       `json:"etag"`
+// entryResp answers every write: the entry it touched, the journal change
+// (its id is the undo handle, with a ready-made line to show), and the new
+// document.
+type entryResp struct {
+	Entry  *entries.Entry    `json:"entry,omitempty"`
+	Change *agent.ChangeLine `json:"change,omitempty"`
+	Doc    *entries.Doc      `json:"doc"`
+	ETag   string            `json:"etag"`
 }
 
-func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
-	var p board.Patch
+func respond(res entries.Result) entryResp {
+	out := entryResp{Doc: res.Snapshot.Doc, ETag: res.Snapshot.ETag}
+	if len(res.Entries) > 0 {
+		out.Entry = &res.Entries[0]
+	}
+	if len(res.Changes) > 0 {
+		out.Change = &agent.ChangeLine{ID: res.Changes[0].ID, Text: agent.ChangeText(res.Changes[0])}
+	}
+	return out
+}
+
+func (s *Server) createEntry(w http.ResponseWriter, r *http.Request) {
+	var p entries.Patch
 	if !decode(w, r, &p) {
 		return
 	}
-	items, snap, err := s.Board.Create(r.Context(), userOf(r), []board.Patch{p})
+	res, err := s.Entries.Create(r.Context(), actorOf(r), []entries.Patch{p})
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, itemResp{Item: &items[0], Board: snap.Board, ETag: snap.ETag})
+	writeJSON(w, http.StatusCreated, respond(res))
 }
 
-func (s *Server) patchItem(w http.ResponseWriter, r *http.Request) {
-	var p board.Patch
+func (s *Server) patchEntry(w http.ResponseWriter, r *http.Request) {
+	var p entries.Patch
 	if !decode(w, r, &p) {
 		return
 	}
-	it, snap, err := s.Board.Update(r.Context(), userOf(r), r.PathValue("id"), p)
+	res, err := s.Entries.Update(r.Context(), actorOf(r), r.PathValue("id"), p)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, itemResp{Item: &it, Board: snap.Board, ETag: snap.ETag})
+	writeJSON(w, http.StatusOK, respond(res))
 }
 
-func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
-	it, snap, err := s.Board.Delete(r.Context(), r.PathValue("id"))
+func (s *Server) deleteEntry(w http.ResponseWriter, r *http.Request) {
+	res, err := s.Entries.Delete(r.Context(), actorOf(r), r.PathValue("id"))
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	s.Log.Info("item deleted", "by", userOf(r), "id", it.ID, "title", it.Title)
-	writeJSON(w, http.StatusOK, itemResp{Board: snap.Board, ETag: snap.ETag})
+	s.Log.Info("entry deleted", "by", userOf(r), "id", res.Entries[0].ID, "title", res.Entries[0].Title)
+	out := respond(res)
+	out.Entry = nil
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) undoChange(w http.ResponseWriter, r *http.Request) {
+	res, err := s.Entries.Undo(r.Context(), actorOf(r), r.PathValue("id"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, respond(res))
 }
 
 func (s *Server) putMeta(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +275,7 @@ func (s *Server) putMeta(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &raw) {
 		return
 	}
-	var mp board.MetaPatch
+	var mp entries.MetaPatch
 	str := func(b json.RawMessage) (*string, bool) {
 		var v *string
 		return v, json.Unmarshal(b, &v) == nil
@@ -261,12 +296,12 @@ func (s *Server) putMeta(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	snap, err := s.Board.SetMeta(r.Context(), mp)
+	snap, err := s.Entries.SetMeta(r.Context(), mp)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, itemResp{Board: snap.Board, ETag: snap.ETag})
+	writeJSON(w, http.StatusOK, entryResp{Doc: snap.Doc, ETag: snap.ETag})
 }
 
 // ---------- SSE ----------
@@ -306,15 +341,15 @@ func (e *sse) comment() error {
 }
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
-	ch, cancel := s.Board.Subscribe()
+	ch, cancel := s.Entries.Subscribe()
 	defer cancel()
-	snap, err := s.Board.Current(r.Context())
+	snap, err := s.Entries.Current(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	out := startSSE(w)
-	if out.send("board", snap) != nil {
+	if out.send("entries", snap) != nil {
 		return
 	}
 	hb := s.SSEHeartbeat
@@ -328,7 +363,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case snap := <-ch:
-			if out.send("board", snap) != nil {
+			if out.send("entries", snap) != nil {
 				return
 			}
 		case <-tick.C:
@@ -343,16 +378,17 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Turns []chat.Turn `json:"turns"`
+		Turns []agent.Turn `json:"turns"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
 	cfg := s.Settings.Resolve(r.Context())
 	user := userOf(r)
+	req := agent.Request{By: user, Channel: "web", Turns: body.Turns}
 	wantStream := cfg.Streaming && strings.Contains(r.Header.Get("Accept"), "text/event-stream")
 	if !wantStream {
-		res, err := s.Chat.Run(r.Context(), user, cfg, body.Turns, nil)
+		res, err := s.Agent.Run(r.Context(), req, cfg, nil)
 		if err != nil {
 			s.Log.Warn("chat failed", "by", user, "model", cfg.Model, "err", err)
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "changes": res.Changes, "model": cfg.Model})
@@ -362,7 +398,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := startSSE(w)
-	res, err := s.Chat.Run(r.Context(), user, cfg, body.Turns, func(e chat.Event) { out.send(e.Type, e) })
+	res, err := s.Agent.Run(r.Context(), req, cfg, func(e agent.Event) { out.send(e.Type, e) })
 	if err != nil {
 		s.Log.Warn("chat failed", "by", user, "model", cfg.Model, "err", err)
 		out.send("error", map[string]any{"error": err.Error(), "changes": res.Changes, "model": cfg.Model})

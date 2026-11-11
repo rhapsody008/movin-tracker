@@ -27,8 +27,8 @@ dev: .env ## Compose up app + MinIO with live reload, at http://localhost:8080
 down: ## Stop the stack
 	$(COMPOSE) --profile tools --profile prod down
 
-seed: ## Load fixtures/board.sample.json into MinIO
-	$(COMPOSE) run --rm --build -v ./fixtures:/fixtures:ro bucket-init seed /fixtures/board.sample.json
+seed: ## Load fixtures/entries.sample.json into MinIO
+	$(COMPOSE) run --rm --build -v ./fixtures:/fixtures:ro bucket-init seed /fixtures/entries.sample.json
 
 test: ## Unit + API tests in the container, against MinIO, with a stubbed LLM
 	$(TOOLS) go test -race -count=1 ./...

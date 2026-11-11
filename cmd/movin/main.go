@@ -1,9 +1,10 @@
-// Command movin is the "Project LTM" board server.
+// Command movin is the renovation agent server: web page, REST API and
+// (from step 1.9) the Telegram bot.
 //
 //	movin                    serve (default)
 //	movin healthcheck        exit 0 if /healthz answers; used by Docker HEALTHCHECK
 //	movin init-bucket        create the bucket with versioning (local MinIO only)
-//	movin seed FILE          replace board.json with FILE (validated, ETag-guarded)
+//	movin seed FILE          replace entries.json with FILE (validated, ETag-guarded)
 package main
 
 import (
@@ -21,9 +22,9 @@ import (
 	_ "time/tzdata" // the distroless image has no zoneinfo
 
 	movintracker "github.com/rhapsody008/movin-tracker"
-	"github.com/rhapsody008/movin-tracker/internal/board"
-	"github.com/rhapsody008/movin-tracker/internal/chat"
+	"github.com/rhapsody008/movin-tracker/internal/agent"
 	"github.com/rhapsody008/movin-tracker/internal/config"
+	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/server"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
@@ -80,12 +81,12 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	boards := board.NewService(store, log)
-	if err := boards.Load(ctx); err != nil {
+	ents := entries.NewService(store, log)
+	if err := ents.Load(ctx); err != nil {
 		// Keep serving: /readyz reports the problem and reads retry lazily.
-		log.Error("initial board load failed", "err", err)
+		log.Error("initial entries load failed", "err", err)
 	}
-	go boards.Poll(ctx, c.PollEvery)
+	go ents.Poll(ctx, c.PollEvery)
 
 	sets, err := settings.NewService(store, c.LLM, c.SettingsSecret, log)
 	if err != nil {
@@ -104,8 +105,8 @@ func serve() error {
 		log.Info("serving frontend from disk", "dir", c.StaticDir)
 	}
 	srv := &server.Server{
-		Board: boards, Settings: sets, Store: store, Static: static, Log: log,
-		Chat:       &chat.Runner{Board: boards, Loc: c.Location, Log: log, Now: time.Now},
+		Entries: ents, Settings: sets, Store: store, Static: static, Log: log,
+		Agent:      &agent.Runner{Entries: ents, Loc: c.Location, Log: log, Now: time.Now},
 		AuthHeader: c.AuthHeader, AllowedEmails: c.AllowedEmails, DevEmail: c.DevEmail,
 	}
 	hs := &http.Server{
@@ -181,7 +182,7 @@ func seed(path string) error {
 	if err != nil {
 		return err
 	}
-	nb, err := board.Decode(data)
+	nd, err := entries.Decode(data)
 	if err != nil {
 		return err
 	}
@@ -190,18 +191,18 @@ func seed(path string) error {
 	if err != nil {
 		return err
 	}
-	svc := board.NewService(store, logger("warn"))
+	svc := entries.NewService(store, logger("warn"))
 	if err := svc.Load(ctx); err != nil {
 		return err
 	}
-	snap, err := svc.Replace(ctx, nb)
+	snap, err := svc.Replace(ctx, nd)
 	if err != nil {
 		return err
 	}
-	key := board.Key
+	key := entries.Key
 	if c.S3Prefix != "" {
 		key = c.S3Prefix + "/" + key
 	}
-	fmt.Printf("seeded s3://%s/%s with %d items (etag %s)\n", c.S3Bucket, key, len(snap.Board.Items), snap.ETag)
+	fmt.Printf("seeded s3://%s/%s with %d entries (etag %s)\n", c.S3Bucket, key, len(snap.Doc.Entries), snap.ETag)
 	return nil
 }

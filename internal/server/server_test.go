@@ -17,8 +17,8 @@ import (
 
 	"github.com/fernet/fernet-go"
 
-	"github.com/rhapsody008/movin-tracker/internal/board"
-	"github.com/rhapsody008/movin-tracker/internal/chat"
+	"github.com/rhapsody008/movin-tracker/internal/agent"
+	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/server"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
@@ -108,10 +108,10 @@ func (f *fakeLLM) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 type env struct {
-	srv   *httptest.Server
-	board *board.Service
-	llm   *fakeLLM
-	logs  *testutil.SyncBuffer
+	srv  *httptest.Server
+	ents *entries.Service
+	llm  *fakeLLM
+	logs *testutil.SyncBuffer
 }
 
 func setup(t *testing.T, store objstore.Store, mutate func(*server.Server)) *env {
@@ -119,7 +119,7 @@ func setup(t *testing.T, store objstore.Store, mutate func(*server.Server)) *env
 	logs := &testutil.SyncBuffer{}
 	log := testutil.Logger(logs)
 	fl := newFakeLLM(t)
-	bs := board.NewService(store, log)
+	bs := entries.NewService(store, log)
 	if err := bs.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -132,9 +132,9 @@ func setup(t *testing.T, store objstore.Store, mutate func(*server.Server)) *env
 		t.Fatal(err)
 	}
 	s := &server.Server{
-		Board: bs, Settings: ss, Store: store, Log: log,
+		Entries: bs, Settings: ss, Store: store, Log: log,
 		Static:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>Our new place</title>")}, "icon.svg": {Data: []byte("<svg/>")}},
-		Chat:       &chat.Runner{Board: bs, Loc: time.UTC, Log: log, Now: func() time.Time { return time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC) }},
+		Agent:      &agent.Runner{Entries: bs, Loc: time.UTC, Log: log, Now: func() time.Time { return time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC) }},
 		AuthHeader: "X-Forwarded-Email", AllowedEmails: []string{"zy@example.com", "partner@example.com"},
 		SSEHeartbeat: 50 * time.Millisecond,
 	}
@@ -143,7 +143,7 @@ func setup(t *testing.T, store objstore.Store, mutate func(*server.Server)) *env
 	}
 	hs := httptest.NewServer(s.Handler())
 	t.Cleanup(hs.Close)
-	return &env{srv: hs, board: bs, llm: fl, logs: logs}
+	return &env{srv: hs, ents: bs, llm: fl, logs: logs}
 }
 
 func (e *env) do(t *testing.T, method, path, body string, hdr ...string) (int, map[string]any, string) {
@@ -180,16 +180,16 @@ func TestHealth(t *testing.T) {
 
 func TestAuth(t *testing.T) {
 	e := setup(t, objstore.NewMemory(), nil)
-	if code, _, _ := e.do(t, "GET", "/api/board", "", "X-Forwarded-Email", ""); code != 401 {
+	if code, _, _ := e.do(t, "GET", "/api/entries", "", "X-Forwarded-Email", ""); code != 401 {
 		t.Fatalf("missing header: want 401, got %d", code)
 	}
-	if code, _, _ := e.do(t, "GET", "/api/board", "", "X-Forwarded-Email", "stranger@example.com"); code != 403 {
+	if code, _, _ := e.do(t, "GET", "/api/entries", "", "X-Forwarded-Email", "stranger@example.com"); code != 403 {
 		t.Fatalf("not allowed: want 403, got %d", code)
 	}
 	if code, _, _ := e.do(t, "GET", "/", "", "X-Forwarded-Email", "stranger@example.com"); code != 403 {
 		t.Fatalf("page for stranger: want 403, got %d", code)
 	}
-	if code, _, _ := e.do(t, "GET", "/api/board", "", "X-Forwarded-Email", "Partner@Example.com"); code != 200 {
+	if code, _, _ := e.do(t, "GET", "/api/entries", "", "X-Forwarded-Email", "Partner@Example.com"); code != 200 {
 		t.Fatalf("allowed (case-insensitive): want 200, got %d", code)
 	}
 	if code, _, _ := e.do(t, "GET", "/icon.svg", "", "X-Forwarded-Email", ""); code != 200 {
@@ -211,49 +211,71 @@ func TestRESTCRUD(t *testing.T) {
 	for name, store := range testutil.Stores(t) {
 		t.Run(name, func(t *testing.T) {
 			e := setup(t, store, nil)
-			code, m, body := e.do(t, "POST", "/api/items", `{"title":"Book movers","cat":"admin","due":"2026-11-20","time":"10:00","quoted":1200}`)
+			code, m, body := e.do(t, "POST", "/api/entries", `{"title":"Book movers","kind":"task","date":"2026-11-20","time":"10:00","cost":{"estimate":1200}}`)
 			if code != 201 {
 				t.Fatalf("create: %d %s", code, body)
 			}
-			item := m["item"].(map[string]any)
-			id := item["id"].(string)
-			if item["by"] != "zy@example.com" || m["etag"] == "" {
+			entry := m["entry"].(map[string]any)
+			id := entry["id"].(string)
+			if entry["by"] != "zy@example.com" || entry["channel"] != "web" || entry["status"] != "todo" || m["etag"] == "" {
 				t.Fatalf("create response: %s", body)
 			}
+			change := m["change"].(map[string]any)
+			if change["id"] == "" || change["text"] != "Saved: task · Book movers · Fri, 20 Nov 10:00 · est $1,200" {
+				t.Fatalf("create change line: %v", change)
+			}
 
-			if code, _, body := e.do(t, "POST", "/api/items", `{"title":""}`); code != 400 {
+			if code, _, body := e.do(t, "POST", "/api/entries", `{"title":""}`); code != 400 {
 				t.Fatalf("empty title: want 400, got %d %s", code, body)
 			}
-			if code, _, body := e.do(t, "POST", "/api/items", `{"title":"x","due":"tomorrow"}`); code != 400 {
+			if code, _, body := e.do(t, "POST", "/api/entries", `{"title":"x","date":"tomorrow"}`); code != 400 {
 				t.Fatalf("bad date: want 400, got %d %s", code, body)
 			}
+			if code, _, body := e.do(t, "POST", "/api/entries", `{"title":"x","room":"garage"}`); code != 400 {
+				t.Fatalf("bad room: want 400, got %d %s", code, body)
+			}
 
-			code, m, body = e.do(t, "PATCH", "/api/items/"+id, `{"status":"done","paid":1200}`, "X-Forwarded-Email", "partner@example.com")
-			if code != 200 || m["item"].(map[string]any)["status"] != "done" || m["item"].(map[string]any)["by"] != "partner@example.com" {
+			code, m, body = e.do(t, "PATCH", "/api/entries/"+id, `{"status":"done","cost":{"actual":1200}}`, "X-Forwarded-Email", "partner@example.com")
+			if code != 200 || m["entry"].(map[string]any)["status"] != "done" || m["entry"].(map[string]any)["by"] != "partner@example.com" {
 				t.Fatalf("patch: %d %s", code, body)
 			}
-			if code, _, _ := e.do(t, "PATCH", "/api/items/nope", `{"status":"done"}`); code != 404 {
+			if code, _, _ := e.do(t, "PATCH", "/api/entries/nope", `{"status":"done"}`); code != 404 {
 				t.Fatalf("patch missing: want 404, got %d", code)
 			}
 
 			if code, m, body := e.do(t, "PUT", "/api/meta", `{"moveDate":"2026-12-05","keyDate":"2026-10-29"}`); code != 200 ||
-				m["board"].(map[string]any)["meta"].(map[string]any)["moveDate"] != "2026-12-05" {
+				m["doc"].(map[string]any)["meta"].(map[string]any)["moveDate"] != "2026-12-05" {
 				t.Fatalf("meta: %d %s", code, body)
 			}
 			if code, _, _ := e.do(t, "PUT", "/api/meta", `{"moveDate":"5 Dec"}`); code != 400 {
 				t.Fatalf("bad meta: want 400, got %d", code)
 			}
 
-			code, m, _ = e.do(t, "GET", "/api/board", "")
-			if code != 200 || len(m["board"].(map[string]any)["items"].([]any)) != 1 {
-				t.Fatalf("board: %d %v", code, m)
+			code, m, _ = e.do(t, "GET", "/api/entries", "")
+			if code != 200 || len(m["doc"].(map[string]any)["entries"].([]any)) != 1 {
+				t.Fatalf("entries: %d %v", code, m)
 			}
 
-			if code, m, body := e.do(t, "DELETE", "/api/items/"+id, ""); code != 200 || len(m["board"].(map[string]any)["items"].([]any)) != 0 {
+			code, m, body = e.do(t, "DELETE", "/api/entries/"+id, "")
+			if code != 200 || len(m["doc"].(map[string]any)["entries"].([]any)) != 0 {
 				t.Fatalf("delete: %d %s", code, body)
 			}
-			if code, _, _ := e.do(t, "DELETE", "/api/items/"+id, ""); code != 404 {
+			delID := m["change"].(map[string]any)["id"].(string)
+			if code, _, _ := e.do(t, "DELETE", "/api/entries/"+id, ""); code != 404 {
 				t.Fatalf("delete twice: want 404, got %d", code)
+			}
+
+			// Undo the delete: the entry is back, stamped with the undoer.
+			code, m, body = e.do(t, "POST", "/api/changes/"+delID+"/undo", "", "X-Forwarded-Email", "partner@example.com")
+			if code != 200 || len(m["doc"].(map[string]any)["entries"].([]any)) != 1 || !strings.HasPrefix(m["change"].(map[string]any)["text"].(string), "Undone:") {
+				t.Fatalf("undo delete: %d %s", code, body)
+			}
+			// The same change again: the entry no longer matches, so 409 with the latest doc.
+			if code, m, body := e.do(t, "POST", "/api/changes/"+delID+"/undo", ""); code != 409 || m["doc"] == nil {
+				t.Fatalf("undo twice: want 409 with doc, got %d %s", code, body)
+			}
+			if code, _, _ := e.do(t, "POST", "/api/changes/nope/undo", ""); code != 404 {
+				t.Fatalf("undo unknown: want 404, got %d", code)
 			}
 		})
 	}
@@ -279,15 +301,15 @@ func (c *conflictStore) Put(ctx context.Context, k string, b []byte, m string) (
 	return c.Store.Put(ctx, k, b, m)
 }
 
-func TestConflictReturns409WithLatestBoard(t *testing.T) {
+func TestConflictReturns409WithLatestDoc(t *testing.T) {
 	cs := &conflictStore{Store: objstore.NewMemory()}
 	e := setup(t, cs, nil)
 	cs.mu.Lock()
-	cs.lose = board.MaxRetries + 1
+	cs.lose = entries.MaxRetries + 1
 	cs.mu.Unlock()
-	code, m, body := e.do(t, "POST", "/api/items", `{"title":"x"}`)
-	if code != 409 || m["error"] != "Someone else just changed this. Showing the latest." || m["board"] == nil {
-		t.Fatalf("want 409 with board, got %d %s", code, body)
+	code, m, body := e.do(t, "POST", "/api/entries", `{"title":"x"}`)
+	if code != 409 || m["error"] != "Someone else just changed this. Showing the latest." || m["doc"] == nil {
+		t.Fatalf("want 409 with doc, got %d %s", code, body)
 	}
 }
 
@@ -303,27 +325,27 @@ func TestSSEBroadcastsWrites(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("content type %q", ct)
 	}
-	events := make(chan board.Snapshot, 10)
+	events := make(chan entries.Snapshot, 10)
 	go func() {
 		sc := bufio.NewScanner(resp.Body)
 		sc.Buffer(make([]byte, 1<<20), 1<<20)
 		for sc.Scan() {
 			if d, ok := strings.CutPrefix(sc.Text(), "data: "); ok {
-				var s board.Snapshot
+				var s entries.Snapshot
 				json.Unmarshal([]byte(d), &s)
 				events <- s
 			}
 		}
 	}()
 	first := <-events
-	if len(first.Board.Items) != 0 {
+	if first.Doc == nil || len(first.Doc.Entries) != 0 {
 		t.Fatalf("initial event: %+v", first)
 	}
-	e.do(t, "POST", "/api/items", `{"title":"Lift booking"}`)
+	e.do(t, "POST", "/api/entries", `{"title":"Lift booking"}`)
 	select {
 	case s := <-events:
-		if len(s.Board.Items) != 1 || s.Board.Items[0].Title != "Lift booking" {
-			t.Fatalf("pushed board: %+v", s.Board.Items)
+		if len(s.Doc.Entries) != 1 || s.Doc.Entries[0].Title != "Lift booking" {
+			t.Fatalf("pushed doc: %+v", s.Doc.Entries)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("no SSE event within 5 s of a write")
@@ -362,14 +384,14 @@ func TestChatToolLoop(t *testing.T) {
 			if reply != "Move-in is set to 5 Dec." {
 				t.Fatalf("reply %q", reply)
 			}
-			if len(changes) != 1 || changes[0] != "Move-in set to Sat, 5 Dec" {
+			if len(changes) != 1 || changes[0].(map[string]any)["text"] != "Move-in set to Sat, 5 Dec" {
 				t.Fatalf("changes %v", changes)
 			}
-			snap, _ := e.board.Current(context.Background())
-			if snap.Board.Meta.MoveDate == nil || *snap.Board.Meta.MoveDate != "2026-12-05" {
-				t.Fatalf("board not changed: %+v", snap.Board.Meta)
+			snap, _ := e.ents.Current(context.Background())
+			if snap.Doc.Meta.MoveDate == nil || *snap.Doc.Meta.MoveDate != "2026-12-05" {
+				t.Fatalf("doc not changed: %+v", snap.Doc.Meta)
 			}
-			if !strings.Contains(e.logs.String(), `"msg":"chat tool call"`) || !strings.Contains(e.logs.String(), `"tool":"set_dates"`) {
+			if !strings.Contains(e.logs.String(), `"msg":"agent tool call"`) || !strings.Contains(e.logs.String(), `"tool":"set_dates"`) || !strings.Contains(e.logs.String(), `"channel":"web"`) {
 				t.Fatal("tool call was not logged")
 			}
 		})
