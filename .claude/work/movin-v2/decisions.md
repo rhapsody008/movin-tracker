@@ -1,0 +1,52 @@
+# movin-tracker v2: decisions
+
+All decided by ZY unless noted. Newest at the bottom of each section.
+
+## Direction (2026-11-11)
+- Reorg from a kanban board with chat into a renovation **agent**. Main channel: **Telegram**. The web page stays for visibility (kanban + calendar) and becomes a **management plane**; web chat is kept as a secondary channel.
+- **Start fresh**: no migration of the old `board.json` (left untouched in S3).
+- Model choice is ZY's, made later. Requirement: tool calling + image input. The runtime LLM settings drawer stays, and the Telegram bot uses the same runtime settings.
+
+## Data
+- Records are structured **entries**, not free-text memory. Fields: kind (idea|decision|task|note|question), room (optional), category, status, cost {estimate, actual}, vendor, date, **time (kept, F6)**, source, notes, tags, archived, by, channel, timestamps.
+- Statuses: idea → shortlisted → decided → done; tasks use todo/doing/done. Notes and questions default to idea (F4).
+- Rooms (from the C5 unit layout): living, dining, dry kitchen, wet kitchen, flex, master bedroom, bedroom 2, bedroom 3, master bathroom, bathroom 2, balcony, whole-house. No "AC ledge", no "unknown"; room is optional instead.
+- Retrieval is structured filters + keyword search. No vector DB.
+- Kanban: four merged columns, Idea/To do · Shortlisted/Doing · Decided · Done (F4).
+- Costs: estimate = quoted, actual = paid, to-pay = estimate − actual. Header totals count only tasks and decided/done entries (F3).
+- Header keeps the move-in countdown and the quoted/paid/to-pay totals.
+- Agent tools: add_entry, update_entry, search_entries, set_dates, undo_change, ask_drawings (1.5). Archiving via update_entry; hard delete is web-only (F2).
+
+## Telegram
+- Long polling inside the app process; outbound only; single replica required (one poller per token).
+- A **dedicated shared group** (ZY, spouse, bot), privacy mode off; every group message is input. Private chats with allowlisted users also allowed. Authorise on both group ID and sender ID.
+- `by` names come from config (`id=name`).
+- Sync notifications go to the group only when a sync changed something.
+
+## Drawings (phase 1.5)
+- Do not vectorize drawings. Raw PDF in S3 is the source of truth; renders are a disposable, versioned cache.
+- Server-side conversion: PDF → high-res PNG + overview PNG + text layer with positions, all stored in S3. The LLM consumes PNGs (overview + crops) plus the text layer.
+- Render cap ~6000 px long edge; one render/crop at a time (F1).
+- Sync triggers: Telegram upload, startup, daily 03:00 SGT (in-process), `/sync`, and the web "Sync now" button. Manifest-based; deleted PDFs mark the sheet "removed".
+- Converter: PDFium WASM in-process preferred, poppler sidecar fallback; decided by the 1.5.0 spike on a dense electrical/plumbing sheet (ZY to supply).
+
+## Management plane
+- Storage section is **read-only** (bucket, region, prefix, credential source, test connection). Credentials and bucket stay in env/Secret, because settings.json itself lives in S3 and the pod is stateless.
+- LLM editable (as today). Telegram: status + editable allowlist (users, groups) in settings.json; token stays in the Secret. Drawings: sheet list + Sync now.
+
+## Deployment and safety
+- No egress restrictions assumed.
+- IAM DeleteObject only on `<prefix>/docs/pages/*` and `<prefix>/docs/text/*` (F5).
+- ZY creates secrets and runs any kubectl apply / IAM change.
+- Real unit drawings never go into git (`/unitmaterial/` is ignored).
+
+## Housekeeping
+- Baseline committed on main: 155d264 (2026-11-11).
+- Delete `build-plan.md` in step 1.11; keep `reference/condo-board.html` for now.
+- Track work in `.claude/work/movin-v2/` (committed).
+
+## Planner delta answers (2026-11-11)
+- Storage test connection deletes its probe object: grant `s3:DeleteObject` on `prod/_probe/*` (step 1.10).
+- Group-ID env default is `TELEGRAM_ALLOWED_CHATS`.
+- "Last successful write" on the storage page reads `LastModified` of `entries.json`, so it survives restarts.
+- Group chatter: the bot stays silent unless it recorded something or was asked a question.
