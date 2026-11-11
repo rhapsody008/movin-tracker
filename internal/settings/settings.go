@@ -89,6 +89,7 @@ type Input struct {
 // View is what GET /api/settings/llm returns. It has no field that could
 // carry the key; only whether one is set and its last four characters.
 type View struct {
+	ClaudeOrigin  string `json:"claudeOrigin"` // where a claude connection goes
 	Kind          string `json:"kind"`
 	BaseURL       string `json:"baseUrl"`
 	Model         string `json:"model"`
@@ -158,6 +159,9 @@ func (s *Service) WithClaudeBaseURL(u string) *Service {
 	}
 	return s
 }
+
+// ClaudeBaseURL is where the Claude connection goes.
+func (s *Service) ClaudeBaseURL() string { return s.claudeURL }
 
 // SetClock replaces the time source (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
@@ -343,7 +347,7 @@ func (s *Service) View(ctx context.Context) View {
 	st := s.current(ctx)
 	l, fromEnv := s.resolve(st)
 	v := View{
-		Kind: l.Kind, BaseURL: l.BaseURL, Model: l.Model, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
+		ClaudeOrigin: s.claudeURL, Kind: l.Kind, BaseURL: l.BaseURL, Model: l.Model, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
 		KeySet: l.APIKey != "", KeyFromEnv: fromEnv && l.APIKey != "", CanStoreKey: s.fkey != nil,
 		Updated: st.Updated, By: st.By,
 	}

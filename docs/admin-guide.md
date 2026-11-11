@@ -149,13 +149,23 @@ Shows where the data is (bucket, region, prefix, endpoint), what kind of AWS cre
 
 ### Settings → LLM
 
-In order: type the **endpoint URL** and **API key**, press **Test connection** (it lists the endpoint's models), **pick a model**, then **Save**. Save first checks that the model can call tools; if it can't, nothing is saved and you can tick "Save even though the tool-calling check failed". Temperature and reply length are left to the model server; each model call may take up to 10 minutes and a message up to 5 tool rounds (fixed in the app). The key is stored encrypted; the page only ever shows its last four characters. Saving here overrides the `LLM_*` env vars, and the bot uses the new model from its next message.
+First pick the **connection**:
+
+- **Claude**: Anthropic's own API at `api.anthropic.com`, with **prompt caching** (the rules, the document list and the entries are reused between calls, so replies are cheaper and start sooner). No URL to type: just the **API key** from the Claude Console.
+- **OpenAI-compatible**: any `…/v1` endpoint, such as vMLX on your Mac or NAI. Type its **endpoint URL** and, if it needs one, its **API key**.
+
+Then, in order: press **Test connection** (it lists the endpoint's models), **pick a model**, then **Save**. Save first checks that the model can call tools; if it can't, nothing is saved and you can tick "Save even though the tool-calling check failed". Temperature and reply length are left to the model server; each model call may take up to 10 minutes and a message up to 5 tool rounds (fixed in the app). The key is stored encrypted; the page only ever shows its last four characters. Saving here overrides the `LLM_*` env vars, and the bot uses the new model from its next message.
 
 A key is only ever sent to the endpoint it belongs to. If you switch to a **different host**, type that host's key: the saved key is dropped rather than sent to the new host, and the server's `LLM_API_KEY` only goes to `LLM_BASE_URL`.
 
-**Think only when asked** is for thinking models such as Qwen3 on vMLX or vLLM. Thinking makes every reply minutes slower, so with this ticked the model answers straight away, and thinks only when a message starts with `/think` (Telegram or the web chat), e.g. `/think compare the two zip blind quotes`. Under the hood every other request sends `chat_template_kwargs: {"enable_thinking": false}`. Leave it off for OpenAI and other endpoints that reject that field (Test connection fails with a 400 if so). With it off, the model server decides, and `/think` makes no difference.
+**Think only when asked**: with this ticked, ordinary messages get quick answers and a message that starts with `/think` (Telegram or the web chat) gets the model's careful thinking, e.g. `/think compare the two zip blind quotes`.
 
-**Claude (Anthropic)**: endpoint `https://api.anthropic.com/v1/`, a Claude API key from the Claude Console, model e.g. `claude-sonnet-5-5`. Anthropic's OpenAI layer handles the chat; for the model list the app adds the headers Anthropic's own Models API needs. Leave "Think only when asked" off: Claude 5 models always think and `/think` changes nothing there.
+- On **Claude** it sets the effort: low for ordinary messages, high with `/think`. Without the tick Claude uses its default effort, and `/think` still asks for high.
+- On **OpenAI-compatible** thinking models (Qwen3 on vMLX or vLLM) every other request sends `chat_template_kwargs: {"enable_thinking": false}`. Leave it off for OpenAI itself and other endpoints that reject that field (Test connection fails with a 400 if so); with it off the model server decides and `/think` makes no difference.
+
+**Switching keys between connections**: a saved key belongs to the host it was saved for and is never sent anywhere else. A key saved for Anthropic's OpenAI-compatible layer (`https://api.anthropic.com/v1/`) carries over when you switch to **Claude**; a vMLX key does not, so type the Claude key. The page says so under the key field. If **OpenAI-compatible** points at `api.anthropic.com`, the page suggests switching to Claude for prompt caching.
+
+**Older versions of the app** don't know the connection kind: if one of them saves the LLM tab, a Claude connection turns back into OpenAI-compatible and chat stops working until you save it again here. Dev and production share `settings.json`, so don't edit the LLM tab from an older build while a newer one runs.
 
 ### Settings → Telegram
 
@@ -282,7 +292,9 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS chain | Secret `movin-secrets` |
 | `SETTINGS_SECRET` | empty | Fernet key for the saved LLM key (Secret) |
 | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | empty | Defaults; Settings → LLM overrides |
+| `LLM_KIND` | `openai` | Default connection: `openai` (OpenAI-compatible) or `claude`. With `claude`, `LLM_BASE_URL` is ignored and `LLM_API_KEY` is the Claude key |
 | `LLM_STREAMING`, `LLM_THINK_ON_DEMAND` | true, false | Defaults; Settings → LLM overrides |
+| `LLM_CLAUDE_BASE_URL` | `https://api.anthropic.com` | Tests only: points the Claude connection at a local stand-in |
 | `TELEGRAM_BOT_TOKEN` | empty | Bot token (Secret); empty = bot off |
 | `TELEGRAM_ALLOWED_IDS`, `TELEGRAM_ALLOWED_CHATS` | empty | Defaults; Settings → Telegram replaces them |
 | `LISTEN_ADDR` | `127.0.0.1:8080` | Keep on loopback in k8s: the app trusts the auth header, so only the proxy beside it may reach it |

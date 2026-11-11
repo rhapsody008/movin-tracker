@@ -531,6 +531,7 @@ func (s *Server) testSettings(w http.ResponseWriter, r *http.Request) {
 // can't trigger it, and the configured key is only sent to its own origin.
 func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	var in struct {
+		Kind    string `json:"kind"`
 		BaseURL string `json:"baseUrl"`
 		APIKey  string `json:"apiKey"`
 	}
@@ -538,8 +539,21 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := s.Settings.Resolve(r.Context())
-	if u := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/"); u != "" {
-		cfg.BaseURL = u
+	switch in.Kind {
+	case settings.KindClaude:
+		// Fixed origin: a URL in the request can't redirect the key.
+		cfg.Kind, cfg.BaseURL = settings.KindClaude, s.Settings.ClaudeBaseURL()
+	case "", settings.KindOpenAI:
+		if cfg.Kind != settings.KindOpenAI {
+			cfg.BaseURL = "" // the saved URL is Claude's; an OpenAI list needs its own
+		}
+		cfg.Kind = settings.KindOpenAI
+		if u := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/"); u != "" {
+			cfg.BaseURL = u
+		}
+	default:
+		writeErr(w, http.StatusBadRequest, "kind must be openai or claude")
+		return
 	}
 	if cfg.BaseURL == "" {
 		writeErr(w, http.StatusBadRequest, "Set an endpoint URL first.")

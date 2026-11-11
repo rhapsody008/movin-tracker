@@ -205,6 +205,10 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .drawer [hidden]{display:none !important}
 .drawer .row input{width:auto}
 .drawer .sub{font-size:13px;color:var(--muted);margin:0}
+.drawer fieldset.conn{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.drawer fieldset.conn legend{font-size:14px;color:var(--muted);margin-bottom:4px;padding:0}
+.drawer fieldset.conn label.row{flex-wrap:wrap;color:var(--ink)}
+.drawer fieldset.conn .sub{margin-left:2px}
 .drawer .result{font-size:14px;border-radius:8px;padding:8px 10px;background:var(--sunk);margin:0}
 .drawer .result.ok{border-left:4px solid var(--ok)}
 .drawer .result.bad{border-left:4px solid var(--danger)}
@@ -346,15 +350,21 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     </div>
   </div>
   <form id="setForm" role="tabpanel" aria-labelledby="tab-llm" autocomplete="off" hidden>
-    <label>Endpoint URL<input name="baseUrl" type="url" placeholder="https://…/v1" required></label>
+    <fieldset class="conn"><legend>Connection</legend>
+      <label class="row"><input type="radio" name="kind" value="openai"> OpenAI-compatible <span class="sub">vMLX, NAI or any …/v1 endpoint</span></label>
+      <label class="row"><input type="radio" name="kind" value="claude"> Claude <span class="sub">Anthropic's own API, with prompt caching</span></label>
+    </fieldset>
+    <p class="sub" id="claudeNote" hidden>Connects to api.anthropic.com. Use an API key from the Claude Console.</p>
+    <label id="urlRow">Endpoint URL<input name="baseUrl" type="url" placeholder="https://…/v1" required></label>
+    <p class="sub" id="anthHint" hidden>This is Anthropic's OpenAI-compatible layer. Choose <b>Claude</b> above for prompt caching; a key saved here carries over.</p>
     <label>API key<input name="apiKey" type="password" autocomplete="new-password"></label>
     <p class="sub" id="keyNote"></p>
     <div><button class="btn ghost" type="button" id="testBtn">Test connection</button></div>
     <p class="result" id="connResult" aria-live="polite"></p>
     <label>Model<select name="model" required disabled><option value="">Test the connection first</option></select></label>
     <label class="row"><input name="streaming" type="checkbox"> Stream replies</label>
-    <label class="row"><input name="thinkOnDemand" type="checkbox"> Think only when asked: start a message with /think</label>
-    <p class="sub">Faster replies from thinking models (Qwen3 on vMLX, vLLM). Leave off for OpenAI and other endpoints that reject <code>chat_template_kwargs</code>.</p>
+    <label class="row"><input name="thinkOnDemand" type="checkbox"> <span id="thinkLabel">Think only when asked: start a message with /think</span></label>
+    <p class="sub" id="thinkHint"></p>
     <p class="result" id="testResult" aria-live="polite"></p>
     <label class="row" id="saveAnywayRow" hidden><input type="checkbox" id="saveAnyway"> Save even though the tool-calling check failed</label>
     <p class="sub" id="setMeta"></p>
@@ -905,12 +915,32 @@ const SF = $("setForm");
 // locks the model list until the connection is tested again. failedSig is
 // the form a tool-calling check failed for ("Save anyway" applies to it).
 let setState = null, connSig = null, failedSig = null, clearKey = false;
+// Two kinds of connection: OpenAI-compatible (any …/v1 URL) or Claude
+// (Anthropic's API at a fixed origin, so no URL field).
+const connKind = () => SF.kind.value === "claude" ? "claude" : "openai";
+const hostOf = u => { try{ return new URL(u).host.toLowerCase(); }catch{ return ""; } };
+const claudeOrigin = () => (setState && setState.claudeOrigin) || "https://api.anthropic.com";
+const targetURL = () => connKind() === "claude" ? claudeOrigin() : SF.baseUrl.value.trim();
 function formVals(){
-  return {baseUrl:SF.baseUrl.value.trim(), apiKey:SF.apiKey.value, clearKey: clearKey && !SF.apiKey.value, model:SF.model.value,
+  const claude = connKind() === "claude";
+  return {kind:connKind(), baseUrl: claude ? "" : SF.baseUrl.value.trim(), apiKey:SF.apiKey.value, clearKey: clearKey && !SF.apiKey.value, model:SF.model.value,
     streaming:SF.streaming.checked, thinkOnDemand:SF.thinkOnDemand.checked};
 }
 const sig = v => JSON.stringify(v);
-const connOf = () => sig({u:SF.baseUrl.value.trim(), k:SF.apiKey.value, c:clearKey});
+const connOf = () => sig({kind:connKind(), u:targetURL(), k:SF.apiKey.value, c:clearKey});
+function applyKind(){
+  const claude = connKind() === "claude";
+  $("urlRow").hidden = claude; SF.baseUrl.disabled = claude; // disabled: not validated, not sent
+  $("claudeNote").hidden = !claude;
+  $("anthHint").hidden = claude || hostOf(SF.baseUrl.value.trim()) !== "api.anthropic.com";
+  $("thinkLabel").textContent = claude
+    ? "Think only when asked: quick answers by default, deeper thinking with /think"
+    : "Think only when asked: start a message with /think";
+  $("thinkHint").innerHTML = claude
+    ? "Claude always thinks a little; with this ticked it answers at low effort and uses high effort for messages that start with /think."
+    : "Faster replies from thinking models (Qwen3 on vMLX, vLLM). Leave off for OpenAI and other endpoints that reject <code>chat_template_kwargs</code>.";
+  keyNote();
+}
 function updateSaveBtn(){
   const connected = connSig !== null && connSig === connOf();
   SF.model.disabled = !connected;
@@ -925,13 +955,15 @@ function fillModels(list, keep){
     : `<option value="">The endpoint listed no models</option>`;
 }
 async function testConnection(){
-  const r = $("connResult"), u = SF.baseUrl.value.trim(), keep = SF.model.value || (setState && setState.model) || "";
+  const r = $("connResult"), kind = connKind(), u = SF.baseUrl.value.trim();
+  const saved = setState && setState.kind === kind ? setState.model : "";
+  const keep = SF.model.value || saved || (kind === "claude" ? "claude-opus-5-5" : "");
   connSig = null; updateSaveBtn();
-  if(!u || !SF.baseUrl.checkValidity()){ r.className = "result bad"; r.textContent = "Enter the endpoint URL first (http:// or https://)."; return; }
+  if(kind === "openai" && (!u || !SF.baseUrl.checkValidity())){ r.className = "result bad"; r.textContent = "Enter the endpoint URL first (http:// or https://)."; return; }
   r.className = "result"; r.textContent = "Connecting…"; $("testBtn").disabled = true;
   const asked = connOf();
   try{
-    const d = await api("POST", "/api/settings/llm/models", {baseUrl:u, apiKey:SF.apiKey.value});
+    const d = await api("POST", "/api/settings/llm/models", {kind, baseUrl: kind === "claude" ? "" : u, apiKey:SF.apiKey.value});
     if(asked !== connOf()) return; // the URL or key changed meanwhile
     fillModels(d.models, keep); connSig = asked;
     const n = (d.models||[]).length;
@@ -946,6 +978,8 @@ function keyNote(){
   else if(v.keySet && v.keyFromEnv) t = `Using the key from the server's LLM_API_KEY${v.keyLast4?`, ending ${v.keyLast4}`:""}. Type a key to override it.`;
   else if(v.keySet) t = `Saved, ending ${v.keyLast4||"····"}. Leave blank to keep it.`;
   else t = `No key saved.`;
+  if(!clearKey && v.keySet && !SF.apiKey.value && hostOf(v.baseUrl) && hostOf(v.baseUrl) !== hostOf(targetURL()))
+    t += ` That key belongs to ${hostOf(v.baseUrl)} and won't be sent here; type this connection's key.`;
   if(!v.canStoreKey) t += " The server has no SETTINGS_SECRET, so a typed key can be tested but not saved.";
   $("keyNote").innerHTML = esc(t) + (v.keySet && !v.keyFromEnv && !clearKey ? ` <button type="button" class="link" id="clearKey">Remove stored key</button>` : "");
   SF.apiKey.placeholder = v.keySet && !clearKey ? `Saved, ending ${v.keyLast4||"····"}` : "sk-…";
@@ -1102,10 +1136,11 @@ async function loadLLM(){
   for(const id of ["testResult","connResult"]){ $(id).textContent = ""; $(id).className = "result"; }
   try{ setState = await api("GET", "/api/settings/llm"); }catch(e){ $("testResult").className = "result bad"; $("testResult").textContent = "Couldn't load chat settings: " + e.message; return; }
   const v = setState;
-  SF.baseUrl.value = v.baseUrl||""; SF.apiKey.value = ""; SF.model.innerHTML = `<option value="">Test the connection first</option>`;
+  SF.kind.value = v.kind === "claude" ? "claude" : "openai";
+  SF.baseUrl.value = v.kind === "claude" ? "" : (v.baseUrl||""); SF.apiKey.value = ""; SF.model.innerHTML = `<option value="">Test the connection first</option>`;
   SF.streaming.checked = !!v.streaming; SF.thinkOnDemand.checked = !!v.thinkOnDemand;
   $("setMeta").textContent = v.updated ? `Last saved ${new Date(v.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${v.by}.` : "Not saved yet; using the server's defaults.";
-  keyNote(); updateSaveBtn();
+  applyKind(); updateSaveBtn();
   if(v.baseUrl) testConnection(); // a saved endpoint: connect straight away so its models show
 }
 function closeSettings(){
@@ -1120,7 +1155,16 @@ $("setCancel").onclick = closeSettings;
 $("scrim").onclick = closeSettings;
 document.addEventListener("keydown", e=>{ if(e.key==="Escape" && $("drawer").classList.contains("open")) closeSettings(); });
 SF.addEventListener("input", updateSaveBtn);
-SF.addEventListener("change", updateSaveBtn);
+SF.addEventListener("change", e=>{
+  if(e.target.name === "kind"){
+    // The model list belonged to the other connection: start over.
+    applyKind(); SF.model.innerHTML = `<option value="">Test the connection first</option>`;
+    $("connResult").textContent = ""; $("connResult").className = "result";
+  }
+  updateSaveBtn();
+});
+SF.baseUrl.addEventListener("input", applyKind);
+SF.apiKey.addEventListener("input", keyNote);
 $("saveAnyway").addEventListener("change", updateSaveBtn);
 SF.addEventListener("submit", e=>e.preventDefault());
 $("testBtn").onclick = testConnection;
