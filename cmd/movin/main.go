@@ -115,7 +115,7 @@ func serve() error {
 		log.Info("serving frontend and admin guide from disk", "dir", c.StaticDir, "guide", guidePath)
 	}
 	// Documents: index + text under docs/, synced from docs/raw/.
-	syncer := &docs.Syncer{Store: store, Conv: &convert.Poppler{}, Log: log, Now: time.Now}
+	syncer := &docs.Syncer{Store: store, Conv: &convert.Poppler{}, Summarise: &docs.LLMSummariser{Settings: sets}, Log: log, Now: time.Now}
 	library := &docs.Library{Sync: syncer}
 	runner := &agent.Runner{Entries: ents, Docs: library, Loc: c.Location, Log: log, Now: time.Now}
 	var bot *telegram.Bot

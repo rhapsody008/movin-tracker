@@ -206,7 +206,8 @@ func (s *Syncer) PageText(ctx context.Context, d Doc) (*PageText, error) {
 func (s *Syncer) run(ctx context.Context, reason string) (Sync, error) {
 	res := Sync{Reason: reason}
 	var changedDocs []Doc
-	done := map[string]Doc{} // documents converted in this run, reused if the index write is redone
+	done := map[string]Doc{}          // documents converted in this run, reused if the index write is redone
+	triedSummary := map[string]bool{} // one summary attempt per document per run
 	var firstImport bool
 	for attempt := 0; ; attempt++ {
 		ix, etag, err := s.load(ctx)
@@ -253,7 +254,14 @@ func (s *Syncer) run(ctx context.Context, reason string) (Sync, error) {
 				continue
 			}
 			if known && d.Status == StatusOK && d.ETag == o.ETag && d.Version == ConvertVersion {
-				continue // unchanged
+				// Unchanged. A missing summary gets one try per sync.
+				if s.Summarise != nil && d.Summary == "" && d.Class != ClassScanned && !triedSummary[o.Key] {
+					triedSummary[o.Key] = true
+					if pt, err := s.PageText(ctx, *d); err == nil {
+						s.summarise(ctx, d, pt.Pages)
+					}
+				}
+				continue
 			}
 			wasOK := known && d.Status == StatusOK
 			refresh := wasOK && d.ETag == o.ETag // same file, older reader
@@ -353,13 +361,20 @@ func (s *Syncer) convert(ctx context.Context, d *Doc, o objstore.ObjectInfo) err
 	d.ETag, d.Size, d.Pages, d.Class, d.TextPages = etag, o.Size, len(pages), class, textPages
 	d.Status, d.Reason, d.Summary = StatusOK, "", ""
 	if s.Summarise != nil && class != ClassScanned {
-		if sum, err := s.Summarise.Summarise(ctx, *d, firstText(pages, 3000)); err == nil {
-			d.Summary = sum
-		} else {
-			s.Log.Warn("document summary failed", "key", o.Key, "err", err)
-		}
+		s.summarise(ctx, d, pages)
 	}
 	return nil
+}
+
+// summarise fills d.Summary from the first ~3000 characters of text; a
+// failure leaves it empty (tried again at the next sync).
+func (s *Syncer) summarise(ctx context.Context, d *Doc, pages []Page) {
+	sum, err := s.Summarise.Summarise(ctx, *d, firstText(pages, 3000))
+	if err != nil {
+		s.Log.Warn("document summary failed", "key", d.Key, "err", err)
+		return
+	}
+	d.Summary = sum
 }
 
 func nonSpace(s string) int {
