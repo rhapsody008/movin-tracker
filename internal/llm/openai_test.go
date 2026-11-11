@@ -110,3 +110,15 @@ func TestOpenAIStopAndUsage(t *testing.T) {
 		}
 	}
 }
+
+// Until the Claude provider lands, a claude connection fails clearly
+// instead of being sent to an OpenAI-shaped endpoint.
+func TestClaudeKindNotBuiltYet(t *testing.T) {
+	p := llm.New(settings.LLM{Kind: settings.KindClaude, BaseURL: settings.ClaudeOrigin, Model: "claude-opus-5-5"})
+	if _, err := p.Complete(context.Background(), llm.Request{}); err == nil {
+		t.Fatal("claude Complete should fail until 1.15")
+	}
+	if _, err := p.Models(context.Background()); err == nil {
+		t.Fatal("claude Models should fail until 1.15")
+	}
+}

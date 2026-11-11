@@ -25,6 +25,7 @@ type Config struct {
 
 	SettingsSecret string
 	LLM            settings.LLM // env-level defaults; settings.json overrides
+	ClaudeBaseURL  string       // LLM_CLAUDE_BASE_URL: tests and stubs only
 
 	TelegramToken string            // empty: the bot does not start
 	Telegram      settings.Telegram // env-level allowlist; settings.json overrides
@@ -74,6 +75,14 @@ func Load() (Config, error) {
 
 	c.LLM = settings.Defaults
 	c.LLM.BaseURL = strings.TrimRight(env("LLM_BASE_URL", ""), "/")
+	c.ClaudeBaseURL = strings.TrimRight(env("LLM_CLAUDE_BASE_URL", settings.ClaudeOrigin), "/")
+	switch c.LLM.Kind = env("LLM_KIND", settings.KindOpenAI); c.LLM.Kind {
+	case settings.KindOpenAI:
+	case settings.KindClaude:
+		c.LLM.BaseURL = c.ClaudeBaseURL // LLM_API_KEY then belongs to Claude
+	default:
+		return c, fmt.Errorf("LLM_KIND must be %q or %q", settings.KindOpenAI, settings.KindClaude)
+	}
 	c.LLM.APIKey = env("LLM_API_KEY", "")
 	c.LLM.Model = env("LLM_MODEL", "")
 	if v := env("LLM_STREAMING", ""); v != "" {

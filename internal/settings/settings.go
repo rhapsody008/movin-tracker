@@ -22,8 +22,19 @@ import (
 
 const Key = "settings.json"
 
+// Connection kinds. A settings file without a kind is OpenAI-compatible.
+const (
+	KindOpenAI = "openai" // OpenAI-compatible /chat/completions (vMLX, NAI)
+	KindClaude = "claude" // Anthropic Messages API
+)
+
+// ClaudeOrigin is where the Claude connection goes. It has no URL field on
+// the page; LLM_CLAUDE_BASE_URL overrides it for tests and stubs only.
+const ClaudeOrigin = "https://api.anthropic.com"
+
 // LLM is a fully resolved connection, ready to call.
 type LLM struct {
+	Kind    string // KindOpenAI or KindClaude; never empty once resolved
 	BaseURL string
 	APIKey  string
 	Model   string
@@ -56,6 +67,7 @@ type stored struct {
 }
 
 type storedLLM struct {
+	Kind          *string `json:"kind,omitempty"`
 	BaseURL       *string `json:"baseUrl,omitempty"`
 	APIKeyEnc     *string `json:"apiKeyEnc,omitempty"`
 	Model         *string `json:"model,omitempty"`
@@ -65,6 +77,7 @@ type storedLLM struct {
 
 // Input is what the settings drawer sends to save or test.
 type Input struct {
+	Kind          string `json:"kind"` // empty means openai; for claude BaseURL is ignored
 	BaseURL       string `json:"baseUrl"`
 	APIKey        string `json:"apiKey"`   // empty keeps the stored key
 	ClearKey      bool   `json:"clearKey"` // explicit removal
@@ -76,6 +89,7 @@ type Input struct {
 // View is what GET /api/settings/llm returns. It has no field that could
 // carry the key; only whether one is set and its last four characters.
 type View struct {
+	Kind          string `json:"kind"`
 	BaseURL       string `json:"baseUrl"`
 	Model         string `json:"model"`
 	Streaming     bool   `json:"streaming"`
@@ -100,24 +114,28 @@ var ErrConflict = errors.New("settings changed by someone else")
 const CacheTTL = 30 * time.Second
 
 type Service struct {
-	store  objstore.Store
-	env    LLM      // values from LLM_* env vars, layered over Defaults
-	tgEnv  Telegram // from TELEGRAM_ALLOWED_IDS / TELEGRAM_ALLOWED_CHATS
-	fkey   *fernet.Key
-	log    *slog.Logger
-	now    func() time.Time
-	ttl    time.Duration
-	mu     sync.Mutex
-	cached stored
-	at     time.Time
-	has    bool
-	gen    uint64 // bumped by every save, so a slower read can't cache older data
+	claudeURL string // ClaudeOrigin unless overridden for tests
+	store     objstore.Store
+	env       LLM      // values from LLM_* env vars, layered over Defaults
+	tgEnv     Telegram // from TELEGRAM_ALLOWED_IDS / TELEGRAM_ALLOWED_CHATS
+	fkey      *fernet.Key
+	log       *slog.Logger
+	now       func() time.Time
+	ttl       time.Duration
+	mu        sync.Mutex
+	cached    stored
+	at        time.Time
+	has       bool
+	gen       uint64 // bumped by every save, so a slower read can't cache older data
 }
 
 // NewService takes the env-level defaults and the SETTINGS_SECRET Fernet key
 // (may be empty: then keys can only come from LLM_API_KEY).
 func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) (*Service, error) {
-	s := &Service{store: store, env: env, log: log, now: time.Now, ttl: CacheTTL}
+	s := &Service{store: store, env: env, log: log, now: time.Now, ttl: CacheTTL, claudeURL: ClaudeOrigin}
+	if s.env.Kind == "" {
+		s.env.Kind = KindOpenAI
+	}
 	if secret != "" {
 		k, err := fernet.DecodeKey(secret)
 		if err != nil {
@@ -131,6 +149,15 @@ func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) 
 // WithTelegramEnv sets the env-level Telegram allowlist (the default that a
 // telegram section in settings.json replaces).
 func (s *Service) WithTelegramEnv(t Telegram) *Service { s.tgEnv = t; return s }
+
+// WithClaudeBaseURL points the Claude connection somewhere other than
+// ClaudeOrigin (LLM_CLAUDE_BASE_URL; tests and stubs only).
+func (s *Service) WithClaudeBaseURL(u string) *Service {
+	if u = strings.TrimRight(strings.TrimSpace(u), "/"); u != "" {
+		s.claudeURL = u
+	}
+	return s
+}
 
 // SetClock replaces the time source (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
@@ -247,8 +274,14 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 	out := s.env
 	keyFromEnv := out.APIKey != ""
 	l := st.LLM
+	if l.Kind != nil && (*l.Kind == KindOpenAI || *l.Kind == KindClaude) {
+		out.Kind = *l.Kind
+	}
 	if l.BaseURL != nil {
 		out.BaseURL = *l.BaseURL
+	}
+	if out.Kind == KindClaude {
+		out.BaseURL = s.claudeURL // fixed: a stored or env URL never redirects it
 	}
 	if l.APIKeyEnc != nil {
 		if k, ok := s.decrypt(*l.APIKeyEnc); ok {
@@ -310,7 +343,7 @@ func (s *Service) View(ctx context.Context) View {
 	st := s.current(ctx)
 	l, fromEnv := s.resolve(st)
 	v := View{
-		BaseURL: l.BaseURL, Model: l.Model, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
+		Kind: l.Kind, BaseURL: l.BaseURL, Model: l.Model, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
 		KeySet: l.APIKey != "", KeyFromEnv: fromEnv && l.APIKey != "", CanStoreKey: s.fkey != nil,
 		Updated: st.Updated, By: st.By,
 	}
@@ -318,6 +351,21 @@ func (s *Service) View(ctx context.Context) View {
 		v.KeyLast4 = l.APIKey[len(l.APIKey)-4:]
 	}
 	return v
+}
+
+// normalise fills the kind (empty = openai) and, for claude, the fixed
+// origin, so validation and key binding see the URL that will be called.
+func (s *Service) normalise(in Input) (Input, error) {
+	switch in.Kind {
+	case "":
+		in.Kind = KindOpenAI
+	case KindOpenAI:
+	case KindClaude:
+		in.BaseURL = s.claudeURL
+	default:
+		return in, &ValidationError{"kind must be openai or claude"}
+	}
+	return in, in.validate()
 }
 
 func (in Input) validate() error {
@@ -335,7 +383,8 @@ func (in Input) validate() error {
 // ForTest resolves the settings the drawer is showing, without saving, so
 // "Test connection" exercises exactly what Save would store.
 func (s *Service) ForTest(ctx context.Context, in Input) (LLM, error) {
-	if err := in.validate(); err != nil {
+	in, err := s.normalise(in)
+	if err != nil {
 		return LLM{}, err
 	}
 	base := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/")
@@ -347,7 +396,7 @@ func (s *Service) ForTest(ctx context.Context, in Input) (LLM, error) {
 		}
 	}
 	return LLM{
-		BaseURL: base, APIKey: key, Model: strings.TrimSpace(in.Model),
+		Kind: in.Kind, BaseURL: base, APIKey: key, Model: strings.TrimSpace(in.Model),
 		TimeoutSec: s.env.TimeoutSec, MaxToolRounds: s.env.MaxToolRounds,
 		Streaming: in.Streaming, ThinkOnDemand: in.ThinkOnDemand,
 	}, nil
@@ -356,7 +405,8 @@ func (s *Service) ForTest(ctx context.Context, in Input) (LLM, error) {
 // Save writes the llm section of settings.json (ETag-guarded), keeping
 // every other section as it is.
 func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
-	if err := in.validate(); err != nil {
+	in, err := s.normalise(in)
+	if err != nil {
 		return View{}, err
 	}
 	if in.APIKey != "" && s.fkey == nil {
@@ -373,7 +423,7 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/")
 	model := strings.TrimSpace(in.Model)
-	err := s.modify(ctx, func(raw map[string]json.RawMessage) error {
+	err = s.modify(ctx, func(raw map[string]json.RawMessage) error {
 		var old storedLLM
 		_ = json.Unmarshal(raw["llm"], &old)
 		keep := old.APIKeyEnc
@@ -389,7 +439,7 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 			keep = enc
 		}
 		setJSON(raw, "llm", storedLLM{
-			BaseURL: &baseURL, APIKeyEnc: keep, Model: &model,
+			Kind: &in.Kind, BaseURL: &baseURL, APIKeyEnc: keep, Model: &model,
 			Streaming: &in.Streaming, ThinkOnDemand: &in.ThinkOnDemand,
 		})
 		setJSON(raw, "updated", s.now().UTC().Format(time.RFC3339))
@@ -399,6 +449,6 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	s.log.Info("LLM settings saved", "by", by, "model", model, "baseUrl", baseURL, "keyChanged", enc != nil || in.ClearKey)
+	s.log.Info("LLM settings saved", "by", by, "kind", in.Kind, "model", model, "baseUrl", baseURL, "keyChanged", enc != nil || in.ClearKey)
 	return s.View(ctx), nil
 }

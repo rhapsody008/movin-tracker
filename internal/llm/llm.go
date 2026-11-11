@@ -110,8 +110,19 @@ type Response struct {
 
 // New returns the provider for a resolved connection.
 func New(cfg settings.LLM) Provider {
+	if cfg.Kind == settings.KindClaude {
+		return notBuilt{}
+	}
 	return newOpenAI(cfg)
 }
+
+// notBuilt stands in for the Claude connection until it lands (step 1.15).
+type notBuilt struct{}
+
+var errNotBuilt = fmt.Errorf("the Claude connection is not built yet; use an OpenAI-compatible endpoint")
+
+func (notBuilt) Complete(context.Context, Request) (Response, error) { return Response{}, errNotBuilt }
+func (notBuilt) Models(context.Context) ([]string, error)            { return nil, errNotBuilt }
 
 // joinSystem renders the sections as one string, as providers without
 // prompt caching send it.

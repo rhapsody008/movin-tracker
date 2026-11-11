@@ -485,7 +485,7 @@ func TestSettingsEnvFallbackAndBounds(t *testing.T) {
 		t.Fatalf("env fallback: %v", m)
 	}
 	base := map[string]any{"baseUrl": e.llm.srv.URL + "/v1", "model": "m", "streaming": true}
-	for field, bad := range map[string]any{"baseUrl": "ftp://x", "model": ""} {
+	for field, bad := range map[string]any{"baseUrl": "ftp://x", "model": "", "kind": "gpt"} {
 		in := map[string]any{}
 		for k, v := range base {
 			in[k] = v
