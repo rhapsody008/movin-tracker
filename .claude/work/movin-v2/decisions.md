@@ -95,3 +95,13 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - Novade password in 3.1: ZY already changed it; no special handling needed for that document.
 - Bucket versioning stays **off** for now (ZY, 2026-11-11), until there is a need. Consequence: no S3-level undo; the in-app journal (last 200 changes) is the only undo. The admin guide's "Recover older data" applies only once versioning is on.
 - LLM connection gets **two kinds** (ZY): OpenAI-compatible (vMLX now, NAI later) and **Claude native** (Messages API, for prompt caching). Planned together with the widened Phase 1.5.
+
+## Connections + documents plan answers (2026-11-11)
+1. Refusal fallbacks on Claude: yes (server-side "default", no UI; step 1.19).
+2. Drawings: no stored page images; crops rendered on demand from the PDF (replaces F1's stored 6000 px PNGs; confirmed by the 1.5.0 spike). Sync still extracts text, classifies, summarises and writes the index ahead of time.
+3. Base image: leave distroless for alpine + poppler.
+4. Vendoring anthropic-sdk-go/v2: approved in principle; version, licence, min Go and transitive modules reported before vendoring (1.15).
+5. /think on Claude: effort low by default, high with /think; 'Think only when asked' on by default; low must pass the 1.18 eval or becomes medium.
+6. Telegram PDF upload: not in 1.5; the S3 console stays.
+7. Prompt-cache TTL: 5 minutes for now; revisit with 1.18's usage logs (1 hour pays off only for messages 5–60 minutes apart).
+- Tool rename: `ask_drawings` → `search_documents`, `read_document_page`, `view_document_page`.

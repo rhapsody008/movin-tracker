@@ -33,16 +33,27 @@ Tick a step only after its verification passes; put the evidence (command + resu
 - [x] Anthropic endpoint (330a117) — `https://api.anthropic.com/v1/`: OpenAI layer covers /chat/completions only; /v1/models is the native Models API → for that host only, send `anthropic-version: 2023-06-01` + `x-api-key` and `?limit=1000`. Verified: dummy key now gets 'invalid x-api-key' (was 'anthropic-version header is required'); test that other hosts never get x-api-key. Open: whether the OpenAI layer needs max_tokens (unverified without a key; Save's tool check will show it).
 - [x] Document intake (25263e5 + bucket work, no code) — ZY uploaded 43 PDFs + 1 video under `docs/raw/` in 8 folders (subfolders allowed, decisions.md). Deleted 20 macOS `._*` files with ZY's OK (dry run first; 44 objects left). Read-only analysis in the scratchpad with poppler in an alpine container: 448 pages, ~343k chars of text (~90k tokens: too much for the prompt, needs search). 8 drawings are vector with text (3 × A1, 5 × A3); A1 at 6000 px renders crisp but peaks at 584 MB RSS (1568 px overview: 79 MB, 1.3 s). Scanned / image-only documents listed in plan.md 'Later phase: scanned documents'. Five entries added from the documents through the web API (broadband + router, Fermax activation within 12 months of TOP, ask Fermax before renovation, defects via Novade, management office + developer contacts). Bucket: SSE-S3 on, public access blocked, **versioning off** (raised with ZY).
 
-## Phase 1.5
-- [ ] 1.5.0 Converter spike — unblocked 2026-11-11 (dense sheets now in `docs/raw/1.0 …/`); partial results under 'Document intake' below; poppler vs PDFium decision goes to the planner
+## Connections (Goal A)
+- [ ] 1.13 Provider seam, no behaviour change
+- [ ] 1.14 Settings: kind
+- [ ] 1.15 Claude provider (vendored SDK: report first)
+- [ ] 1.16 Agent on both providers + cache layout
+- [ ] 1.17 Server + LLM tab + guide
+- [ ] 1.18 Channels + chateval + live check (needs ZY's Claude key)
+- [ ] 1.19 Refusal fallbacks
+
+## Phase 1.5 (documents; replanned 2026-11-11)
+- [ ] 1.5.0 Spike (poppler; scratchpad) — partial results under 'Document intake' above
 - [ ] 1.5.1 objstore List + PutBlob
 - [ ] 1.5.2 Docs index
-- [ ] 1.5.3 Converter (needs approval for vendored deps)
+- [ ] 1.5.3 Converter (poppler) + alpine base image
 - [ ] 1.5.4 Sync engine
-- [ ] 1.5.5 Multimodal LLM + sheet summary
-- [ ] 1.5.6 Schedule + triggers
-- [ ] 1.5.7 Telegram documents + /sync
-- [ ] 1.5.8 ask_drawings
-- [ ] 1.5.9 chateval drawings cases
-- [ ] 1.5.11 Drawings admin
-- [ ] 1.5.10 Deploy files
+- [ ] 1.5.5 Search
+- [ ] 1.5.6 Text tools + prompt index
+- [ ] 1.5.7 Schedule, triggers, /sync
+- [ ] 1.5.8 Documents admin (checkpoint)
+- [ ] 1.5.9 Summaries
+- [ ] 1.5.10 Image plumbing
+- [ ] 1.5.11 view_document_page
+- [ ] 1.5.12 chateval document cases
+- [ ] 1.5.13 Deploy files
