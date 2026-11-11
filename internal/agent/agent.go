@@ -6,6 +6,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -61,7 +62,20 @@ type Result struct {
 	// Silent is true when, in a group chat, the model decided the message
 	// needed no answer and nothing was changed. The channel sends nothing.
 	Silent bool `json:"silent,omitempty"`
+	// Usage totals the turn's model calls (for logs and chateval).
+	Usage llm.Usage `json:"-"`
 }
+
+// RefusalReply is what the user sees when the model declines a message.
+// Changes made earlier in the turn stay (each has its own Undo).
+const RefusalReply = "Claude declined this message. Try rephrasing it."
+
+// CutOffNote ends a reply that hit the output limit.
+const CutOffNote = " (cut off: the reply hit the length limit)"
+
+// ErrCutOff is returned when the output limit stopped a round before it
+// produced any usable text or complete tool calls.
+var ErrCutOff = errors.New("the model's reply was cut off by the output limit before it said anything; try a shorter question")
 
 // Event is streamed while a turn runs.
 type Event struct {
@@ -115,7 +129,27 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 		if err != nil {
 			return res, err
 		}
+		u := out.Usage
+		res.Usage.In += u.In
+		res.Usage.Out += u.Out
+		res.Usage.CacheRead += u.CacheRead
+		res.Usage.CacheWrite += u.CacheWrite
+		r.Log.Info("llm call", "kind", cfg.Kind, "model", cfg.Model, "round", round, "stop", string(out.Stop),
+			"in", u.In, "out", u.Out, "cacheRead", u.CacheRead, "cacheWrite", u.CacheWrite)
 		m := out.Message
+		switch out.Stop {
+		case llm.StopRefusal:
+			emit(Event{Type: "reset"}) // drop any partial streamed text
+			res.Reply = RefusalReply
+			return res, nil
+		case llm.StopMaxTokens:
+			// Tool calls cut off mid-way can't be trusted; keep only text.
+			if strings.TrimSpace(m.Content) == "" {
+				return res, ErrCutOff
+			}
+			res.Reply = strings.TrimSpace(m.Content) + CutOffNote
+			return res, nil
+		}
 		if len(m.ToolCalls) == 0 || force {
 			res.Reply = strings.TrimSpace(m.Content)
 			break

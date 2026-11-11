@@ -117,12 +117,15 @@ Rules:
 		fmt.Fprintf(&b, `
 This is a group chat; each user message starts with the speaker's name. If a message needs nothing recorded and asks you nothing (chat between the two of them), reply with exactly %s.`, SilentReply)
 	}
-	rules := b.String()
-	b.Reset()
-	// What changes between turns goes last.
-	fmt.Fprintf(&b, `
-
-Today is %s (%s). Key collection: %s. Move-in: %s.
-Current entries%s: %s`, now.Format("2006-01-02"), now.Format("Monday"), orNotSet(d.Meta.KeyDate), orNotSet(d.Meta.MoveDate), more, listJSON)
-	return []llm.Section{{Text: rules, CacheBreak: true}, {Text: b.String()}}
+	// Most stable first, so a prompt cache keeps as much as possible: the
+	// rules change only with a new build, the entries with a write, the
+	// date every day (and is tiny, so it is never cached).
+	entriesPart := fmt.Sprintf("\n\nCurrent entries%s: %s", more, listJSON)
+	datePart := fmt.Sprintf("\nToday is %s (%s). Key collection: %s. Move-in: %s.",
+		now.Format("2006-01-02"), now.Format("Monday"), orNotSet(d.Meta.KeyDate), orNotSet(d.Meta.MoveDate))
+	return []llm.Section{
+		{Text: b.String(), CacheBreak: true},
+		{Text: entriesPart, CacheBreak: true},
+		{Text: datePart},
+	}
 }
