@@ -145,3 +145,12 @@ func TestDocumentToolsOnClaude(t *testing.T) {
 		t.Errorf("no documents: want no documents section, got %d blocks", len(sys))
 	}
 }
+
+func TestEmptyAnswerAfterDocumentSearch(t *testing.T) {
+	lib, _ := docsLib(t, true)
+	r := newRig(t, step{calls: [][2]string{{"search_documents", `{"query":"warranty"}`}}}, step{text: ""})
+	r.runner.Docs = lib
+	if res := r.run(t, user("ZY", "web", "what's the warranty?")); res.Reply != agent.NotFoundInDocsReply {
+		t.Fatalf("reply %q", res.Reply)
+	}
+}

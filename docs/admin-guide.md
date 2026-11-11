@@ -175,6 +175,17 @@ A key is only ever sent to the endpoint it belongs to. If you switch to a **diff
 - **Recently refused**: everyone who messaged the bot but isn't allowed, with **Add** buttons. **Save** applies the list from the next message; no restart.
 - **Go back to the server's defaults** drops the saved list and uses the env vars again.
 
+### Settings → Documents
+
+The PDFs under `docs/raw/` in the bucket, grouped by folder, with pages and what kind each is:
+
+- **text**: the bot can search and read it.
+- **drawing**: a sheet of A3 or larger with text (floor plan, M&E plans); searchable, and the bot can look at it as an image.
+- **scanned**: pictures only, or a text layer that comes out as gibberish; listed but not searchable yet (the later OCR phase).
+- **skipped** (not a PDF, or a macOS `._` file), **couldn't be read** (with the reason; retried at every sync) or **removed** (gone from the bucket).
+
+The line at the top gives the counts and the last sync. **Sync now** re-reads the bucket at once; the list updates by itself when it finishes.
+
 ## Everyday tasks
 
 ### Add your spouse (or yourself)
@@ -188,6 +199,14 @@ Make sure privacy mode is off (BotFather `/setprivacy` → Disable) and the bot 
 ### The group suddenly stopped answering
 
 When Telegram upgrades a group to a "supergroup", its ID changes. The new ID shows under **Recently refused** as "group upgraded: new chat ID". Add it and remove the old one.
+
+### Add or replace documents
+
+1. In the S3 console open the bucket, then `docs/raw/` (make folders freely, e.g. `docs/raw/9.0 Contracts/`).
+2. Upload the PDFs. Replacing a file with the same name counts as a new version.
+3. Wait for the nightly sync (03:00), or send `/sync` to the bot, or press **Settings → Documents → Sync now**.
+
+The group gets one message listing what was added, changed or removed (never for the very first import, and not again in the chat that sent `/sync`, which gets the result as a reply). Deleting a PDF from the bucket marks it removed at the next sync. Video and other non-PDF files are skipped.
 
 ### Switch the model or endpoint
 
@@ -222,6 +241,7 @@ Tell it what's happening, in plain words. It records ideas, decisions, quotes, p
 - "Lim quoted 18k for carpentry, paid 30% today" (updates the existing carpentry entry instead of adding a second one)
 - "Electrician coming Friday 2pm to check the DB"
 - "What did we decide for the kitchen and what did it cost?"
+- "How do I defrost the fridge?" or "Who do we contact about defects?" (it searches the documents and says which document and page it used)
 
 If something is unclear (which bathroom?), it asks instead of guessing. In the group it stays quiet for ordinary chat between the two of you.
 
@@ -231,7 +251,7 @@ If something is unclear (which bathroom?), it asks instead of guessing. In the g
 | `/recent` | The last 10 changes, who made them and when |
 | `/undo` | Undo your own last change |
 | `/help` | What the bot can do |
-| `/sync` | Re-read the drawings (planned; says "not switched on" for now) |
+| `/sync` | Re-read the documents now (they also sync at startup and every night) and say what changed |
 
 PDFs, photos and voice notes get "I can only read text for now" until those features land.
 
@@ -303,6 +323,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `DEV_EMAIL` | empty | Local only: act as this user without a proxy. Never in production |
 | `TZ` | `Asia/Singapore` | Time zone for dates |
 | `LOG_LEVEL` | `info` | `debug` logs every request |
+| `DOCS_SYNC_SCHEDULE` | `03:00` | Daily document sync time in `TZ` (HH:MM), or `off` |
 
 ### What's in the bucket
 
@@ -311,11 +332,13 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `entries.json` | Entries, key dates, last 200 changes |
 | `settings.json` | LLM connection (key encrypted), Telegram allowlist |
 | `_probe/...` | Storage test scratch files, deleted right after |
-| `docs/raw/...` | Your documents: drawings, contracts, developer and management-office papers (upload here, subfolders welcome, e.g. `docs/raw/contracts/...`; reading them is planned) |
+| `docs/raw/...` | Your documents: drawings, contracts, developer and management-office papers (upload here, subfolders welcome, e.g. `docs/raw/contracts/...`) |
+| `docs/index.json` | The documents list the app keeps (kind, pages, status, last sync); rebuilt by a sync if deleted |
+| `docs/text/...` | The text of each page, one file per document (`<same path>.json`); safe to delete, the next sync recreates it |
 
 ## Not built yet
 
-- **Documents**: the bot reading what is under `docs/raw/` (drawings, checklists, letters, manuals): search their text, look at drawing pages, a daily re-sync, `/sync` and a Documents tab. Upload through the S3 console for now. Scanned documents (no text layer) come after that, in a later phase.
+- **Scanned documents**: reading pages that are pictures only (OCR or the model's vision), and the garbled text layers. Listed today, not searchable.
 - **Photos and voice notes** on entries.
 - **OCI + Flux deployment** in the NKP project, replacing the manual apply.
 

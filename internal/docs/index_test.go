@@ -103,3 +103,17 @@ func TestPathsAndRoundTrip(t *testing.T) {
 		t.Fatal("Changes()")
 	}
 }
+
+func TestGarbled(t *testing.T) {
+	good := "Cleaning the grease filters: remove the filters and wash them in hot soapy water every two months."
+	shifted := "'LPHQVLRQV \x03 \x03 EN \x12\\K NOOMQNXSK QR XPV VP cK TRKZ c| OKLRPXR fQXSMTZQX^ S\\QMZLKXh"
+	if docs.Garbled(good) || docs.Garbled("") || docs.Garbled("DB TV P3 2G") {
+		t.Fatal("good text flagged")
+	}
+	if !docs.Garbled(shifted) {
+		t.Fatal("control characters not flagged")
+	}
+	if !docs.Garbled("xzq brt plk mnb vcx zxc qwr tps lkj hgf dsx nbv") {
+		t.Fatal("vowel-less words not flagged")
+	}
+}

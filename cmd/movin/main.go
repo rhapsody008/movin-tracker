@@ -132,7 +132,7 @@ func serve() error {
 	}
 	srv := &server.Server{
 		Entries: ents, Settings: sets, Store: store, Static: static, Log: log,
-		Agent: runner, Bot: bot, Guide: guide,
+		Agent: runner, Bot: bot, Docs: syncer, Guide: guide,
 		AuthHeader: c.AuthHeader, AllowedEmails: c.AllowedEmails, DevEmail: c.DevEmail,
 	}
 	hs := &http.Server{

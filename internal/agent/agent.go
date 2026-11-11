@@ -71,6 +71,10 @@ type Result struct {
 // Changes made earlier in the turn stay (each has its own Undo).
 const RefusalReply = "Claude declined this message. Try rephrasing it."
 
+// NotFoundInDocsReply is the reply when the model searched the documents
+// and then said nothing.
+const NotFoundInDocsReply = "I looked in the documents but couldn't find an answer to that. Try other words, or name the document."
+
 // CutOffNote ends a reply that hit the output limit.
 const CutOffNote = " (cut off: the reply hit the length limit)"
 
@@ -127,6 +131,7 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 	// calling tools after that, one more round is forced to answer in words,
 	// so even a setting of 1 can make changes.
 	rounds := max(cfg.MaxToolRounds, 1) + 1
+	lookedInDocs := false
 	for round := 1; round <= rounds; round++ {
 		force := round == rounds
 		out, err := client.Complete(ctx, llm.Request{
@@ -167,6 +172,9 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 		}
 		msgs = append(msgs, llm.Message{Role: "assistant", Content: m.Content, ToolCalls: m.ToolCalls, Native: m.Native})
 		for _, tc := range m.ToolCalls {
+			if tc.Function.Name == "search_documents" || tc.Function.Name == "read_document_page" {
+				lookedInDocs = true
+			}
 			out, lines := r.exec(ctx, actor, tc)
 			for _, l := range lines {
 				res.Changes = append(res.Changes, l)
@@ -185,6 +193,8 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 	if res.Reply == "" {
 		if len(res.Changes) > 0 {
 			res.Reply = "Done."
+		} else if lookedInDocs {
+			res.Reply = NotFoundInDocsReply
 		} else {
 			res.Reply = "No answer came back. Try rephrasing."
 		}

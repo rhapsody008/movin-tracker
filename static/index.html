@@ -238,6 +238,13 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .panel h3{font-size:15px;font-family:var(--body);font-weight:700;margin:4px 0 0}
 .panel .warn{color:var(--danger);font-size:14px;margin:0}
 .panel .warn:empty{display:none}
+.doclist{display:grid;gap:8px}
+.doclist details{background:var(--sunk);border-radius:8px;padding:8px 10px}
+.doclist summary{cursor:pointer;font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.doclist ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.doclist li{display:grid;gap:2px;font-size:14px;overflow-wrap:anywhere}
+.doclist .meta{color:var(--muted);font-size:13px}
+.doclist .bad{color:var(--danger)}
 .rej{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:14px}
 .rej li{background:var(--sunk);border-radius:8px;padding:8px 10px;display:grid;gap:6px}
 .rej .who{overflow-wrap:anywhere}
@@ -318,7 +325,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     <button type="button" role="tab" id="tab-storage" aria-controls="panel-storage" data-tab="storage">Storage</button>
     <button type="button" role="tab" id="tab-llm" aria-controls="setForm" data-tab="llm">LLM</button>
     <button type="button" role="tab" id="tab-telegram" aria-controls="panel-telegram" data-tab="telegram">Telegram</button>
-    <button type="button" role="tab" id="tab-drawings" aria-controls="panel-drawings" data-tab="drawings" hidden>Drawings</button>
+    <button type="button" role="tab" id="tab-docs" aria-controls="panel-docs" data-tab="docs">Documents</button>
   </nav>
   <div class="panel" id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden>
     <p class="sub">Where entries and settings are kept. These come from the server's environment and Secrets, so they can't be changed here.</p>
@@ -327,6 +334,12 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     <div><button class="btn ghost" type="button" id="storageTest">Test connection</button></div>
     <p class="sub">Writes a scratch object under <code>_probe/</code>, checks that a stale write is refused (that is what protects concurrent edits), then deletes it.</p>
     <ul class="steps" id="storageSteps" aria-live="polite"></ul>
+  </div>
+  <div class="panel" id="panel-docs" role="tabpanel" aria-labelledby="tab-docs" hidden>
+    <p class="stline" id="docsStatus" aria-live="polite">Loading…</p>
+    <div><button class="btn ghost" type="button" id="docsSync">Sync now</button></div>
+    <p class="sub">The app reads the PDFs under <code>docs/raw/</code> in the bucket at startup, every night and on <code>/sync</code>. Upload or replace files in the S3 console; folders are fine. Scanned documents (pictures only) are listed but can't be searched yet.</p>
+    <div class="doclist" id="docsList"></div>
   </div>
   <div class="panel" id="panel-telegram" role="tabpanel" aria-labelledby="tab-telegram" hidden>
     <p class="stline" id="tgStatus">Loading…</p>
@@ -986,7 +999,7 @@ function keyNote(){
 }
 SF.addEventListener("click", e=>{ if(e.target.id==="clearKey"){ clearKey = true; keyNote(); updateSaveBtn(); } });
 /* ---------- settings: tabs ---------- */
-const TABS = ["storage","llm","telegram"]; // same order as on screen; drawings joins in phase 1.5
+const TABS = ["storage","llm","telegram","docs"]; // same order as on screen
 let curTab = "llm", opener = null;
 function showTab(tab){
   if(!TABS.includes(tab)) tab = "llm";
@@ -994,10 +1007,12 @@ function showTab(tab){
   document.querySelectorAll(".tabs [data-tab]").forEach(b=>{ const on = b.dataset.tab===tab; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; });
   $("panel-storage").hidden = tab!=="storage";
   $("panel-telegram").hidden = tab!=="telegram";
+  $("panel-docs").hidden = tab!=="docs";
   SF.hidden = $("llmFoot").hidden = tab!=="llm";
   clearInterval(tgTimer); tgTimer = null;
   if(tab==="storage") loadStorage();
   if(tab==="llm") loadLLM();
+  if(tab==="docs") loadDocs();
   if(tab==="telegram"){ loadTelegram(); tgTimer = setInterval(()=>{ if($("drawer").classList.contains("open")) refreshTelegramStatus(); }, 10000); }
 }
 document.querySelector(".tabs").addEventListener("click", e=>{ const b=e.target.closest("[data-tab]"); if(b) { showTab(b.dataset.tab); b.focus(); } });
@@ -1184,6 +1199,46 @@ $("setSave").onclick = async ()=>{
   }catch(e){ const r=$("testResult"); r.className="result bad"; r.textContent = e.message; updateSaveBtn(); }
 };
 
+/* ---------- settings: documents ---------- */
+let docsState = null;
+const when = s => s ? new Date(s).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"}) : "";
+async function loadDocs(){
+  try{ docsState = await api("GET", "/api/docs"); renderDocs(); }
+  catch(e){ $("docsStatus").textContent = "Couldn't load the documents: " + e.message; }
+}
+function renderDocs(){
+  const v = docsState; if(!v) return;
+  $("docsSync").hidden = !v.on;
+  if(!v.on){ $("docsStatus").textContent = "Documents are not switched on on this server."; $("docsList").innerHTML = ""; return; }
+  const ok = v.docs.filter(d=>d.status==="ok"), n = c => ok.filter(d=>d.class===c).length;
+  const s = v.lastSync;
+  let last = "Not synced yet.";
+  if(s){
+    const parts = [["added",s.added],["changed",s.changed],["removed",s.removed],["failed",s.failed],["re-read",s.refreshed]].filter(p=>p[1]>0).map(p=>`${p[1]} ${p[0]}`);
+    last = `Last sync ${when(s.at)} (${s.reason}): ${parts.length ? parts.join(", ") : "no changes"}.` + (s.error ? ` Error: ${s.error}` : "");
+  }
+  $("docsStatus").textContent = v.running ? "Syncing…" : `${ok.length} readable: ${n("text")} text, ${n("drawing")} drawings, ${n("scanned")} scanned (not searchable yet). ${last}`;
+  const folders = {};
+  for(const d of v.docs){ (folders[d.folder || "(top level)"] ||= []).push(d); }
+  $("docsList").innerHTML = Object.keys(folders).sort().map(f=>{
+    const items = folders[f].sort((a,b)=>a.name.localeCompare(b.name)).map(d=>{
+      let meta = d.status === "ok" ? `${d.pages} page${d.pages===1?"":"s"} · ${d.class}` : "";
+      let note = "";
+      if(d.status === "skipped") note = `Skipped: ${d.reason}`;
+      if(d.status === "failed") note = `Couldn't be read: ${d.reason}`;
+      if(d.status === "removed") note = `Removed from the bucket ${when(d.removedAt)}`;
+      return `<li><span>${esc(d.name)}</span>${meta?`<span class="meta">${esc(meta)}</span>`:""}${note?`<span class="meta ${d.status==="failed"?"bad":""}">${esc(note)}</span>`:""}${d.summary?`<span class="meta">${esc(d.summary)}</span>`:""}</li>`;
+    }).join("");
+    return `<details><summary>${esc(f)} (${folders[f].length})</summary><ul>${items}</ul></details>`;
+  }).join("") || `<p class="sub">No documents yet. Upload PDFs under docs/raw/ in the bucket, then press Sync now.</p>`;
+}
+$("docsSync").onclick = async ()=>{
+  $("docsSync").disabled = true; $("docsStatus").textContent = "Syncing…";
+  try{ await api("POST", "/api/docs/sync"); }
+  catch(e){ $("docsStatus").textContent = "Couldn't start a sync: " + e.message; }
+  finally{ setTimeout(()=>{ $("docsSync").disabled = false; }, 1500); }
+};
+
 /* ---------- boot ---------- */
 {
   const f = store.get("movin.filters");
@@ -1204,6 +1259,7 @@ api("GET","/api/settings/llm").then(v=>setModelLine(v.model)).catch(()=>{});
     if(pending > 0){ pushedEtag = snap.etag; return; }
     applyServer(snap);
   });
+  es.addEventListener("docs", e=>{ docsState = JSON.parse(e.data); if(curTab === "docs") renderDocs(); });
   es.onopen = ()=>{ opened = true; clearTimeout(downTimer); if($("banner").textContent.startsWith("Stopped syncing")) banner(""); };
   es.onerror = ()=>{
     // EventSource reconnects by itself; only say something if it stays down.

@@ -337,7 +337,10 @@ func (s *Syncer) convert(ctx context.Context, d *Doc, o objstore.ObjectInfo) err
 	}
 	info := make([]PageInfo, len(pages))
 	for i, p := range pages {
-		info[i] = PageInfo{W: p.W, H: p.H, Chars: nonSpace(p.Text)}
+		if Garbled(p.Text) {
+			pages[i].Text, pages[i].Words = "", nil // unusable; keeps it out of search
+		}
+		info[i] = PageInfo{W: p.W, H: p.H, Chars: nonSpace(pages[i].Text)}
 	}
 	class, textPages := Classify(info)
 	body, err := json.Marshal(PageText{Key: o.Key, ETag: etag, Pages: pages})

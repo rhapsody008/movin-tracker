@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/agent"
+	"github.com/rhapsody008/movin-tracker/internal/docs"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/llm"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
@@ -28,6 +29,7 @@ type Server struct {
 	Settings *settings.Service
 	Agent    *agent.Runner
 	Bot      *telegram.Bot // nil when TELEGRAM_BOT_TOKEN is not set
+	Docs     *docs.Syncer  // nil: the documents feature is off
 	// Guide returns the admin guide (Markdown). Nil serves 404.
 	Guide  func() ([]byte, error)
 	Store  objstore.Store
@@ -87,6 +89,8 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/admin/storage", s.getStorage)
 	api.HandleFunc("POST /api/admin/storage/test", s.testStorage)
 	api.HandleFunc("GET /api/admin/telegram", s.getTelegram)
+	api.HandleFunc("GET /api/docs", s.getDocs)
+	api.HandleFunc("POST /api/docs/sync", s.syncDocs)
 	api.HandleFunc("PUT /api/settings/telegram", s.putTelegram)
 	api.HandleFunc("GET /api/settings/llm", s.getSettings)
 	api.HandleFunc("PUT /api/settings/llm", s.putSettings)
@@ -380,6 +384,12 @@ func (e *sse) comment() error {
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	ch, cancel := s.Entries.Subscribe()
 	defer cancel()
+	var docsCh <-chan struct{}
+	if s.Docs != nil {
+		c, stop := s.Docs.Subscribe()
+		defer stop()
+		docsCh = c
+	}
 	snap, err := s.Entries.Current(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
@@ -404,6 +414,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 			return
 		case snap := <-ch:
 			if out.send("entries", snap) != nil {
+				return
+			}
+		case <-docsCh:
+			v, err := s.docsView(r.Context())
+			if err == nil && out.send("docs", v) != nil {
 				return
 			}
 		case <-tick.C:

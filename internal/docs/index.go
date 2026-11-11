@@ -42,7 +42,7 @@ const (
 // ConvertVersion goes up when how documents are read or classified
 // changes; documents read with an older version are read again at the next
 // sync ("refreshed", which is not announced).
-const ConvertVersion = 2
+const ConvertVersion = 3 // 3: garbled text layers count as no text
 
 // MinTextChars is how many non-space characters a page needs to count as
 // having text; below it the page is treated as an image.
@@ -125,6 +125,41 @@ func SkipReason(key string) string {
 		return "not a PDF (" + strings.ToLower(strings.TrimPrefix(path.Ext(name), ".")) + ")"
 	}
 	return ""
+}
+
+// Garbled reports whether a page's text layer is unusable: fonts without a
+// proper character map come out as control characters and shifted letters
+// ("Dimensions" → "'LPHQVLRQV"). Such pages count as having no text (found
+// in one of ZY's manuals; OCR is the later phase for them).
+func Garbled(text string) bool {
+	chars, ctrl := 0, 0
+	for _, r := range text {
+		switch {
+		case r == '\n' || r == '\t' || r == '\r' || r == '\f' || r == ' ':
+		case r < 0x20:
+			ctrl++
+			chars++
+		default:
+			chars++
+		}
+	}
+	if chars == 0 {
+		return false
+	}
+	if float64(ctrl)/float64(chars) > 0.02 {
+		return true
+	}
+	words, novowel := 0, 0
+	for _, w := range strings.FieldsFunc(text, func(r rune) bool { return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') }) {
+		if len(w) < 3 {
+			continue
+		}
+		words++
+		if !strings.ContainsAny(w, "aeiouyAEIOUY") {
+			novowel++
+		}
+	}
+	return words >= 10 && float64(novowel)/float64(words) > 0.3
 }
 
 // PageInfo is what classification needs to know about a page.
