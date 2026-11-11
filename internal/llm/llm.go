@@ -20,6 +20,15 @@ type Message struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Native     any        `json:"-"`
+	// Images go with a user message or a tool result (e.g. a drawing
+	// crop). Only connections with vision get them.
+	Images []Image `json:"-"`
+}
+
+// Image is a picture for the model.
+type Image struct {
+	MediaType string // image/png
+	Data      []byte
 }
 
 type ToolCall struct {

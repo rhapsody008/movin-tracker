@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +23,7 @@ import (
 
 type request struct {
 	Model      string    `json:"model"`
-	Messages   []Message `json:"messages"`
+	Messages   []wireMsg `json:"messages"`
 	Tools      []Tool    `json:"tools,omitempty"`
 	ToolChoice string    `json:"tool_choice,omitempty"`
 	Stream     bool      `json:"stream,omitempty"`
@@ -140,7 +141,7 @@ func (c *openAI) Complete(ctx context.Context, in Request) (Response, error) {
 		msgs = append([]Message{{Role: "system", Content: sys}}, in.Messages...)
 	}
 	req := request{
-		Model: c.cfg.Model, Messages: msgs, Tools: in.Tools,
+		Model: c.cfg.Model, Messages: toWire(msgs), Tools: in.Tools,
 		Stream: in.Stream,
 	}
 	if in.ForceAnswer && len(in.Tools) > 0 {
@@ -191,6 +192,62 @@ func (c *openAI) Complete(ctx context.Context, in Request) (Response, error) {
 		return Response{}, err
 	}
 	return Response{Message: m, Stop: stopOf(m, finish)}, nil
+}
+
+// wireMsg is a message as /chat/completions takes it: the same fields as
+// Message (same order, so text-only requests are byte-identical), with
+// content either a string or, when there are images, a list of parts.
+type wireMsg struct {
+	Role       string     `json:"role"`
+	Content    any        `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+}
+
+type part struct {
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *imageURL `json:"image_url,omitempty"`
+}
+
+type imageURL struct {
+	URL string `json:"url"`
+}
+
+func imageParts(text string, imgs []Image) []part {
+	parts := []part{{Type: "text", Text: text}}
+	for _, im := range imgs {
+		parts = append(parts, part{Type: "image_url", ImageURL: &imageURL{URL: "data:" + im.MediaType + ";base64," + base64.StdEncoding.EncodeToString(im.Data)}})
+	}
+	return parts
+}
+
+// toWire maps messages. Tool results can only carry text here, so their
+// images follow the run of tool messages as one user message.
+func toWire(msgs []Message) []wireMsg {
+	out := make([]wireMsg, 0, len(msgs))
+	var pending []Image
+	flush := func() {
+		if len(pending) > 0 {
+			out = append(out, wireMsg{Role: "user", Content: imageParts("Images returned by the tools above.", pending)})
+			pending = nil
+		}
+	}
+	for _, m := range msgs {
+		if m.Role != "tool" {
+			flush()
+		}
+		w := wireMsg{Role: m.Role, Content: m.Content, ToolCalls: m.ToolCalls, ToolCallID: m.ToolCallID}
+		switch {
+		case m.Role == "tool":
+			pending = append(pending, m.Images...)
+		case len(m.Images) > 0:
+			w.Content = imageParts(m.Content, m.Images)
+		}
+		out = append(out, w)
+	}
+	flush()
+	return out
 }
 
 // stopOf maps an OpenAI finish_reason; tool calls win over the reason.

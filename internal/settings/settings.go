@@ -34,7 +34,10 @@ const ClaudeOrigin = "https://api.anthropic.com"
 
 // LLM is a fully resolved connection, ready to call.
 type LLM struct {
-	Kind    string // KindOpenAI or KindClaude; never empty once resolved
+	Kind string // KindOpenAI or KindClaude; never empty once resolved
+	// Vision: the model takes images (drawing crops). Always on for Claude;
+	// for OpenAI-compatible endpoints it is what the Save check found.
+	Vision  bool
 	BaseURL string
 	APIKey  string
 	Model   string
@@ -67,6 +70,7 @@ type stored struct {
 }
 
 type storedLLM struct {
+	Vision        *bool   `json:"vision,omitempty"`
 	Kind          *string `json:"kind,omitempty"`
 	BaseURL       *string `json:"baseUrl,omitempty"`
 	APIKeyEnc     *string `json:"apiKeyEnc,omitempty"`
@@ -77,7 +81,8 @@ type storedLLM struct {
 
 // Input is what the settings drawer sends to save or test.
 type Input struct {
-	Kind          string `json:"kind"` // empty means openai; for claude BaseURL is ignored
+	Vision        bool   `json:"vision"` // from the Save check's image probe
+	Kind          string `json:"kind"`   // empty means openai; for claude BaseURL is ignored
 	BaseURL       string `json:"baseUrl"`
 	APIKey        string `json:"apiKey"`   // empty keeps the stored key
 	ClearKey      bool   `json:"clearKey"` // explicit removal
@@ -89,6 +94,7 @@ type Input struct {
 // View is what GET /api/settings/llm returns. It has no field that could
 // carry the key; only whether one is set and its last four characters.
 type View struct {
+	Vision        bool   `json:"vision"`
 	ClaudeOrigin  string `json:"claudeOrigin"` // where a claude connection goes
 	Kind          string `json:"kind"`
 	BaseURL       string `json:"baseUrl"`
@@ -284,8 +290,12 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 	if l.BaseURL != nil {
 		out.BaseURL = *l.BaseURL
 	}
+	if l.Vision != nil {
+		out.Vision = *l.Vision
+	}
 	if out.Kind == KindClaude {
 		out.BaseURL = s.claudeURL // fixed: a stored or env URL never redirects it
+		out.Vision = true
 	}
 	if l.APIKeyEnc != nil {
 		if k, ok := s.decrypt(*l.APIKeyEnc); ok {
@@ -347,7 +357,7 @@ func (s *Service) View(ctx context.Context) View {
 	st := s.current(ctx)
 	l, fromEnv := s.resolve(st)
 	v := View{
-		ClaudeOrigin: s.claudeURL, Kind: l.Kind, BaseURL: l.BaseURL, Model: l.Model, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
+		ClaudeOrigin: s.claudeURL, Kind: l.Kind, Vision: l.Vision, BaseURL: l.BaseURL, Model: l.Model, Streaming: l.Streaming, ThinkOnDemand: l.ThinkOnDemand,
 		KeySet: l.APIKey != "", KeyFromEnv: fromEnv && l.APIKey != "", CanStoreKey: s.fkey != nil,
 		Updated: st.Updated, By: st.By,
 	}
@@ -400,7 +410,7 @@ func (s *Service) ForTest(ctx context.Context, in Input) (LLM, error) {
 		}
 	}
 	return LLM{
-		Kind: in.Kind, BaseURL: base, APIKey: key, Model: strings.TrimSpace(in.Model),
+		Kind: in.Kind, Vision: in.Vision || in.Kind == KindClaude, BaseURL: base, APIKey: key, Model: strings.TrimSpace(in.Model),
 		TimeoutSec: s.env.TimeoutSec, MaxToolRounds: s.env.MaxToolRounds,
 		Streaming: in.Streaming, ThinkOnDemand: in.ThinkOnDemand,
 	}, nil
@@ -443,7 +453,7 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 			keep = enc
 		}
 		setJSON(raw, "llm", storedLLM{
-			Kind: &in.Kind, BaseURL: &baseURL, APIKeyEnc: keep, Model: &model,
+			Kind: &in.Kind, Vision: &in.Vision, BaseURL: &baseURL, APIKeyEnc: keep, Model: &model,
 			Streaming: &in.Streaming, ThinkOnDemand: &in.ThinkOnDemand,
 		})
 		setJSON(raw, "updated", s.now().UTC().Format(time.RFC3339))

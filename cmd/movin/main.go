@@ -115,9 +115,12 @@ func serve() error {
 		log.Info("serving frontend and admin guide from disk", "dir", c.StaticDir, "guide", guidePath)
 	}
 	// Documents: index + text under docs/, synced from docs/raw/.
-	syncer := &docs.Syncer{Store: store, Conv: &convert.Poppler{}, Summarise: &docs.LLMSummariser{Settings: sets}, Log: log, Now: time.Now}
+	// One Poppler: syncs and page views take turns, so memory stays flat.
+	poppler := &convert.Poppler{}
+	syncer := &docs.Syncer{Store: store, Conv: poppler, Summarise: &docs.LLMSummariser{Settings: sets}, Log: log, Now: time.Now}
 	library := &docs.Library{Sync: syncer}
-	runner := &agent.Runner{Entries: ents, Docs: library, Loc: c.Location, Log: log, Now: time.Now}
+	viewer := &docs.Viewer{Sync: syncer, Conv: poppler}
+	runner := &agent.Runner{Entries: ents, Docs: library, Viewer: viewer, Loc: c.Location, Log: log, Now: time.Now}
 	var bot *telegram.Bot
 	if c.TelegramToken != "" {
 		bot = &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Docs: syncer, Log: log}

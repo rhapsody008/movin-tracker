@@ -495,7 +495,9 @@ type testResult struct {
 	ToolCalls   bool     `json:"toolCalls"`
 	Models      []string `json:"models,omitempty"`
 	ModelsError string   `json:"modelsError,omitempty"`
-	Error       string   `json:"error,omitempty"`
+	// Vision: the connection accepted a test image (always for Claude).
+	Vision bool   `json:"vision"`
+	Error  string `json:"error,omitempty"`
 }
 
 var probeTool = llm.Tool{Type: "function", Function: llm.FunctionDecl{
@@ -536,9 +538,22 @@ func (s *Server) testSettings(w http.ResponseWriter, r *http.Request) {
 		res.Error = "The endpoint answered but did not return tool_calls. Pick a model that supports tool calling."
 	default:
 		res.OK, res.ToolCalls = true, true
+		res.Vision = cfg.Kind == settings.KindClaude || s.probeVision(r.Context(), c)
 	}
 	s.Log.Info("LLM settings test", "by", userOf(r), "model", cfg.Model, "ok", res.OK, "latencyMs", res.LatencyMs)
 	writeJSON(w, http.StatusOK, res)
+}
+
+// probePNG is a 1×1 red pixel.
+var probePNG = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\xc9\xfe\x92\xef\x00\x00\x00\x00IEND\xaeB`\x82")
+
+// probeVision sends one tiny image; an endpoint that takes it can be given
+// drawing crops. Any error means no.
+func (s *Server) probeVision(ctx context.Context, c llm.Provider) bool {
+	_, err := c.Complete(ctx, llm.Request{
+		Messages: []llm.Message{{Role: "user", Content: "Reply with one word: what colour is this square?", Images: []llm.Image{{MediaType: "image/png", Data: probePNG}}}},
+	})
+	return err == nil
 }
 
 // listModels proxies GET {baseUrl}/models for the drawer, which may name an

@@ -180,7 +180,7 @@ A key is only ever sent to the endpoint it belongs to. If you switch to a **diff
 The PDFs under `docs/raw/` in the bucket, grouped by folder, with pages and what kind each is:
 
 - **text**: the bot can search and read it.
-- **drawing**: a sheet of A3 or larger with text (floor plan, M&E plans); searchable, and the bot can look at it as an image.
+- **drawing**: a sheet of A3 or larger with text (floor plan, M&E plans); searchable, and the bot can look at it as an image: the whole sheet first, then zoomed-in parts to read small labels. That needs a connection that takes images: Claude always does; for an OpenAI-compatible endpoint, **Save** on the LLM tab checks it with a tiny test image.
 - **scanned**: pictures only, or a text layer that comes out as gibberish; listed but not searchable yet (the later OCR phase).
 - **skipped** (not a PDF, or a macOS `._` file), **couldn't be read** (with the reason; retried at every sync) or **removed** (gone from the bucket).
 
@@ -242,6 +242,7 @@ Tell it what's happening, in plain words. It records ideas, decisions, quotes, p
 - "Electrician coming Friday 2pm to check the DB"
 - "What did we decide for the kitchen and what did it cost?"
 - "How do I defrost the fridge?" or "Who do we contact about defects?" (it searches the documents and says which document and page it used)
+- "Where is the DB on the power plan?" (it looks at the drawing)
 
 If something is unclear (which bathroom?), it asks instead of guessing. In the group it stays quiet for ordinary chat between the two of you.
 

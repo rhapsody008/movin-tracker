@@ -92,6 +92,7 @@ type Event struct {
 type Runner struct {
 	Entries *entries.Service
 	Docs    *docs.Library // nil: the documents feature is off
+	Viewer  *docs.Viewer  // nil: pages can't be shown as images
 	Loc     *time.Location
 	Log     *slog.Logger
 	Now     func() time.Time
@@ -114,11 +115,12 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 		return Result{}, err
 	}
 	system := r.SystemSections(snap.Doc, req)
-	if ds := r.docsSection(ctx); ds != "" {
+	if ds := r.docsSection(ctx, cfg); ds != "" {
 		// Between the rules and the entries: it changes only with a sync.
 		system = append([]llm.Section{system[0], {Text: ds, CacheBreak: true}}, system[1:]...)
 	}
-	tools := r.tools()
+	tools := r.tools(cfg)
+	images := 0
 	msgs := make([]llm.Message, 0, len(turns))
 	for _, t := range turns {
 		msgs = append(msgs, llm.Message{Role: t.Role, Content: t.Content})
@@ -175,12 +177,16 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 			if tc.Function.Name == "search_documents" || tc.Function.Name == "read_document_page" {
 				lookedInDocs = true
 			}
-			out, lines := r.exec(ctx, actor, tc)
+			out, imgs, lines := r.exec(ctx, actor, tc)
 			for _, l := range lines {
 				res.Changes = append(res.Changes, l)
 				emit(Event{Type: "change", Text: l.Text, ID: l.ID})
 			}
-			msgs = append(msgs, llm.Message{Role: "tool", ToolCallID: tc.ID, Content: out})
+			if images+len(imgs) > MaxImagesPerTurn {
+				out, imgs = `{"error":"image limit for this message reached; answer from what you have seen"}`, nil
+			}
+			images += len(imgs)
+			msgs = append(msgs, llm.Message{Role: "tool", ToolCallID: tc.ID, Content: out, Images: imgs})
 		}
 	}
 	if strings.Contains(res.Reply, SilentReply) {

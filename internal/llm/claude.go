@@ -6,6 +6,7 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -281,11 +282,18 @@ func claudeMessages(msgs []Message) ([]anthropic.BetaMessageParam, error) {
 	for _, m := range msgs {
 		switch m.Role {
 		case "user":
-			push("user", text(m.Content))
+			blocks := text(m.Content)
+			for _, im := range m.Images {
+				blocks = append(blocks, anthropic.BetaContentBlockParamUnion{OfImage: claudeImage(im)})
+			}
+			push("user", blocks)
 		case "tool":
+			content := []anthropic.BetaToolResultBlockParamContentUnion{{OfText: &anthropic.BetaTextBlockParam{Text: nonEmpty(m.Content)}}}
+			for _, im := range m.Images {
+				content = append(content, anthropic.BetaToolResultBlockParamContentUnion{OfImage: claudeImage(im)})
+			}
 			push("user", []anthropic.BetaContentBlockParamUnion{{OfToolResult: &anthropic.BetaToolResultBlockParam{
-				ToolUseID: m.ToolCallID,
-				Content:   []anthropic.BetaToolResultBlockParamContentUnion{{OfText: &anthropic.BetaTextBlockParam{Text: nonEmpty(m.Content)}}},
+				ToolUseID: m.ToolCallID, Content: content,
 			}}})
 		case "assistant":
 			if native, ok := m.Native.([]anthropic.BetaContentBlockParamUnion); ok {
@@ -308,6 +316,12 @@ func claudeMessages(msgs []Message) ([]anthropic.BetaMessageParam, error) {
 		}
 	}
 	return out, nil
+}
+
+func claudeImage(im Image) *anthropic.BetaImageBlockParam {
+	return &anthropic.BetaImageBlockParam{Source: anthropic.BetaImageBlockParamSourceUnion{OfBase64: &anthropic.BetaBase64ImageSourceParam{
+		Data: base64.StdEncoding.EncodeToString(im.Data), MediaType: anthropic.BetaBase64ImageSourceMediaType(im.MediaType),
+	}}}
 }
 
 func nonEmpty(s string) string {

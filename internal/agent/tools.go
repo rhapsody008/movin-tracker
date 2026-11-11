@@ -64,8 +64,9 @@ var Tools = []llm.Tool{
 
 // exec runs one tool call and returns the JSON result for the model plus
 // the change lines for the user.
-func (r *Runner) exec(ctx context.Context, a entries.Actor, tc llm.ToolCall) (string, []ChangeLine) {
+func (r *Runner) exec(ctx context.Context, a entries.Actor, tc llm.ToolCall) (string, []llm.Image, []ChangeLine) {
 	var args map[string]any
+	var images []llm.Image
 	result, lines, err := func() (any, []ChangeLine, error) {
 		if err := json.Unmarshal([]byte(orEmptyObj(tc.Function.Arguments)), &args); err != nil {
 			return nil, nil, fmt.Errorf("arguments are not valid JSON: %w", err)
@@ -85,6 +86,10 @@ func (r *Runner) exec(ctx context.Context, a entries.Actor, tc llm.ToolCall) (st
 			return r.searchDocuments(ctx, args)
 		case "read_document_page":
 			return r.readDocumentPage(ctx, args)
+		case "view_document_page":
+			out, imgs, err := r.viewDocumentPage(ctx, args)
+			images = imgs
+			return out, nil, err
 		}
 		return nil, nil, fmt.Errorf("unknown tool %q", tc.Function.Name)
 	}()
@@ -95,7 +100,10 @@ func (r *Runner) exec(ctx context.Context, a entries.Actor, tc llm.ToolCall) (st
 		out, _ = json.Marshal(result)
 	}
 	r.Log.Info("agent tool call", "by", a.By, "channel", a.Channel, "tool", tc.Function.Name, "args", tc.Function.Arguments, "result", truncate(string(out), 2000))
-	return string(out), lines
+	if err != nil {
+		images = nil
+	}
+	return string(out), images, lines
 }
 
 // truncate cuts s to at most n runes (never inside a UTF-8 sequence).

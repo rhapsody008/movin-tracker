@@ -154,3 +154,54 @@ func TestEmptyAnswerAfterDocumentSearch(t *testing.T) {
 		t.Fatalf("reply %q", res.Reply)
 	}
 }
+
+// The view tool is offered only to connections with vision; its image goes
+// back inside the tool result; a message may look at no more than 6 images.
+func TestViewDocumentPage(t *testing.T) {
+	lib, _ := docsLib(t, true)
+	ix, _ := lib.Sync.Index(context.Background())
+	plan := ""
+	for _, d := range ix.Docs {
+		if d.Class == docs.ClassDrawing {
+			plan = d.ID
+		}
+	}
+	conv := lib.Sync.Conv.(*convert.Fake)
+	viewer := &docs.Viewer{Sync: lib.Sync, Conv: conv}
+	view := `{"doc":"` + plan + `","page":1,"region":{"x0":0,"y0":0,"x1":0.5,"y1":0.5}}`
+	calls := [][2]string{}
+	for i := 0; i < 7; i++ {
+		calls = append(calls, [2]string{"view_document_page", view})
+	}
+	r, cs := claudeRig(t, claudeStep{stop: "tool_use", calls: calls}, claudeStep{stop: "end_turn", text: "The DB is near the entrance."})
+	r.runner.Docs, r.runner.Viewer = lib, viewer
+	r.cfg.Vision = true
+	res := r.run(t, user("ZY", "web", "where is the DB?"))
+	if !strings.Contains(res.Reply, "DB") {
+		t.Fatalf("reply %q", res.Reply)
+	}
+	var names []struct{ Name string }
+	json.Unmarshal(cs.reqs[0]["tools"], &names)
+	if names[len(names)-1].Name != "view_document_page" {
+		t.Fatalf("view tool not offered with vision: %v", names)
+	}
+	second := string(cs.reqs[1]["messages"])
+	if n := strings.Count(second, `"type":"image"`); n != agent.MaxImagesPerTurn {
+		t.Fatalf("%d images sent, want the cap of %d", n, agent.MaxImagesPerTurn)
+	}
+	if !strings.Contains(second, "image limit for this message reached") {
+		t.Fatalf("7th view not refused")
+	}
+	if !strings.Contains(second, `\"region\":{\"x0\":0,\"y0\":0,\"x1\":0.5,\"y1\":0.5}`) { // inside the tool result's text
+		t.Fatalf("region not echoed: %.300s", second)
+	}
+
+	// Without vision: no view tool.
+	r2, cs2 := claudeRig(t, claudeStep{stop: "end_turn", text: "ok"})
+	r2.runner.Docs, r2.runner.Viewer = lib, viewer
+	r2.cfg.Vision = false
+	r2.run(t, user("ZY", "web", "hi"))
+	if strings.Contains(string(cs2.reqs[0]["tools"]), "view_document_page") {
+		t.Fatal("view tool offered without vision")
+	}
+}

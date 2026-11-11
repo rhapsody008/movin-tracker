@@ -276,3 +276,17 @@ type Word struct {
 	T   string     `json:"t"`
 	Box [4]float64 `json:"b"` // x0, y0, x1, y1
 }
+
+// Region is part of a page as fractions of its as-displayed width and
+// height, origin top-left: {0, 0, 1, 1} is the whole page.
+type Region struct {
+	X0 float64 `json:"x0"`
+	Y0 float64 `json:"y0"`
+	X1 float64 `json:"x1"`
+	Y1 float64 `json:"y1"`
+}
+
+// Valid reports whether the region is inside the page and not empty.
+func (r Region) Valid() bool {
+	return r.X0 >= 0 && r.Y0 >= 0 && r.X1 <= 1 && r.Y1 <= 1 && r.X1-r.X0 > 0.001 && r.Y1-r.Y0 > 0.001
+}

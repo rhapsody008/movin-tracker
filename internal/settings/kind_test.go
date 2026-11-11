@@ -167,3 +167,25 @@ func TestClaudeBaseURLOverride(t *testing.T) {
 		t.Fatalf("override: %q", got)
 	}
 }
+
+// Claude always has vision; an OpenAI-compatible connection has what its
+// Save check found.
+func TestVision(t *testing.T) {
+	r := newRig(t, "", envTG(t))
+	ctx := context.Background()
+	if r.svc.Resolve(ctx).Vision {
+		t.Fatal("openai default should not have vision")
+	}
+	if _, err := r.svc.Save(ctx, "zy", settings.Input{BaseURL: "https://llm.example/v1", Model: "m", Vision: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !r.svc.Resolve(ctx).Vision || !r.svc.View(ctx).Vision {
+		t.Fatal("saved vision lost")
+	}
+	if _, err := r.svc.Save(ctx, "zy", settings.Input{Kind: settings.KindClaude, Model: "claude-opus-5-5"}); err != nil {
+		t.Fatal(err)
+	}
+	if !r.svc.Resolve(ctx).Vision {
+		t.Fatal("claude without vision")
+	}
+}

@@ -23,14 +23,8 @@ type Converter interface {
 	Render(ctx context.Context, pdf []byte, page int, region *Region, longEdge int) ([]byte, error)
 }
 
-// Region is part of a page as fractions of its as-displayed width and
-// height, origin top-left: {0, 0, 1, 1} is the whole page.
-type Region struct{ X0, Y0, X1, Y1 float64 }
-
-// Valid reports whether the region is inside the page and not empty.
-func (r Region) Valid() bool {
-	return r.X0 >= 0 && r.Y0 >= 0 && r.X1 <= 1 && r.Y1 <= 1 && r.X1-r.X0 > 0.001 && r.Y1-r.Y0 > 0.001
-}
+// Region is part of a page (defined in docs so both packages share it).
+type Region = docs.Region
 
 // ErrBadPage is returned for a page number outside the document.
 var ErrBadPage = errors.New("no such page")

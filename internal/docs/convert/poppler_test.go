@@ -133,7 +133,7 @@ func TestPixelBox(t *testing.T) {
 	if h != 1568 || w < 1108 || w > 1111 || x < 1108 || x > 1111 || y != 0 || dpi < 67.0 || dpi > 67.1 {
 		t.Fatalf("dpi %.2f box %d,%d %dx%d", dpi, x, y, w, h)
 	}
-	if !(Region{0, 0, 1, 1}).Valid() || (Region{0.2, 0, 0.2, 1}).Valid() || (Region{-0.1, 0, 1, 1}).Valid() {
+	if !(Region{X0: 0, Y0: 0, X1: 1, Y1: 1}).Valid() || (Region{X0: 0.2, Y0: 0, X1: 0.2, Y1: 1}).Valid() || (Region{X0: -0.1, Y0: 0, X1: 1, Y1: 1}).Valid() {
 		t.Fatal("Valid()")
 	}
 }
