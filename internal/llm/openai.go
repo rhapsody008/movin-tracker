@@ -1,6 +1,7 @@
-// Package llm is a minimal client for an OpenAI-compatible
-// /chat/completions endpoint with tool calling.
 package llm
+
+// The OpenAI-compatible provider: /chat/completions with tool calling and
+// SSE streaming, /models for the list. vMLX on the Mac today, NAI later.
 
 import (
 	"bufio"
@@ -19,35 +20,6 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
 
-type Message struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-}
-
-type ToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Function FunctionCall `json:"function"`
-}
-
-type FunctionCall struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-}
-
-type Tool struct {
-	Type     string       `json:"type"`
-	Function FunctionDecl `json:"function"`
-}
-
-type FunctionDecl struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
-}
-
 type request struct {
 	Model      string    `json:"model"`
 	Messages   []Message `json:"messages"`
@@ -59,29 +31,16 @@ type request struct {
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 }
 
-// APIError is a non-2xx answer from the endpoint, kept short for the UI.
-type APIError struct {
-	Status int
-	Body   string
-}
-
-func (e *APIError) Error() string {
-	return fmt.Sprintf("endpoint returned %d: %s", e.Status, e.Body)
-}
-
-type Client struct {
+type openAI struct {
 	cfg  settings.LLM
 	http *http.Client
-	// Think asks for thinking on this turn. It only matters when
-	// cfg.ThinkOnDemand is set; otherwise the server decides.
-	Think bool
 }
 
-func New(cfg settings.LLM) *Client {
-	return &Client{cfg: cfg, http: &http.Client{Timeout: time.Duration(cfg.TimeoutSec) * time.Second}}
+func newOpenAI(cfg settings.LLM) *openAI {
+	return &openAI{cfg: cfg, http: &http.Client{Timeout: time.Duration(cfg.TimeoutSec) * time.Second}}
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
+func (c *openAI) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -131,7 +90,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 }
 
 // scrub removes the API key from an error in case an endpoint echoes it.
-func (c *Client) scrub(err error) error {
+func (c *openAI) scrub(err error) error {
 	if c.cfg.APIKey == "" || !strings.Contains(err.Error(), c.cfg.APIKey) {
 		return err
 	}
@@ -139,13 +98,13 @@ func (c *Client) scrub(err error) error {
 }
 
 // anthropic reports whether the endpoint is Anthropic's own API.
-func (c *Client) anthropic() bool {
+func (c *openAI) anthropic() bool {
 	u, err := url.Parse(c.cfg.BaseURL)
 	return err == nil && strings.EqualFold(u.Hostname(), "api.anthropic.com")
 }
 
 // Models lists the model ids the endpoint offers.
-func (c *Client) Models(ctx context.Context) ([]string, error) {
+func (c *openAI) Models(ctx context.Context) ([]string, error) {
 	path := "/models"
 	if c.anthropic() {
 		path += "?limit=1000" // it pages, 20 by default
@@ -171,46 +130,80 @@ func (c *Client) Models(ctx context.Context) ([]string, error) {
 	return ids, nil
 }
 
-// Complete runs one chat completion. With stream set, text deltas go to
-// onText as they arrive and tool call fragments are reassembled.
-// forceAnswer sends tool_choice "none" so the model has to reply in words.
-func (c *Client) Complete(ctx context.Context, msgs []Message, tools []Tool, forceAnswer, stream bool, onText func(string)) (Message, error) {
-	req := request{
-		Model: c.cfg.Model, Messages: msgs, Tools: tools,
-		Stream: stream,
+// Complete runs one chat completion. The system sections are joined into
+// one system message. With Stream set, text deltas go to OnText as they
+// arrive and tool call fragments are reassembled. ForceAnswer sends
+// tool_choice "none" so the model has to reply in words.
+func (c *openAI) Complete(ctx context.Context, in Request) (Response, error) {
+	msgs := in.Messages
+	if sys := joinSystem(in.System); sys != "" {
+		msgs = append([]Message{{Role: "system", Content: sys}}, in.Messages...)
 	}
-	if forceAnswer && len(tools) > 0 {
+	req := request{
+		Model: c.cfg.Model, Messages: msgs, Tools: in.Tools,
+		Stream: in.Stream,
+	}
+	if in.ForceAnswer && len(in.Tools) > 0 {
 		req.ToolChoice = "none"
 	}
-	if c.cfg.ThinkOnDemand && !c.Think {
+	if c.cfg.ThinkOnDemand && !in.Think {
 		req.ChatTemplateKwargs = map[string]any{"enable_thinking": false}
 	}
 	resp, err := c.do(ctx, http.MethodPost, "/chat/completions", req)
 	if err != nil {
-		return Message{}, err
+		return Response{}, err
 	}
 	defer resp.Body.Close()
-	if !stream || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+	if !in.Stream || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		var out struct {
 			Choices []struct {
-				Message Message `json:"message"`
+				Message      Message `json:"message"`
+				FinishReason string  `json:"finish_reason"`
 			} `json:"choices"`
+			Usage struct {
+				PromptTokens        int `json:"prompt_tokens"`
+				CompletionTokens    int `json:"completion_tokens"`
+				PromptTokensDetails struct {
+					CachedTokens int `json:"cached_tokens"`
+				} `json:"prompt_tokens_details"`
+			} `json:"usage"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			return Message{}, fmt.Errorf("decode completion: %w", err)
+			return Response{}, fmt.Errorf("decode completion: %w", err)
 		}
 		if len(out.Choices) == 0 {
-			return Message{}, fmt.Errorf("endpoint returned no choices")
+			return Response{}, fmt.Errorf("endpoint returned no choices")
 		}
 		m := out.Choices[0].Message
 		m.Role = "assistant"
 		m.Content = StripSpecialTokens(m.Content)
-		if onText != nil && m.Content != "" {
-			onText(m.Content)
+		if in.OnText != nil && m.Content != "" {
+			in.OnText(m.Content)
 		}
-		return m, nil
+		u := out.Usage
+		return Response{
+			Message: m, Stop: stopOf(m, out.Choices[0].FinishReason),
+			Usage: Usage{In: u.PromptTokens, Out: u.CompletionTokens, CacheRead: u.PromptTokensDetails.CachedTokens},
+		}, nil
 	}
-	return readStream(resp.Body, onText)
+	m, finish, err := readStream(resp.Body, in.OnText)
+	if err != nil {
+		return Response{}, err
+	}
+	return Response{Message: m, Stop: stopOf(m, finish)}, nil
+}
+
+// stopOf maps an OpenAI finish_reason; tool calls win over the reason.
+func stopOf(m Message, finish string) Stop {
+	switch {
+	case len(m.ToolCalls) > 0:
+		return StopTool
+	case finish == "length":
+		return StopMaxTokens
+	case finish == "content_filter":
+		return StopRefusal
+	}
+	return StopEnd
 }
 
 // specialTokenRe matches chat-template control tokens that some local
@@ -225,7 +218,7 @@ func StripSpecialTokens(s string) string {
 	return strings.TrimSpace(specialTokenRe.ReplaceAllString(s, ""))
 }
 
-func readStream(r io.Reader, onText func(string)) (Message, error) {
+func readStream(r io.Reader, onText func(string)) (Message, string, error) {
 	type delta struct {
 		Content   string `json:"content"`
 		ToolCalls []struct {
@@ -239,6 +232,7 @@ func readStream(r io.Reader, onText func(string)) (Message, error) {
 		} `json:"tool_calls"`
 	}
 	var text strings.Builder
+	var finish string
 	calls := map[int]*ToolCall{}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
@@ -253,7 +247,8 @@ func readStream(r io.Reader, onText func(string)) (Message, error) {
 		}
 		var chunk struct {
 			Choices []struct {
-				Delta delta `json:"delta"`
+				Delta        delta  `json:"delta"`
+				FinishReason string `json:"finish_reason"`
 			} `json:"choices"`
 			Error *struct {
 				Message string `json:"message"`
@@ -263,10 +258,13 @@ func readStream(r io.Reader, onText func(string)) (Message, error) {
 			continue
 		}
 		if chunk.Error != nil {
-			return Message{}, fmt.Errorf("endpoint error mid-stream: %s", chunk.Error.Message)
+			return Message{}, "", fmt.Errorf("endpoint error mid-stream: %s", chunk.Error.Message)
 		}
 		if len(chunk.Choices) == 0 {
 			continue
+		}
+		if f := chunk.Choices[0].FinishReason; f != "" {
+			finish = f
 		}
 		d := chunk.Choices[0].Delta
 		d.Content = StripSpecialTokens(d.Content)
@@ -292,7 +290,7 @@ func readStream(r io.Reader, onText func(string)) (Message, error) {
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return Message{}, fmt.Errorf("read stream: %w", err)
+		return Message{}, "", fmt.Errorf("read stream: %w", err)
 	}
 	m := Message{Role: "assistant", Content: StripSpecialTokens(text.String())}
 	idx := make([]int, 0, len(calls))
@@ -307,5 +305,5 @@ func readStream(r io.Reader, onText func(string)) (Message, error) {
 		}
 		m.ToolCalls = append(m.ToolCalls, *c)
 	}
-	return m, nil
+	return m, finish, nil
 }

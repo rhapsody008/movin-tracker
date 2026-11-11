@@ -507,10 +507,12 @@ func (s *Server) testSettings(w http.ResponseWriter, r *http.Request) {
 		res.ModelsError = err.Error()
 	}
 	start := time.Now()
-	m, err := c.Complete(r.Context(), []llm.Message{
-		{Role: "system", Content: "You set dates on a board. Always use the tool."},
-		{Role: "user", Content: "We move in on 2026-12-05."},
-	}, []llm.Tool{probeTool}, false, false, nil)
+	out, err := c.Complete(r.Context(), llm.Request{
+		System:   []llm.Section{{Text: "You set dates on a board. Always use the tool."}},
+		Messages: []llm.Message{{Role: "user", Content: "We move in on 2026-12-05."}},
+		Tools:    []llm.Tool{probeTool},
+	})
+	m := out.Message
 	res.LatencyMs = time.Since(start).Milliseconds()
 	switch {
 	case err != nil:

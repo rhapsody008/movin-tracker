@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/rhapsody008/movin-tracker/internal/entries"
+	"github.com/rhapsody008/movin-tracker/internal/llm"
 )
 
 // PromptEntries is how many recently updated entries the system prompt
@@ -54,9 +55,20 @@ func orNotSet(p *string) string {
 	return *p
 }
 
-// SystemPrompt carries the rules, the room list and the most recently
-// updated entries as compact JSON (non-archived only, notes left out).
+// SystemPrompt is the system prompt as one string, as providers without
+// prompt caching see it.
 func (r *Runner) SystemPrompt(d *entries.Doc, req Request) string {
+	var b strings.Builder
+	for _, s := range r.SystemSections(d, req) {
+		b.WriteString(s.Text)
+	}
+	return b.String()
+}
+
+// SystemSections carries the rules, the room list and the most recently
+// updated entries as compact JSON (non-archived only, notes left out),
+// most stable part first.
+func (r *Runner) SystemSections(d *entries.Doc, req Request) []llm.Section {
 	now := r.Now().In(r.Loc)
 	live := make([]entries.Entry, 0, len(d.Entries))
 	for _, e := range d.Entries {
@@ -105,10 +117,12 @@ Rules:
 		fmt.Fprintf(&b, `
 This is a group chat; each user message starts with the speaker's name. If a message needs nothing recorded and asks you nothing (chat between the two of them), reply with exactly %s.`, SilentReply)
 	}
+	rules := b.String()
+	b.Reset()
 	// What changes between turns goes last.
 	fmt.Fprintf(&b, `
 
 Today is %s (%s). Key collection: %s. Move-in: %s.
 Current entries%s: %s`, now.Format("2006-01-02"), now.Format("Monday"), orNotSet(d.Meta.KeyDate), orNotSet(d.Meta.MoveDate), more, listJSON)
-	return b.String()
+	return []llm.Section{{Text: rules, CacheBreak: true}, {Text: b.String()}}
 }

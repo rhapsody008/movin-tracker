@@ -93,14 +93,14 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 	if err != nil {
 		return Result{}, err
 	}
-	msgs := []llm.Message{{Role: "system", Content: r.SystemPrompt(snap.Doc, req)}}
+	system := r.SystemSections(snap.Doc, req)
+	msgs := make([]llm.Message, 0, len(turns))
 	for _, t := range turns {
 		msgs = append(msgs, llm.Message{Role: t.Role, Content: t.Content})
 	}
 
 	actor := entries.Actor{By: req.By, Channel: req.Channel}
 	client := llm.New(cfg)
-	client.Think = req.Think
 	res := Result{Changes: []ChangeLine{}, Model: cfg.Model}
 	// MaxToolRounds counts rounds that may call tools. If the model is still
 	// calling tools after that, one more round is forced to answer in words,
@@ -108,10 +108,14 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 	rounds := max(cfg.MaxToolRounds, 1) + 1
 	for round := 1; round <= rounds; round++ {
 		force := round == rounds
-		m, err := client.Complete(ctx, msgs, Tools, force, cfg.Streaming, func(s string) { emit(Event{Type: "delta", Text: s}) })
+		out, err := client.Complete(ctx, llm.Request{
+			System: system, Messages: msgs, Tools: Tools, ForceAnswer: force, Stream: cfg.Streaming, Think: req.Think,
+			OnText: func(s string) { emit(Event{Type: "delta", Text: s}) },
+		})
 		if err != nil {
 			return res, err
 		}
+		m := out.Message
 		if len(m.ToolCalls) == 0 || force {
 			res.Reply = strings.TrimSpace(m.Content)
 			break
@@ -120,7 +124,7 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 			// Text before a tool call is a preamble; the final answer replaces it.
 			emit(Event{Type: "reset"})
 		}
-		msgs = append(msgs, llm.Message{Role: "assistant", Content: m.Content, ToolCalls: m.ToolCalls})
+		msgs = append(msgs, llm.Message{Role: "assistant", Content: m.Content, ToolCalls: m.ToolCalls, Native: m.Native})
 		for _, tc := range m.ToolCalls {
 			out, lines := r.exec(ctx, actor, tc)
 			for _, l := range lines {
