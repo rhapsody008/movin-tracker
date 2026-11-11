@@ -107,8 +107,9 @@ func serve() error {
 		log.Info("serving frontend from disk", "dir", c.StaticDir)
 	}
 	runner := &agent.Runner{Entries: ents, Loc: c.Location, Log: log, Now: time.Now}
+	var bot *telegram.Bot
 	if c.TelegramToken != "" {
-		bot := &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Log: log}
+		bot = &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Log: log}
 		go func() {
 			if err := bot.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Error("telegram bot stopped", "err", err)
@@ -119,7 +120,7 @@ func serve() error {
 	}
 	srv := &server.Server{
 		Entries: ents, Settings: sets, Store: store, Static: static, Log: log,
-		Agent:      runner,
+		Agent: runner, Bot: bot,
 		AuthHeader: c.AuthHeader, AllowedEmails: c.AllowedEmails, DevEmail: c.DevEmail,
 	}
 	hs := &http.Server{

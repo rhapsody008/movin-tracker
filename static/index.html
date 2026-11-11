@@ -224,6 +224,25 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
 .steps li.bad{border-left-color:var(--danger)}
 .steps li .ms{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
 .steps li .err{display:block;color:var(--danger);font-size:13px;overflow-wrap:anywhere}
+.rows{display:grid;gap:8px}
+.rowi{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:8px;align-items:center}
+.rowi.g{grid-template-columns:minmax(0,1fr) auto}
+.rowi input{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.rowi .rm{background:none;border:0;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px}
+.panel h3{font-size:15px;font-family:var(--body);font-weight:700;margin:4px 0 0}
+.panel .warn{color:var(--danger);font-size:14px;margin:0}
+.panel .warn:empty{display:none}
+.rej{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:14px}
+.rej li{background:var(--sunk);border-radius:8px;padding:8px 10px;display:grid;gap:6px}
+.rej .who{overflow-wrap:anywhere}
+.rej .why{color:var(--muted);font-size:13px}
+.rej .btns{display:flex;gap:8px;flex-wrap:wrap}
+.rej .btns button{font-size:13px;padding:4px 10px}
+.stline{font-size:14px;border-radius:8px;padding:8px 10px;background:var(--sunk);margin:0;border-left:4px solid var(--line)}
+.stline.ok{border-left-color:var(--ok)}
+.stline.bad{border-left-color:var(--danger)}
+.panel .acts{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px}
+.panel .acts div{display:flex;gap:8px}
 @media (prefers-reduced-motion:no-preference){ .drawer{transition:transform .2s ease, visibility .2s} }
 @media (max-width:600px){ .drawer{width:100vw;border-left:0} }
 </style>
@@ -291,7 +310,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
   <nav class="tabs" role="tablist" aria-label="Settings sections">
     <button type="button" role="tab" id="tab-storage" aria-controls="panel-storage" data-tab="storage">Storage</button>
     <button type="button" role="tab" id="tab-llm" aria-controls="setForm" data-tab="llm">LLM</button>
-    <button type="button" role="tab" id="tab-telegram" aria-controls="panel-telegram" data-tab="telegram" hidden>Telegram</button>
+    <button type="button" role="tab" id="tab-telegram" aria-controls="panel-telegram" data-tab="telegram">Telegram</button>
     <button type="button" role="tab" id="tab-drawings" aria-controls="panel-drawings" data-tab="drawings" hidden>Drawings</button>
   </nav>
   <div class="panel" id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden>
@@ -301,6 +320,27 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     <div><button class="btn ghost" type="button" id="storageTest">Test connection</button></div>
     <p class="sub">Writes a scratch object under <code>_probe/</code>, checks that a stale write is refused (that is what protects concurrent edits), then deletes it.</p>
     <ul class="steps" id="storageSteps" aria-live="polite"></ul>
+  </div>
+  <div class="panel" id="panel-telegram" role="tabpanel" aria-labelledby="tab-telegram" hidden>
+    <p class="stline" id="tgStatus">Loading…</p>
+    <p class="sub" id="tgSource"></p>
+    <h3>People</h3>
+    <p class="sub">Telegram user ID and the name entries will show as "by". Allowed people can use the bot in a private chat, and in any allowed group.</p>
+    <div class="rows" id="tgUsers"></div>
+    <div><button class="btn ghost" type="button" id="tgAddUser">Add person</button></div>
+    <p class="warn" id="tgWarn"></p>
+    <h3>Groups</h3>
+    <p class="sub">Group chat IDs start with a minus sign. In a group, the bot needs both the group and the person on the list.</p>
+    <div class="rows" id="tgGroups"></div>
+    <div><button class="btn ghost" type="button" id="tgAddGroup">Add group</button></div>
+    <h3>Recently refused</h3>
+    <p class="sub">Who messaged the bot but isn't allowed. This is the easy way to find your group's ID: add the bot to the group, send any message, then add it here.</p>
+    <ul class="rej" id="tgRejected"></ul>
+    <p class="result" id="tgResult" aria-live="polite"></p>
+    <div class="acts">
+      <button class="link" type="button" id="tgUseEnv">Go back to the server's defaults</button>
+      <div><button class="btn ghost" type="button" id="tgCancel">Cancel</button><button class="btn" type="button" id="tgSave" disabled>Save</button></div>
+    </div>
   </div>
   <form id="setForm" role="tabpanel" aria-labelledby="tab-llm" autocomplete="off" hidden>
     <label>Endpoint URL<input name="baseUrl" type="url" placeholder="https://…/v1" required></label>
@@ -870,16 +910,19 @@ async function loadModels(){
 }
 function fillModels(list){ $("modelList").innerHTML = (list||[]).map(m=>`<option value="${esc(m)}">`).join(""); }
 /* ---------- settings: tabs ---------- */
-const TABS = ["storage","llm"]; // telegram and drawings join in later steps
+const TABS = ["storage","llm","telegram"]; // same order as on screen; drawings joins in phase 1.5
 let curTab = "llm", opener = null;
 function showTab(tab){
   if(!TABS.includes(tab)) tab = "llm";
   curTab = tab; store.set("movin.adminTab", tab);
   document.querySelectorAll(".tabs [data-tab]").forEach(b=>{ const on = b.dataset.tab===tab; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; });
   $("panel-storage").hidden = tab!=="storage";
+  $("panel-telegram").hidden = tab!=="telegram";
   SF.hidden = $("llmFoot").hidden = tab!=="llm";
+  clearInterval(tgTimer); tgTimer = null;
   if(tab==="storage") loadStorage();
   if(tab==="llm") loadLLM();
+  if(tab==="telegram"){ loadTelegram(); tgTimer = setInterval(()=>{ if($("drawer").classList.contains("open")) refreshTelegramStatus(); }, 10000); }
 }
 document.querySelector(".tabs").addEventListener("click", e=>{ const b=e.target.closest("[data-tab]"); if(b) { showTab(b.dataset.tab); b.focus(); } });
 document.querySelector(".tabs").addEventListener("keydown", e=>{
@@ -927,6 +970,89 @@ $("storageTest").onclick = async ()=>{
   }catch(e){ list.innerHTML = `<li class="bad">${esc(e.message)}</li>`; }
   finally{ b.disabled = false; }
 };
+
+/* ---------- settings: telegram ---------- */
+let tgState = null, tgDraft = null, tgTimer = null;
+const tgSig = d => JSON.stringify({u:d.users.map(u=>[u.id.trim(), u.name.trim()]), g:d.groups.map(g=>g.trim())});
+async function loadTelegram(){
+  $("tgResult").textContent = ""; $("tgResult").className = "result";
+  try{ tgState = await api("GET", "/api/admin/telegram"); }
+  catch(e){ $("tgStatus").className = "stline bad"; $("tgStatus").textContent = "Couldn't load Telegram settings: " + e.message; return; }
+  const a = tgState.allowlist;
+  tgDraft = {users:(a.users||[]).map(u=>({...u})), groups:[...(a.groups||[])]};
+  renderTelegram();
+}
+async function refreshTelegramStatus(){
+  try{ const d = await api("GET", "/api/admin/telegram"); tgState = {...tgState, status:d.status}; renderTGStatus(); renderTGRejected(); }catch{}
+}
+function renderTGStatus(){
+  const st = tgState.status, el = $("tgStatus");
+  let t, cls = "stline";
+  if(!st.tokenSet){ t = "The bot is off: TELEGRAM_BOT_TOKEN is not set on the server. You can still prepare the lists below."; }
+  else if(st.running){ cls += " ok"; t = `Running as @${st.botUsername}. ` + (st.lastUpdateAt ? `Last message ${ago(st.lastUpdateAt)}.` : "No messages yet."); }
+  else { cls += " bad"; t = "The bot is not running."; }
+  if(st.lastError) t += ` Last error ${ago(st.lastErrorAt)}: ${st.lastError}`;
+  el.className = cls; el.textContent = t;
+}
+function renderTGRejected(){
+  const list = (tgState.status.rejected||[]);
+  if(!list.length){ $("tgRejected").innerHTML = `<li class="why">Nobody yet.</li>`; return; }
+  const haveU = new Set(tgDraft.users.map(u=>u.id.trim())), haveG = new Set(tgDraft.groups.map(g=>g.trim()));
+  $("tgRejected").innerHTML = list.map((r,i)=>{
+    const where = r.chatType==="private" ? "Private chat" : `Group “${r.chatTitle||r.chatId}” (${r.chatId})`;
+    const btns = [];
+    if(r.fromId && r.fromId!=="0" && !haveU.has(r.fromId)) btns.push(`<button class="btn ghost" type="button" data-tgaddu="${i}">Add ${esc((r.fromName||"person").split(" ")[0])}</button>`);
+    if(r.chatType!=="private" && !haveG.has(r.chatId)) btns.push(`<button class="btn ghost" type="button" data-tgaddg="${i}">Add this group</button>`);
+    return `<li><span class="who">${esc(where)}${r.fromName?` · ${esc(r.fromName)} (${esc(r.fromId)})`:""}</span>
+      <span class="why">${esc(r.reason)} · ${esc(ago(r.at))}</span>${btns.length?`<span class="btns">${btns.join("")}</span>`:""}</li>`;
+  }).join("");
+}
+function renderTelegram(){
+  renderTGStatus();
+  const a = tgState.allowlist;
+  $("tgSource").textContent = a.fromEnv ? "Using the server's defaults (TELEGRAM_ALLOWED_IDS and TELEGRAM_ALLOWED_CHATS). Saving here replaces them."
+    : `Saved ${new Date(a.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${a.by}. This replaces the server's defaults.`;
+  $("tgUseEnv").hidden = a.fromEnv;
+  $("tgUsers").innerHTML = tgDraft.users.map((u,i)=>`<div class="rowi"><input inputmode="numeric" placeholder="User ID" aria-label="Telegram user ID" value="${esc(u.id)}" data-tgu="${i}" data-f="id"><input placeholder="Name" aria-label="Name" maxlength="40" value="${esc(u.name)}" data-tgu="${i}" data-f="name"><button class="rm" type="button" aria-label="Remove" data-tgrmu="${i}">×</button></div>`).join("")
+    || `<p class="sub">No one yet.</p>`;
+  $("tgGroups").innerHTML = tgDraft.groups.map((g,i)=>`<div class="rowi g"><input inputmode="numeric" placeholder="-100…" aria-label="Group chat ID" value="${esc(g)}" data-tgg="${i}"><button class="rm" type="button" aria-label="Remove" data-tgrmg="${i}">×</button></div>`).join("")
+    || `<p class="sub">No groups yet.</p>`;
+  renderTGRejected();
+  tgDirty();
+}
+function tgDirty(){
+  const a = tgState.allowlist;
+  $("tgSave").disabled = tgSig(tgDraft) === tgSig({users:a.users||[], groups:a.groups||[]});
+  $("tgWarn").textContent = tgDraft.users.length ? "" : "With nobody on the list, the bot ignores every message.";
+}
+$("panel-telegram").addEventListener("input", e=>{
+  const t = e.target;
+  if(t.dataset.tgu!==undefined) tgDraft.users[Number(t.dataset.tgu)][t.dataset.f] = t.value;
+  else if(t.dataset.tgg!==undefined) tgDraft.groups[Number(t.dataset.tgg)] = t.value;
+  tgDirty();
+});
+$("panel-telegram").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  const rej = (tgState && tgState.status.rejected) || [];
+  if(b.dataset.tgrmu!==undefined){ tgDraft.users.splice(Number(b.dataset.tgrmu),1); renderTelegram(); }
+  else if(b.dataset.tgrmg!==undefined){ tgDraft.groups.splice(Number(b.dataset.tgrmg),1); renderTelegram(); }
+  else if(b.dataset.tgaddu!==undefined){ const r = rej[Number(b.dataset.tgaddu)]; tgDraft.users.push({id:r.fromId, name:(r.fromName||"").split(" (@")[0].split(" ")[0] || r.fromId}); renderTelegram(); }
+  else if(b.dataset.tgaddg!==undefined){ tgDraft.groups.push(rej[Number(b.dataset.tgaddg)].chatId); renderTelegram(); }
+});
+$("tgAddUser").onclick = ()=>{ tgDraft.users.push({id:"", name:""}); renderTelegram(); $("tgUsers").querySelector(".rowi:last-child input")?.focus(); };
+$("tgAddGroup").onclick = ()=>{ tgDraft.groups.push(""); renderTelegram(); $("tgGroups").querySelector(".rowi:last-child input")?.focus(); };
+$("tgCancel").onclick = closeSettings;
+async function saveTelegram(body, okMsg){
+  const r = $("tgResult");
+  $("tgSave").disabled = true;
+  try{
+    const d = await api("PUT", "/api/settings/telegram", body);
+    tgState = d; tgDraft = {users:d.allowlist.users.map(u=>({...u})), groups:[...d.allowlist.groups]};
+    renderTelegram(); r.className = "result ok"; r.textContent = okMsg;
+  }catch(e){ r.className = "result bad"; r.textContent = e.message; tgDirty(); }
+}
+$("tgSave").onclick = ()=>saveTelegram({users:tgDraft.users.filter(u=>u.id.trim()||u.name.trim()), groups:tgDraft.groups.filter(g=>g.trim())}, "Saved. The bot uses the new list from the next message.");
+$("tgUseEnv").onclick = ()=>{ if(confirm("Drop the list saved here and use the server's defaults again?")) saveTelegram({useEnv:true}, "Back on the server's defaults."); };
 
 /* ---------- settings: LLM ---------- */
 async function loadLLM(){

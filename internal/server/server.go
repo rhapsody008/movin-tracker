@@ -20,12 +20,14 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/llm"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
+	"github.com/rhapsody008/movin-tracker/internal/telegram"
 )
 
 type Server struct {
 	Entries  *entries.Service
 	Settings *settings.Service
 	Agent    *agent.Runner
+	Bot      *telegram.Bot // nil when TELEGRAM_BOT_TOKEN is not set
 	Store    objstore.Store
 	Static   fs.FS
 	Log      *slog.Logger
@@ -62,6 +64,8 @@ func (s *Server) Handler() http.Handler {
 	})
 	api.HandleFunc("GET /api/admin/storage", s.getStorage)
 	api.HandleFunc("POST /api/admin/storage/test", s.testStorage)
+	api.HandleFunc("GET /api/admin/telegram", s.getTelegram)
+	api.HandleFunc("PUT /api/settings/telegram", s.putTelegram)
 	api.HandleFunc("GET /api/settings/llm", s.getSettings)
 	api.HandleFunc("PUT /api/settings/llm", s.putSettings)
 	api.HandleFunc("POST /api/settings/llm/test", s.testSettings)

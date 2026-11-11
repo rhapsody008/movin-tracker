@@ -23,6 +23,7 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/server"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
+	"github.com/rhapsody008/movin-tracker/internal/telegram"
 	"github.com/rhapsody008/movin-tracker/internal/testutil"
 )
 
@@ -636,5 +637,50 @@ func TestStorageProbeCatchesIgnoredConditions(t *testing.T) {
 	}
 	if _, err := store.Stat(context.Background(), m["key"].(string)); err == nil {
 		t.Fatal("a failed probe must still clean up")
+	}
+}
+
+func TestTelegramAdmin(t *testing.T) {
+	var sets *settings.Service
+	e := setup(t, objstore.NewMemory(), func(s *server.Server) { sets = s.Settings })
+	code, m, body := e.do(t, "GET", "/api/admin/telegram", "")
+	st, _ := m["status"].(map[string]any)
+	al, _ := m["allowlist"].(map[string]any)
+	if code != 200 || st["tokenSet"] != false || st["running"] != false || al["fromEnv"] != true || len(al["users"].([]any)) != 0 {
+		t.Fatalf("no bot: %d %s", code, body)
+	}
+	// The allowlist is editable even without a token.
+	code, m, body = e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"111","name":"ZY"},{"id":"222","name":"Partner"}],"groups":["-1001"]}`)
+	al, _ = m["allowlist"].(map[string]any)
+	if code != 200 || al["fromEnv"] != false || len(al["users"].([]any)) != 2 || al["by"] != "zy@example.com" {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	// What the bot reads next is the saved list (no restart involved).
+	tg := sets.ResolveTelegram(context.Background())
+	if name, ok := tg.UserName(222); !ok || name != "Partner" || !tg.GroupAllowed(-1001) {
+		t.Fatalf("bot would see: %+v", tg)
+	}
+	if code, _, body := e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"-5","name":"x"}]}`); code != 400 || !strings.Contains(body, "positive") {
+		t.Fatalf("invalid id: %d %s", code, body)
+	}
+	if code, m, _ := e.do(t, "PUT", "/api/settings/telegram", `{"useEnv":true}`); code != 200 || m["allowlist"].(map[string]any)["fromEnv"] != true {
+		t.Fatalf("useEnv: %d %v", code, m)
+	}
+}
+
+func TestTelegramAdminNeverShowsToken(t *testing.T) {
+	const tok = "987654321:AAsecretTokenValueThatMustNotLeak"
+	e := setup(t, objstore.NewMemory(), func(s *server.Server) {
+		s.Bot = &telegram.Bot{API: telegram.New(tok, "http://127.0.0.1:1"), Settings: s.Settings, Log: s.Log}
+	})
+	code, m, body := e.do(t, "GET", "/api/admin/telegram", "")
+	if code != 200 || m["status"].(map[string]any)["tokenSet"] != true {
+		t.Fatalf("with token: %d %s", code, body)
+	}
+	_, _, body2 := e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"1","name":"A"}]}`)
+	for _, b := range []string{body, body2, e.logs.String()} {
+		if strings.Contains(b, tok) || strings.Contains(b, "AAsecret") {
+			t.Fatalf("token leaked: %s", b)
+		}
 	}
 }

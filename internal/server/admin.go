@@ -11,6 +11,8 @@ import (
 
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
+	"github.com/rhapsody008/movin-tracker/internal/settings"
+	"github.com/rhapsody008/movin-tracker/internal/telegram"
 )
 
 // ---------- admin: storage ----------
@@ -158,4 +160,30 @@ func (s *Server) probe(ctx context.Context) probeResult {
 		}
 	}
 	return res
+}
+
+// ---------- admin: telegram ----------
+
+type telegramView struct {
+	// Status is the bot's state; it never includes the token, only whether
+	// one is set.
+	Status    telegram.Status       `json:"status"`
+	Allowlist settings.TelegramView `json:"allowlist"`
+}
+
+func (s *Server) getTelegram(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: s.Settings.ViewTelegram(r.Context())})
+}
+
+func (s *Server) putTelegram(w http.ResponseWriter, r *http.Request) {
+	var in settings.TelegramInput
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := s.Settings.SaveTelegram(r.Context(), userOf(r), in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: v})
 }

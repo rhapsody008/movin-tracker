@@ -5,7 +5,7 @@ Source: planner, 2026-11-11 (original plan + delta for ZY's decisions and the ma
 Rules for every step: changes are to the local repo only; `make lint && make test` green after each step; rollback = revert that step's files against baseline `155d264`. Deletions, new vendored dependencies, `kubectl apply`, IAM changes and secrets need ZY's approval.
 
 ## Order
-Phase 1: 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 1.6a → 1.7 → 1.7a → 1.8 → 1.8a → 1.9 → 1.9a → 1.10 → 1.11
+Phase 1: 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 1.6a → 1.7 → 1.7a → 1.8 → 1.8a → 1.9 → 1.9a → 1.10 → 1.11 → 1.12
 Phase 1.5: 1.5.0 (spike, gate) → 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5 → 1.5.6 → 1.5.7 → 1.5.8 → 1.5.9 → 1.5.11 → 1.5.10
 (1.5.1, 1.5.2 and 1.5.4 with the fake converter can run before the spike.)
 
@@ -99,6 +99,8 @@ Phase 1.5: 1.5.0 (spike, gate) → 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5
 **1.10 Config + manifests (files only)** — switch oauth2-proxy to GitHub (`provider = "github"`, `scope = "user:email"`; README: create a GitHub OAuth App, callback `https://<host>/oauth2/callback`); secrets.example.yaml comments (no IRSA, add TELEGRAM_BOT_TOKEN, LLM_API_KEY optional, ghcr-pull example); `.dockerignore` adds `unitmaterial/` and `.claude/`; .env.example, secrets.example.yaml (TELEGRAM_BOT_TOKEN), configmap (TELEGRAM_ALLOWED_IDS, TELEGRAM_ALLOWED_CHATS), deployment comment (single poller), iam-policy.json (DeleteObject on `prod/_probe/*`), README (BotFather: privacy off, add to group, read group ID from admin). Verify: `kubectl kustomize deploy/k8s/overlays/prod` renders; `make run` on read-only rootfs. Rollout is a separate approval; ZY creates the secret.
 
 **1.11 Retire old code (approval)** — delete internal/board, internal/chat, cmd/import, fixtures/board.sample.json, build-plan.md; fix Makefile seed and conflict-test names. Keep reference/condo-board.html. Verify: `make lint test build`; no references to internal/board or internal/chat.
+
+**1.12 Admin operation guide (ZY deliverable)** — `docs/admin-guide.md`, linked from README. Written last in Phase 1 so it reflects what exists; updated again after Phase 1.5 and the deployment steps. Scope: see decisions.md "Admin operation guide". Verify: every command in it is run once (or marked as cluster-only), and ZY reviews it.
 
 ## Phase 1.5 steps
 **1.5.0 Converter spike (gate; waits for a dense sheet from ZY)** — scratchpad only. Check: legibility vs `pdftoppm -r 300`; text runs map to pixels (rotation, y-flip); peak RSS + time per page, wazero memory vs GOMEMLIMIT; `docker run --read-only --memory=512m --user 65532` on amd64/arm64, no cache writes outside /tmp; binary/vendor growth, Go 1.27; memory returned after close. Fallback: poppler sidecar.

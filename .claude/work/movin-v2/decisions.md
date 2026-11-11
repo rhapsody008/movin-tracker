@@ -65,3 +65,6 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - Web sign-in: **GitHub OAuth App** via oauth2-proxy (`provider = "github"`, `scope = "user:email"`, email allowlist kept). Telegram does not use OAuth.
 - The app image on GHCR is **public** (binary + embedded frontend only, no config or secrets). The deploy artifact stays **private**.
 - After editing a hand-made secret: `kubectl rollout restart deploy/movin` (or Reloader annotation if NKP has it).
+
+## Admin operation guide (2026-11-11)
+- ZY needs an **admin operation guide** as a Phase 1 deliverable (step 1.12), written at the end of Phase 1 so it matches what was built. Audience: ZY operating the app. Covers: first-time setup (BotFather, privacy off, GitHub OAuth App, Fernet key, IAM user, GHCR token), the NKP secrets and what each is for, deploy/release/rollback/pause (OCI + Flux, once D.* lands), the admin page (Storage, LLM, Telegram tabs), adding people and the group (rejected list), rotating secrets and restarting, local dev (`make dev`, `.env`, vMLX via host.docker.internal), and troubleshooting (409 second poller, saved LLM endpoint down, storage test failures, supergroup ID change).
