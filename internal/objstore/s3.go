@@ -24,7 +24,10 @@ type S3 struct {
 	Prefix   string
 	Region   string
 	Endpoint string
-	creds    aws.CredentialsProvider
+	// ListPageSize is the page size for List (0: S3's default of 1000).
+	// Tests lower it to exercise pagination.
+	ListPageSize int32
+	creds        aws.CredentialsProvider
 }
 
 // S3Options configures NewS3. Credentials come from the default AWS chain
@@ -96,6 +99,41 @@ func (s *S3) Stat(ctx context.Context, key string) (ObjectInfo, error) {
 		return ObjectInfo{}, mapErr(err)
 	}
 	return ObjectInfo{Key: key, ETag: aws.ToString(out.ETag), Size: aws.ToInt64(out.ContentLength), LastModified: aws.ToTime(out.LastModified)}, nil
+}
+
+func (s *S3) List(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+	in := &s3.ListObjectsV2Input{Bucket: &s.Bucket, Prefix: aws.String(s.key(prefix))}
+	if s.ListPageSize > 0 {
+		in.MaxKeys = aws.Int32(s.ListPageSize)
+	}
+	strip := ""
+	if s.Prefix != "" {
+		strip = s.Prefix + "/"
+	}
+	out := []ObjectInfo{}
+	for p := s3.NewListObjectsV2Paginator(s.Client, in); p.HasMorePages(); {
+		page, err := p.NextPage(ctx)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		for _, o := range page.Contents {
+			out = append(out, ObjectInfo{
+				Key: strings.TrimPrefix(aws.ToString(o.Key), strip), ETag: aws.ToString(o.ETag),
+				Size: aws.ToInt64(o.Size), LastModified: aws.ToTime(o.LastModified),
+			})
+		}
+	}
+	return out, nil // S3 lists in key (UTF-8 byte) order
+}
+
+func (s *S3) PutBlob(ctx context.Context, key string, body []byte, contentType string) (string, error) {
+	out, err := s.Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &s.Bucket, Key: aws.String(s.key(key)), Body: bytes.NewReader(body), ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return "", mapErr(err)
+	}
+	return aws.ToString(out.ETag), nil
 }
 
 func (s *S3) Delete(ctx context.Context, key string) error {

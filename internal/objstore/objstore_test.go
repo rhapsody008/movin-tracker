@@ -129,3 +129,63 @@ func TestCredentialLabel(t *testing.T) {
 		}
 	}
 }
+
+// List walks nested "folders", keeps keys with spaces and punctuation as
+// they are, stops at the prefix boundary, pages through long listings and
+// strips the store's own prefix; PutBlob overwrites without a guard.
+func TestListAndPutBlob(t *testing.T) {
+	for name, s := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			b, ok := s.(Blobs)
+			if !ok {
+				t.Fatalf("%T does not implement Blobs", s)
+			}
+			if s3s, ok := s.(*S3); ok {
+				s3s.ListPageSize = 2 // force several pages
+			}
+			keys := []string{
+				"docs/raw/1.0 Plans & Drawings/1.1 Layout (A3).pdf",
+				"docs/raw/2.0 Checklists/deep/er/x #03.pdf",
+				"docs/raw/top.pdf",
+				"docs/raw/zz last.pdf",
+				"docs/rawx/not this.pdf",
+				"entries.json",
+			}
+			for i, k := range keys {
+				if _, err := b.PutBlob(ctx, k, []byte(fmt.Sprintf("%%PDF-%d", i)), "application/pdf"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := b.List(ctx, "docs/raw/")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var names []string
+			for _, o := range got {
+				names = append(names, o.Key)
+				if o.ETag == "" || o.Size != 6 || o.LastModified.IsZero() {
+					t.Errorf("%s: %+v", o.Key, o)
+				}
+			}
+			want := keys[:4]
+			if fmt.Sprint(names) != fmt.Sprint(want) {
+				t.Fatalf("list\n got %q\nwant %q", names, want)
+			}
+			if none, err := b.List(ctx, "docs/none/"); err != nil || len(none) != 0 {
+				t.Fatalf("empty prefix: %v %v", none, err)
+			}
+			// Unconditional overwrite (a guarded Put would refuse it).
+			if _, err := s.Put(ctx, keys[2], []byte("x"), ""); !errors.Is(err, ErrPrecondition) {
+				t.Fatalf("guarded put over an existing key: %v", err)
+			}
+			if _, err := b.PutBlob(ctx, keys[2], []byte("new body"), "application/pdf"); err != nil {
+				t.Fatal(err)
+			}
+			body, _, err := s.Get(ctx, keys[2])
+			if err != nil || string(body) != "new body" {
+				t.Fatalf("after PutBlob: %q %v", body, err)
+			}
+		})
+	}
+}

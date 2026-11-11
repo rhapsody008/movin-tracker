@@ -30,6 +30,18 @@ type Store interface {
 	Delete(ctx context.Context, key string) error
 }
 
+// Blobs is implemented by stores that also hold files (the documents and
+// what is derived from them): list everything under a key prefix, and write
+// without a version guard. Keys are relative to the store's own prefix.
+type Blobs interface {
+	// List returns every object whose key starts with prefix, at any depth,
+	// sorted by key. A prefix that matches nothing gives an empty list.
+	List(ctx context.Context, prefix string) ([]ObjectInfo, error)
+	// PutBlob writes body unconditionally with the given content type and
+	// returns the new ETag.
+	PutBlob(ctx context.Context, key string, body []byte, contentType string) (etag string, err error)
+}
+
 type ObjectInfo struct {
 	Key          string
 	ETag         string
@@ -53,3 +65,8 @@ type Info struct {
 type Describer interface {
 	Info(ctx context.Context) Info
 }
+
+var (
+	_ Blobs = (*S3)(nil)
+	_ Blobs = (*Memory)(nil)
+)
