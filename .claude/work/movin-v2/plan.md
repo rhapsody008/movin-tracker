@@ -125,6 +125,13 @@ Phase 1.5: 1.5.0 (spike, gate) → 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5
 
 **1.5.10 Deploy (files only)** — memory limit + GOMEMLIMIT from the spike (start 64Mi/512Mi; A1 may need 768Mi–1Gi); IAM DeleteObject on `prod/docs/pages/*` and `prod/docs/text/*` (+ lifecycle rule for noncurrent versions); compose mem_limit; .env.example; README. Verify: `make run`, upload the sample through the bot.
 
+## Deployment via OCI + NKP (potential; not yet planned in detail)
+Status: decided in principle (see decisions.md, "Deployment / GitOps"). Needs a planner pass and a read-only cluster check once ZY's NKP cluster is available. Likely shape:
+- D.1 `.github/workflows/image.yml`: on `v*` tags, after the image push, `kustomize edit set image` with the digest in the workspace and `flux push artifact oci://ghcr.io/<owner>/movin-tracker-deploy:<version>`; optional cosign signing of image + artifact.
+- D.2 `deploy/k8s/overlays/prod`: drop namespace.yaml and the namespace field.
+- D.3 New `deploy/flux/`: kustomization.yaml + OCIRepository (semver >=1.0.0, secretRef ghcr-pull) + Flux Kustomization (./overlays/prod, prune, same service account as the NKP project).
+- D.4 README: release, rollback, pause; ZY creates ghcr-pull and app secrets in the project namespace.
+
 ## Phase 2 (room left, not built)
 attachments[]{key,mime} on entries + `<prefix>/media/`; agent.Request.Images; Telegram dispatch by message type; settings `stt` section; `docs/facts/<sheet>.json` + reviewed flag.
 

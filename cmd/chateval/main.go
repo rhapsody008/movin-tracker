@@ -1,7 +1,9 @@
-// Command chateval sends the Phase 3 messages to the real LLM endpoint
-// configured by LLM_* (from .env) and prints the board diff after each one.
-// It runs on an in-memory copy of fixtures/board.sample.json, so it never
-// touches a real bucket. Exits non-zero if any message makes the wrong change.
+// Command chateval sends a fixed set of messages to the real LLM endpoint
+// configured by LLM_* (from .env), through the agent, and prints the entry
+// diff after each one. It runs on an in-memory copy of
+// fixtures/entries.sample.json, so it never touches a real bucket. Messages
+// run in order on the same document. Exits non-zero if any message makes the
+// wrong change.
 package main
 
 import (
@@ -14,32 +16,57 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"github.com/rhapsody008/movin-tracker/internal/board"
-	"github.com/rhapsody008/movin-tracker/internal/chat"
+	"github.com/rhapsody008/movin-tracker/internal/agent"
 	"github.com/rhapsody008/movin-tracker/internal/config"
+	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/testutil"
 )
 
-type check func(b *board.Board) error
+// check gets the document before and after the message, and the result.
+type check func(before, after *entries.Doc, res agent.Result) error
 
 type evalCase struct {
 	msg   string
+	group bool
 	check check
 }
 
-func live(b *board.Board, re string) []board.Item {
+const (
+	seedCleaning   = "01K9SEED000000000000000002"
+	seedCountertop = "01K9SEED000000000000000003"
+)
+
+func live(d *entries.Doc, re string) []entries.Entry {
 	rx := regexp.MustCompile("(?i)" + re)
-	var out []board.Item
-	for _, it := range b.Items {
-		if !it.Archived && (rx.MatchString(it.Title) || rx.MatchString(it.Vendor)) {
-			out = append(out, it)
+	var out []entries.Entry
+	for _, e := range d.Entries {
+		if !e.Archived && (rx.MatchString(e.Title) || rx.MatchString(e.Vendor) || rx.MatchString(e.Notes)) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// added returns entries present in after but not in before.
+func added(before, after *entries.Doc) []entries.Entry {
+	var out []entries.Entry
+	for _, e := range after.Entries {
+		if _, ok := before.Find(e.ID); !ok {
+			out = append(out, e)
 		}
 	}
 	return out
 }
 
 func eq(p *float64, v float64) bool { return p != nil && *p == v }
+
+func unchanged(before, after *entries.Doc) error {
+	if d := diff(before, after); len(d) != 1 || d[0] != "(no change)" {
+		return fmt.Errorf("expected no change, got: %s", strings.Join(d, "; "))
+	}
+	return nil
+}
 
 // nextDec5 is the 5 Dec on or after today.
 func nextDec5(now time.Time) string {
@@ -50,48 +77,124 @@ func nextDec5(now time.Time) string {
 	return d
 }
 
+// fridays are the dates "Friday" can reasonably mean: the coming Friday
+// (today if it is Friday) and the one after.
+func fridays(now time.Time) []string {
+	d := now
+	for d.Weekday() != time.Friday {
+		d = d.AddDate(0, 0, 1)
+	}
+	return []string{d.Format("2006-01-02"), d.AddDate(0, 0, 7).Format("2006-01-02")}
+}
+
 func cases(now time.Time) []evalCase {
 	return []evalCase{
-		{"We move in on 5 Dec", func(b *board.Board) error {
-			if want := nextDec5(now); b.Meta.MoveDate == nil || *b.Meta.MoveDate != want {
-				return fmt.Errorf("moveDate = %v, want %s", deref(b.Meta.MoveDate), want)
+		{msg: "We move in on 5 Dec", check: func(_, a *entries.Doc, _ agent.Result) error {
+			if want := nextDec5(now); a.Meta.MoveDate == nil || *a.Meta.MoveDate != want {
+				return fmt.Errorf("moveDate = %v, want %s", deref(a.Meta.MoveDate), want)
 			}
 			return nil
 		}},
-		{"Lim quoted 18k for carpentry, paid 30% today", func(b *board.Board) error {
-			its := live(b, "carpent")
-			if len(its) != 1 {
-				return fmt.Errorf("want exactly one live carpentry item (update, not duplicate), got %d", len(its))
+		{msg: "Thinking of fluted glass for the dry kitchen sliding door", check: func(b, a *entries.Doc, _ agent.Result) error {
+			n := added(b, a)
+			if len(n) != 1 {
+				return fmt.Errorf("want one new entry, got %d", len(n))
 			}
-			it := its[0]
-			if !eq(it.Quoted, 18000) || !eq(it.Paid, 5400) {
-				return fmt.Errorf("carpentry quoted=%v paid=%v, want 18000 / 5400", deref(it.Quoted), deref(it.Paid))
+			e := n[0]
+			if e.Kind != "idea" || e.Room == nil || *e.Room != "dry kitchen" {
+				return fmt.Errorf("got kind=%s room=%v, want idea / dry kitchen", e.Kind, deref(e.Room))
 			}
-			if !strings.Contains(strings.ToLower(it.Vendor+" "+it.Title+" "+it.Notes), "lim") {
-				return fmt.Errorf("carpentry item does not mention Lim")
-			}
-			return nil
-		}},
-		{"Add a 3-seater sofa, budget 2k, to the shopping list", func(b *board.Board) error {
-			its := live(b, "sofa")
-			if len(its) != 1 {
-				return fmt.Errorf("want one sofa item, got %d", len(its))
-			}
-			if its[0].Cat != "shopping" || !eq(its[0].Quoted, 2000) {
-				return fmt.Errorf("sofa cat=%s quoted=%v, want shopping / 2000", its[0].Cat, deref(its[0].Quoted))
-			}
-			if its[0].Due != nil {
-				return fmt.Errorf("sofa got an invented date %s", *its[0].Due)
+			if e.Date != nil || e.Cost.Estimate != nil || e.Vendor != "" {
+				return fmt.Errorf("invented a date, cost or vendor: %+v", e)
 			}
 			return nil
 		}},
-		{"Drop the post-reno cleaning", func(b *board.Board) error {
-			it, ok := b.Find("01K7SEED000000000000000009")
+		{msg: "Decided: Daikin system 4 aircon, 5.8k from CoolAir", check: func(b, a *entries.Doc, _ agent.Result) error {
+			n := added(b, a)
+			if len(n) != 1 {
+				return fmt.Errorf("want one new entry, got %d", len(n))
+			}
+			e := n[0]
+			if e.Kind != "decision" && e.Status != "decided" {
+				return fmt.Errorf("got kind=%s status=%s, want a decision", e.Kind, e.Status)
+			}
+			if !eq(e.Cost.Estimate, 5800) && !eq(e.Cost.Actual, 5800) {
+				return fmt.Errorf("cost = %+v, want 5800", e.Cost)
+			}
+			if !strings.Contains(strings.ToLower(e.Vendor), "coolair") {
+				return fmt.Errorf("vendor = %q, want CoolAir", e.Vendor)
+			}
+			return nil
+		}},
+		{msg: "Electrician coming Friday 2pm to check the DB", check: func(b, a *entries.Doc, _ agent.Result) error {
+			n := added(b, a)
+			if len(n) != 1 {
+				return fmt.Errorf("want one new entry, got %d", len(n))
+			}
+			e := n[0]
+			ok := e.Date != nil && (*e.Date == fridays(now)[0] || *e.Date == fridays(now)[1])
+			if e.Kind != "task" || !ok || e.Time == nil || *e.Time != "14:00" {
+				return fmt.Errorf("got kind=%s date=%v time=%v, want task / %s / 14:00", e.Kind, deref(e.Date), deref(e.Time), fridays(now)[0])
+			}
+			return nil
+		}},
+		{msg: "Lim quoted 18k for carpentry, paid 30% today", check: func(b, a *entries.Doc, _ agent.Result) error {
+			es := live(a, "carpent")
+			if len(es) != 1 {
+				return fmt.Errorf("want exactly one live carpentry entry (update, not duplicate), got %d", len(es))
+			}
+			e := es[0]
+			if !eq(e.Cost.Estimate, 18000) || !eq(e.Cost.Actual, 5400) {
+				return fmt.Errorf("carpentry estimate=%v actual=%v, want 18000 / 5400", deref(e.Cost.Estimate), deref(e.Cost.Actual))
+			}
+			if !strings.Contains(strings.ToLower(e.Vendor+" "+e.Title+" "+e.Notes), "lim") {
+				return fmt.Errorf("carpentry entry does not mention Lim")
+			}
+			return nil
+		}},
+		{msg: "Put the grey tiles in the bathroom", check: func(b, a *entries.Doc, res agent.Result) error {
+			// Two bathrooms and no tiles on record: it should ask, not guess.
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			if !strings.Contains(res.Reply, "?") {
+				return fmt.Errorf("expected a clarifying question, got %q", res.Reply)
+			}
+			return nil
+		}},
+		{msg: "What did we decide for the kitchen countertop and how much was it?", check: func(b, a *entries.Doc, res agent.Result) error {
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			r := strings.ReplaceAll(strings.ToLower(res.Reply), ",", "")
+			if !strings.Contains(r, "sintered") || !(strings.Contains(r, "4200") || strings.Contains(r, "4.2k")) {
+				return fmt.Errorf("reply should name sintered stone and 4,200: %q", res.Reply)
+			}
+			return nil
+		}},
+		{msg: "Drop the post-reno cleaning", check: func(_, a *entries.Doc, _ agent.Result) error {
+			e, ok := a.Find(seedCleaning)
 			if !ok {
 				return fmt.Errorf("post-reno cleaning was hard-deleted; it should be archived")
 			}
-			if !it.Archived {
+			if !e.Archived {
 				return fmt.Errorf("post-reno cleaning is not archived")
+			}
+			return nil
+		}},
+		{msg: "Undo that", check: func(_, a *entries.Doc, _ agent.Result) error {
+			e, ok := a.Find(seedCleaning)
+			if !ok || e.Archived {
+				return fmt.Errorf("post-reno cleaning should be back (not archived)")
+			}
+			return nil
+		}},
+		{msg: "Partner: ok see you at dinner", group: true, check: func(b, a *entries.Doc, res agent.Result) error {
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			if !res.Silent {
+				return fmt.Errorf("group chatter should get no reply, got %q", res.Reply)
 			}
 			return nil
 		}},
@@ -121,9 +224,9 @@ func run() error {
 		return err
 	}
 	if c.LLM.BaseURL == "" || c.LLM.Model == "" {
-		return fmt.Errorf("set LLM_BASE_URL, LLM_MODEL (and LLM_API_KEY) in .env first")
+		return fmt.Errorf("set LLM_BASE_URL, LLM_MODEL (and LLM_API_KEY if needed) in .env first")
 	}
-	fixture := "fixtures/board.sample.json"
+	fixture := "fixtures/entries.sample.json"
 	if len(os.Args) > 1 {
 		fixture = os.Args[1]
 	}
@@ -131,44 +234,53 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	seed, err := board.Decode(data)
+	seed, err := entries.Decode(data)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
 	logs := &testutil.SyncBuffer{}
-	svc := board.NewService(objstore.NewMemory(), testutil.Logger(logs))
+	svc := entries.NewService(objstore.NewMemory(), testutil.Logger(logs))
 	if err := svc.Load(ctx); err != nil {
 		return err
 	}
 	if _, err := svc.Replace(ctx, seed); err != nil {
 		return err
 	}
-	runner := &chat.Runner{Board: svc, Loc: c.Location, Log: testutil.Logger(logs), Now: time.Now}
+	runner := &agent.Runner{Entries: svc, Loc: c.Location, Log: testutil.Logger(logs), Now: time.Now}
 	now := time.Now().In(c.Location)
 	fmt.Printf("chat-eval: model %s at %s, today %s\n\n", c.LLM.Model, c.LLM.BaseURL, now.Format("Mon 2 Jan 2006"))
 
+	all := cases(now)
 	failed := 0
-	for i, tc := range cases(now) {
+	for i, tc := range all {
 		before, _ := svc.Current(ctx)
 		start := time.Now()
-		res, err := runner.Run(ctx, "chat-eval", c.LLM, []chat.Turn{{Role: "user", Content: tc.msg}}, nil)
+		req := agent.Request{By: "chat-eval", Channel: "web", Group: tc.group, Turns: []agent.Turn{{Role: "user", Content: tc.msg}}}
+		if tc.group {
+			req.Channel = "telegram"
+		}
+		res, err := runner.Run(ctx, req, c.LLM, nil)
 		after, _ := svc.Current(ctx)
 		fmt.Printf("%d. %q  (%.1fs)\n", i+1, tc.msg, time.Since(start).Seconds())
 		if err != nil {
-			fmt.Printf("   FAIL  chat error: %v\n\n", err)
+			fmt.Printf("   FAIL  agent error: %v\n\n", err)
 			failed++
 			continue
 		}
-		fmt.Printf("   reply:   %s\n", res.Reply)
-		for _, l := range res.Changes {
-			fmt.Printf("   change:  %s\n", l)
+		if res.Silent {
+			fmt.Printf("   reply:   (silent)\n")
+		} else {
+			fmt.Printf("   reply:   %s\n", res.Reply)
 		}
-		for _, l := range diff(before.Board, after.Board) {
+		for _, l := range res.Changes {
+			fmt.Printf("   change:  %s\n", l.Text)
+		}
+		for _, l := range diff(before.Doc, after.Doc) {
 			fmt.Printf("   diff:    %s\n", l)
 		}
-		if err := tc.check(after.Board); err != nil {
+		if err := tc.check(before.Doc, after.Doc, res); err != nil {
 			fmt.Printf("   FAIL  %v\n\n", err)
 			failed++
 		} else {
@@ -178,18 +290,18 @@ func run() error {
 	if failed > 0 {
 		fmt.Println("tool-call log:")
 		for _, l := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
-			if strings.Contains(l, "chat tool call") {
+			if strings.Contains(l, "agent tool call") {
 				fmt.Println("  ", l)
 			}
 		}
-		return fmt.Errorf("%d of 4 messages made the wrong change", failed)
+		return fmt.Errorf("%d of %d messages made the wrong change", failed, len(all))
 	}
-	fmt.Println("All 4 messages produced the right board change.")
+	fmt.Printf("All %d messages produced the right change.\n", len(all))
 	return nil
 }
 
-// diff describes what changed between two boards, field by field.
-func diff(a, b *board.Board) []string {
+// diff describes what changed between two documents, field by field.
+func diff(a, b *entries.Doc) []string {
 	var out []string
 	if s := deref(a.Meta.MoveDate); s != deref(b.Meta.MoveDate) {
 		out = append(out, fmt.Sprintf("meta.moveDate: %v → %v", s, deref(b.Meta.MoveDate)))
@@ -197,17 +309,17 @@ func diff(a, b *board.Board) []string {
 	if s := deref(a.Meta.KeyDate); s != deref(b.Meta.KeyDate) {
 		out = append(out, fmt.Sprintf("meta.keyDate: %v → %v", s, deref(b.Meta.KeyDate)))
 	}
-	old := map[string]board.Item{}
-	for _, it := range a.Items {
-		old[it.ID] = it
+	old := map[string]entries.Entry{}
+	for _, e := range a.Entries {
+		old[e.ID] = e
 	}
 	seen := map[string]bool{}
-	for _, it := range b.Items {
-		seen[it.ID] = true
-		prev, ok := old[it.ID]
+	for _, e := range b.Entries {
+		seen[e.ID] = true
+		prev, ok := old[e.ID]
 		if !ok {
-			j, _ := json.Marshal(map[string]any{"cat": it.Cat, "status": it.Status, "due": it.Due, "time": it.Time, "vendor": it.Vendor, "quoted": it.Quoted, "paid": it.Paid})
-			out = append(out, fmt.Sprintf("+ %q %s", it.Title, j))
+			j, _ := json.Marshal(map[string]any{"kind": e.Kind, "room": e.Room, "category": e.Category, "status": e.Status, "date": e.Date, "time": e.Time, "vendor": e.Vendor, "estimate": e.Cost.Estimate, "actual": e.Cost.Actual})
+			out = append(out, fmt.Sprintf("+ %q %s", e.Title, j))
 			continue
 		}
 		var ch []string
@@ -216,23 +328,25 @@ func diff(a, b *board.Board) []string {
 				ch = append(ch, fmt.Sprintf("%s: %v → %v", name, x, y))
 			}
 		}
-		cmp("title", prev.Title, it.Title)
-		cmp("cat", prev.Cat, it.Cat)
-		cmp("status", prev.Status, it.Status)
-		cmp("due", deref(prev.Due), deref(it.Due))
-		cmp("time", deref(prev.Time), deref(it.Time))
-		cmp("vendor", prev.Vendor, it.Vendor)
-		cmp("quoted", deref(prev.Quoted), deref(it.Quoted))
-		cmp("paid", deref(prev.Paid), deref(it.Paid))
-		cmp("notes", prev.Notes, it.Notes)
-		cmp("archived", prev.Archived, it.Archived)
+		cmp("title", prev.Title, e.Title)
+		cmp("kind", prev.Kind, e.Kind)
+		cmp("room", deref(prev.Room), deref(e.Room))
+		cmp("category", prev.Category, e.Category)
+		cmp("status", prev.Status, e.Status)
+		cmp("date", deref(prev.Date), deref(e.Date))
+		cmp("time", deref(prev.Time), deref(e.Time))
+		cmp("vendor", prev.Vendor, e.Vendor)
+		cmp("estimate", deref(prev.Cost.Estimate), deref(e.Cost.Estimate))
+		cmp("actual", deref(prev.Cost.Actual), deref(e.Cost.Actual))
+		cmp("notes", prev.Notes, e.Notes)
+		cmp("archived", prev.Archived, e.Archived)
 		if len(ch) > 0 {
 			out = append(out, fmt.Sprintf("~ %q %s", prev.Title, strings.Join(ch, ", ")))
 		}
 	}
-	for _, it := range a.Items {
-		if !seen[it.ID] {
-			out = append(out, fmt.Sprintf("- %q (hard-deleted)", it.Title))
+	for _, e := range a.Entries {
+		if !seen[e.ID] {
+			out = append(out, fmt.Sprintf("- %q (hard-deleted)", e.Title))
 		}
 	}
 	if len(out) == 0 {

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -177,12 +178,25 @@ func (c *Client) Complete(ctx context.Context, msgs []Message, tools []Tool, for
 		}
 		m := out.Choices[0].Message
 		m.Role = "assistant"
+		m.Content = StripSpecialTokens(m.Content)
 		if onText != nil && m.Content != "" {
 			onText(m.Content)
 		}
 		return m, nil
 	}
 	return readStream(resp.Body, onText)
+}
+
+// specialTokenRe matches chat-template control tokens that some local
+// servers (e.g. vMLX) leak into the reply text.
+var specialTokenRe = regexp.MustCompile(`<\|(?:im_end|im_start|eot_id|end_of_text|endoftext|end|eom_id)\|>`)
+
+// StripSpecialTokens removes leaked chat-template tokens from model text.
+func StripSpecialTokens(s string) string {
+	if !strings.Contains(s, "<|") {
+		return s
+	}
+	return strings.TrimSpace(specialTokenRe.ReplaceAllString(s, ""))
 }
 
 func readStream(r io.Reader, onText func(string)) (Message, error) {
@@ -229,6 +243,7 @@ func readStream(r io.Reader, onText func(string)) (Message, error) {
 			continue
 		}
 		d := chunk.Choices[0].Delta
+		d.Content = StripSpecialTokens(d.Content)
 		if d.Content != "" {
 			text.WriteString(d.Content)
 			if onText != nil {
@@ -253,7 +268,7 @@ func readStream(r io.Reader, onText func(string)) (Message, error) {
 	if err := sc.Err(); err != nil {
 		return Message{}, fmt.Errorf("read stream: %w", err)
 	}
-	m := Message{Role: "assistant", Content: text.String()}
+	m := Message{Role: "assistant", Content: StripSpecialTokens(text.String())}
 	idx := make([]int, 0, len(calls))
 	for i := range calls {
 		idx = append(idx, i)

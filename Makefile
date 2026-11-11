@@ -36,7 +36,7 @@ test: ## Unit + API tests in the container, against MinIO, with a stubbed LLM
 conflict-test: ## Two concurrent writers on one ETag; both changes must survive
 	$(TOOLS) go test -count=1 -v -run 'TestConditionalWrites|TestConflictBothChangesSurvive|TestConcurrentWriters|TestConflictReturns409' ./internal/...
 
-chat-eval: .env ## Run the Phase 3 messages against the real endpoint from .env; print the board diff per message
+chat-eval: .env ## Run the agent eval messages against the real endpoint from .env; print the entry diff per message
 	$(COMPOSE) --profile tools run --rm --no-deps test go run ./cmd/chateval
 
 lint: ## gofmt + go vet

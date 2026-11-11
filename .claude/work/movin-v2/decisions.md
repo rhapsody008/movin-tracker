@@ -50,3 +50,11 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - Group-ID env default is `TELEGRAM_ALLOWED_CHATS`.
 - "Last successful write" on the storage page reads `LastModified` of `entries.json`, so it survives restarts.
 - Group chatter: the bot stays silent unless it recorded something or was asked a question.
+
+## Deployment / GitOps (2026-11-11)
+- Target: an NKP project. Flux runs there; the project namespace exists and NKP's project GitOps watches a git path with a kustomization.yaml.
+- No CI commits to the repo. Releases are `git tag vX.Y.Z`.
+- CI on `v*` tags: push the image, render the prod overlay with the image pinned by digest (in the CI workspace only), and `flux push artifact` it to a private GHCR package `movin-tracker-deploy:X.Y.Z` (optionally cosign-signed).
+- Bridge: NKP watches a static `deploy/flux/` folder holding an OCIRepository (semver `>=1.0.0`, secretRef ghcr-pull) and a Flux Kustomization (path ./overlays/prod, prune). Rollback = hand-edit a tag pin there.
+- The overlay drops namespace.yaml and `namespace: movin`; the NKP project owns the namespace.
+- NKP service-account permissions for creating Flux objects: ZY will fix if needed. No cluster available yet; planner + cluster check happen when ZY says it's up.
