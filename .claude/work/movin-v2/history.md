@@ -14,5 +14,6 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Step 1.7a done.
 - Step 1.8 done.
 - Step 1.8a done.
-- Next: 1.9 Telegram bot (poller, auth, per-chat workers, shared group history, Undo buttons, commands). Manual check needs a test bot token from ZY in `.env`.
+- Step 1.9 done (automated). Manual check waits for ZY: BotFather /newbot, /setprivacy → Disable, TELEGRAM_BOT_TOKEN in .env, own Telegram user ID in TELEGRAM_ALLOWED_IDS (find it from the 'telegram message ignored' log line, or the rejected list once 1.9a lands).
+- Next: 1.9a Telegram admin tab.
 - Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.

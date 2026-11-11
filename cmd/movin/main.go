@@ -28,6 +28,7 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/server"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
+	"github.com/rhapsody008/movin-tracker/internal/telegram"
 )
 
 func main() {
@@ -105,9 +106,20 @@ func serve() error {
 		static = os.DirFS(c.StaticDir)
 		log.Info("serving frontend from disk", "dir", c.StaticDir)
 	}
+	runner := &agent.Runner{Entries: ents, Loc: c.Location, Log: log, Now: time.Now}
+	if c.TelegramToken != "" {
+		bot := &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Log: log}
+		go func() {
+			if err := bot.Run(ctx); err != nil && ctx.Err() == nil {
+				log.Error("telegram bot stopped", "err", err)
+			}
+		}()
+	} else {
+		log.Info("TELEGRAM_BOT_TOKEN is not set; the Telegram bot is off")
+	}
 	srv := &server.Server{
 		Entries: ents, Settings: sets, Store: store, Static: static, Log: log,
-		Agent:      &agent.Runner{Entries: ents, Loc: c.Location, Log: log, Now: time.Now},
+		Agent:      runner,
 		AuthHeader: c.AuthHeader, AllowedEmails: c.AllowedEmails, DevEmail: c.DevEmail,
 	}
 	hs := &http.Server{

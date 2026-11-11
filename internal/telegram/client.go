@@ -44,6 +44,9 @@ type Message struct {
 	Document       *Document   `json:"document,omitempty"`
 	Photo          []PhotoSize `json:"photo,omitempty"`
 	Voice          *Voice      `json:"voice,omitempty"`
+	// The message's inline keyboard (present on the bot's own messages
+	// when they come back inside a callback query).
+	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 	// Set on the service message Telegram sends when a group becomes a
 	// supergroup (the chat ID changes).
 	MigrateToChatID int64 `json:"migrate_to_chat_id,omitempty"`
