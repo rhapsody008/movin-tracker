@@ -23,7 +23,8 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - `by` names come from config (`id=name`).
 - Sync notifications go to the group only when a sync changed something.
 
-## Drawings (phase 1.5)
+## Drawings (phase 1.5) — superseded
+Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored page images, on-demand crops, poppler instead of PDFium) and widened from drawings to all documents. Kept for history.
 - Do not vectorize drawings. Raw PDF in S3 is the source of truth; renders are a disposable, versioned cache.
 - Server-side conversion: PDF → high-res PNG + overview PNG + text layer with positions, all stored in S3. The LLM consumes PNGs (overview + crops) plus the text layer.
 - Render cap ~6000 px long edge; one render/crop at a time (F1).
@@ -36,7 +37,7 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 
 ## Deployment and safety
 - No egress restrictions assumed.
-- IAM DeleteObject only on `<prefix>/docs/pages/*` and `<prefix>/docs/text/*` (F5).
+- ~~IAM DeleteObject only on `<prefix>/docs/pages/*` and `<prefix>/docs/text/*` (F5).~~ Superseded: there is no prefix (one bucket), no `docs/pages/` (renders aren't stored), and sync never deletes, so no DeleteObject beyond `_probe/*` (1.5.13). `docs/raw/*` is explicitly denied to the app user (2026-11-12).
 - ZY creates secrets and runs any kubectl apply / IAM change.
 - Real unit drawings never go into git (`/unitmaterial/` is ignored).
 
@@ -113,3 +114,8 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - Model calls on the saved Anthropic key are fine (document summaries, document eval cases; est. < $1); document text and drawing crops go to Claude.
 - Sync writes only `docs/text/**` and `docs/index.json`; never deletes or changes `docs/raw/`; no new IAM permission.
 - After the last step: run the strict review and **report** its findings for ZY to approve; don't fix them unasked.
+
+## Review outcome (2026-11-12)
+- Fixed: the blocker, all majors, all minors, the cache-mark guard, the memory and poppler-lock suggestions, and the re-review's N1–N5 + Q1. Left as they are: the N6 nits and the remaining lint extras.
+- The env key without `LLM_BASE_URL` stays unbound (predates v2; ZY sees no issue).
+- `docs/raw/` is protected by an IAM Deny for the app user; ZY uploads through the S3 console with their own credentials. ZY applies the policy.

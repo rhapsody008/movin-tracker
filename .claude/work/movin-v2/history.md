@@ -2,6 +2,15 @@
 
 One entry per working session: what was done, what is next, blockers. Newest first.
 
+## 2026-11-12 — review fixes
+- ZY read the strict review (review-2026-11-12.md, REJECT) and chose fixes: the blocker and all majors (9af245e, eb1ef86, 65415b5, 9b58984), then the five minors + cache-mark guard (727ebe4), the docs/raw/ Deny in the IAM policy (5f5bc19, files only), and both memory/lock suggestions (25001c9; found the stdout cap had never applied).
+- Re-review by the strict reviewer before pushing: APPROVE WITH NITS. N1–N5 and Q1 fixed (3b2d49f); N6 nits and the remaining lint extras left by choice.
+- ZY pushed main (e103d33..3b2d49f).
+- /doctor (Claude Code itself, not the repo): the 'auto-update failed' message was transient (already on the newest release); auto mode made the default permission mode in `~/.claude/settings.json` (backup `settings.json.bak-doctor`).
+- Tracking files brought up to date: this entry, superseded lines marked in decisions.md, package table in plan.md.
+- Open for ZY: apply `deploy/iam-policy.json` (docs/raw/ Deny); check the first CI run with QEMU + poppler-test.
+- Next: ZY picks between the backlog (milestones, 09:30 check-in; planner) and deployment (waits for the NKP cluster).
+
 ## 2026-11-11 — kickoff
 - Done: discussion of the reorg; sample drawing inspected (`1.1 Type C5 Unit Layout Plan.pdf`: vector PDF with a real text layer, ~200 text runs, no dimensions, no electrical/plumbing); planner produced the plan; ZY answered flags F1–F6 and the open questions (see decisions.md); baseline committed (155d264) with lint + tests green; this folder created.
 - Planner delta merged into plan.md (management plane, Telegram group auth + per-chat workers, time kept). Step 1.1 done.
@@ -29,5 +38,3 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Claude native connection done: 1.15 SDK provider (v2.3.0), 1.16 cache layout + stop reasons, 1.17 LLM tab kinds, 1.18 eval (Sonnet 5.5 10/10, 2.6 s/message, 80–90% cache reads; vMLX 10/10, 34 s/message), 1.19 refusal fallbacks (lookup needs the beta header, found live). Documents: 1.5.1 store listing, 1.5.2 index model. Next: 1.5.3 converter (poppler, alpine image).
 - Overnight Phase 1.5 run (ZY's go-ahead; decisions.md 'Overnight run'): 1.5.3 poppler converter + alpine image, 1.5.4 sync engine, 1.5.5 BM25 search, 1.5.6 document tools + prompt section, 1.5.7 startup/daily/`/sync` + group notices, 1.5.8 Documents tab + live checkpoint, 1.5.9 summaries, 1.5.10–1.5.11 images + view_document_page, 1.5.12 document evals (15/15 on Opus 5.5), 1.5.13 deploy sizing (256 Mi, GOMEMLIMIT 128MiB). Live on the real bucket: 43 documents read silently (26 text, 8 drawings, 9 scanned after two fixes: a big no-text leaflet and a garbled-font manual now count as scanned, via quiet ConvertVersion refreshes); all 34 readable documents summarised; drawing questions answered from views. Found and fixed along the way: an import that failed before poppler would later have announced 43 documents; the fallback lookup needs the beta header; Region literals; several test expectations. Then the strict review of all code since c27d770 (report only, for ZY).
 - Next (morning): ZY reads the review findings and decides on fixes; optionally re-save Settings → LLM; push; then the planner for the backlog (milestones, 09:30 check-in) or deployment.
-- Next: ZY reviews the guide; then Phase 1.5 (drawings) — 1.5.1/1.5.2/1.5.4 can start before the dense sheet; 1.5.0 spike needs it. Deployment steps D.* wait for the NKP cluster. One code review after all code is complete.
-- Blocked: 1.5.0 converter spike waits for a dense electrical/plumbing sheet from ZY.

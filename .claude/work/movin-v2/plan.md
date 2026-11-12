@@ -14,13 +14,16 @@ Phase 1.5 documents (Goal B): 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5 → 
 | Package | Files | Role |
 |---|---|---|
 | internal/entries | model.go, service.go, search.go, journal.go | Replaces internal/board |
-| internal/agent | agent.go, tools.go, prompt.go, history.go | Replaces internal/chat; no HTTP/Telegram imports |
-| internal/telegram | client.go, bot.go, commands.go | Bot API client (net/http, no deps), poller, auth, per-chat workers |
-| internal/docs | index.go, sync.go, schedule.go, crop.go, summary.go | Phase 1.5; Notifier interface, must not import telegram |
-| internal/docs/convert | convert.go, pdfium.go, fake.go | Converter interface; PDFium WASM; fake |
-| internal/objstore | existing | + Delete, Info, Tracked decorator (1.6a); + List, PutBlob (1.5.1) |
-| internal/llm | client.go | multimodal parts (1.5.5) |
-| internal/settings | settings.go | + telegram section, cache, Save fix (1.8a) |
+| internal/agent | agent.go, tools.go, doctools.go, prompt.go, history.go | Replaces internal/chat; no HTTP/Telegram imports |
+| internal/telegram | client.go, bot.go, commands.go, docs.go | Bot API client (net/http, no deps), poller, auth, per-chat workers, /sync + document notices |
+| internal/docs | index.go, sync.go, search.go, schedule.go, summary.go, render.go | Phase 1.5; Notifier interface, must not import telegram |
+| internal/docs/convert | convert.go, poppler.go, fake.go | Region alias, poppler subprocess converter/renderer, fake |
+| internal/objstore | memory.go, objstore.go, s3.go | + Stat, Delete, Info (1.6a); + List, PutBlob (1.5.1) |
+| internal/llm | llm.go, openai.go, claude.go | Provider seam (1.13), Claude native (1.15), images (1.5.10) |
+| internal/settings | settings.go, telegram.go | + telegram section, cache, Save fix (1.8a); kind, vision (1.14, 1.5.10) |
+| internal/server | server.go, admin.go, docs.go | REST + SSE, admin (storage, telegram, guide), documents |
+
+(Table updated 2026-11-12 to match the code; the original plan had PDFium, crop.go and a Tracked decorator, none of which were built.)
 
 ## Design
 ### Entries (`<prefix>/entries.json`)
