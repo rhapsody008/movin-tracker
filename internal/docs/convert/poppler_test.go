@@ -115,7 +115,7 @@ func TestPopplerTimeoutKillsTheTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	p := &Poppler{Timeout: 300 * time.Millisecond}
+	p := &Poppler{TextTimeout: 300 * time.Millisecond} // pdfinfo is a text-side tool
 	start := time.Now()
 	_, err := p.Text(context.Background(), sample(t))
 	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
@@ -154,4 +154,38 @@ func TestPopplerRealSample(t *testing.T) {
 		t.Fatalf("%v %d", err, len(pages))
 	}
 	t.Logf("%d pages, page 1 %vx%v, %d chars, %d words", len(pages), pages[0].W, pages[0].H, len(pages[0].Text), len(pages[0].Words))
+}
+
+// One run at a time, but a caller whose context ends stops waiting for its
+// turn (a chat view isn't stuck behind a slow sync run).
+func TestPopplerWaitRespectsContext(t *testing.T) {
+	needPoppler(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pdfinfo"), []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	p := &Poppler{TextTimeout: 3 * time.Second}
+	go p.Text(context.Background(), sample(t)) // holds the slot for 3 s
+	time.Sleep(200 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := p.Render(ctx, sample(t), 1, nil, 200)
+	if err == nil || !strings.Contains(err.Error(), "waiting for the PDF tools") || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err %v", err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("waited %v for a slot after its context ended", d)
+	}
+}
+
+func TestPopplerOutputCap(t *testing.T) {
+	needPoppler(t)
+	if _, err := (&Poppler{MaxOutput: 50}).Text(context.Background(), sample(t)); err == nil || !strings.Contains(err.Error(), "output larger than 50 bytes") {
+		t.Fatalf("err %v", err)
+	}
+	if DefaultMaxOutput != 16<<20 || DefaultTextTimeout != 30*time.Second {
+		t.Fatal("defaults changed")
+	}
 }

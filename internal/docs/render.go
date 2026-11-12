@@ -31,9 +31,20 @@ type Viewer struct {
 	Conv Renderer
 
 	mu    sync.Mutex
-	pdfs  lru[[]byte]
-	views lru[[]byte]
+	pdfs  byteLRU
+	views byteLRU
 }
+
+// Cache limits: a few PDFs (the largest today is 14 MB) and a couple of
+// dozen renders (each 0.1–1 MB), bounded in bytes so big uploads can't
+// push the app past its memory limit.
+const (
+	maxCachedPDFs     = 3
+	maxCachedPDFBytes = 32 << 20
+	maxPDFToCache     = 16 << 20 // bigger PDFs are read again each time
+	maxCachedViews    = 24
+	maxCachedViewByte = 16 << 20
+)
 
 // View is one rendered page or region.
 type View struct {
@@ -84,7 +95,7 @@ func (v *Viewer) View(ctx context.Context, id string, n int, region *Region) (Vi
 		return View{}, err
 	}
 	v.mu.Lock()
-	v.views.put(key, png, 24)
+	v.views.put(key, png, maxCachedViews, maxCachedViewByte)
 	v.mu.Unlock()
 	out.PNG = png
 	return out, nil
@@ -103,7 +114,9 @@ func (v *Viewer) pdf(ctx context.Context, d Doc) ([]byte, error) {
 		return nil, fmt.Errorf("read %s: %w", d.Name(), err)
 	}
 	v.mu.Lock()
-	v.pdfs.put(key, b, 3) // the largest PDF today is 14 MB
+	if len(b) <= maxPDFToCache {
+		v.pdfs.put(key, b, maxCachedPDFs, maxCachedPDFBytes)
+	}
 	v.mu.Unlock()
 	return b, nil
 }
@@ -127,13 +140,15 @@ func wordsIn(p Page, r *Region) []string {
 	return out
 }
 
-// lru is a tiny least-recently-used map (callers hold the lock).
-type lru[T any] struct {
-	keys []string
-	vals map[string]T
+// byteLRU is a small least-recently-used cache of byte slices, bounded by
+// entries and by total bytes (callers hold the lock).
+type byteLRU struct {
+	keys  []string
+	vals  map[string][]byte
+	bytes int
 }
 
-func (c *lru[T]) get(k string) (T, bool) {
+func (c *byteLRU) get(k string) ([]byte, bool) {
 	v, ok := c.vals[k]
 	if ok {
 		c.touch(k)
@@ -141,24 +156,45 @@ func (c *lru[T]) get(k string) (T, bool) {
 	return v, ok
 }
 
-func (c *lru[T]) put(k string, v T, max int) {
-	if c.vals == nil {
-		c.vals = map[string]T{}
+func (c *byteLRU) put(k string, v []byte, maxEntries, maxBytes int) {
+	if len(v) > maxBytes {
+		return
 	}
-	if _, ok := c.vals[k]; !ok && len(c.keys) >= max {
-		delete(c.vals, c.keys[0])
+	if c.vals == nil {
+		c.vals = map[string][]byte{}
+	}
+	if old, ok := c.vals[k]; ok {
+		c.bytes -= len(old)
+		c.drop(k)
+	}
+	for len(c.keys) > 0 && (len(c.keys) >= maxEntries || c.bytes+len(v) > maxBytes) {
+		oldest := c.keys[0]
+		c.bytes -= len(c.vals[oldest])
+		delete(c.vals, oldest)
 		c.keys = c.keys[1:]
 	}
 	c.vals[k] = v
-	c.touch(k)
+	c.bytes += len(v)
+	c.keys = append(c.keys, k)
 }
 
-func (c *lru[T]) touch(k string) {
+func (c *byteLRU) touch(k string) {
+	c.drop(k)
+	c.keys = append(c.keys, k)
+}
+
+func (c *byteLRU) drop(k string) {
 	for i, x := range c.keys {
 		if x == k {
 			c.keys = append(c.keys[:i], c.keys[i+1:]...)
-			break
+			return
 		}
 	}
-	c.keys = append(c.keys, k)
+}
+
+// Size reports the cached PDFs and renders (entries, bytes), for tests.
+func (v *Viewer) Size() (pdfs, pdfBytes, views, viewBytes int) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return len(v.pdfs.keys), v.pdfs.bytes, len(v.views.keys), v.views.bytes
 }

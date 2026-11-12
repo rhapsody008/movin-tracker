@@ -53,3 +53,28 @@ func TestViewer(t *testing.T) {
 		t.Errorf("removed doc: %v", err)
 	}
 }
+
+// A PDF bigger than 16 MiB is read again each time rather than cached.
+func TestViewerDoesNotCacheHugePDFs(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	huge := "pdf-huge" + strings.Repeat("x", 17<<20)
+	r.conv.Pages[huge] = []docs.Page{{N: 1, W: 595, H: 842, Text: long}}
+	r.conv.Pages["pdf-small"] = []docs.Page{{N: 1, W: 595, H: 842, Text: long}}
+	r.put(t, "docs/raw/huge.pdf", huge)
+	r.put(t, "docs/raw/small.pdf", "pdf-small")
+	r.run(t)
+	v := &docs.Viewer{Sync: r.sync, Conv: r.conv}
+	if _, err := v.View(ctx, r.doc(t, "docs/raw/huge.pdf").ID, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, _, _, _ := v.Size(); n != 0 {
+		t.Fatalf("huge PDF cached")
+	}
+	if _, err := v.View(ctx, r.doc(t, "docs/raw/small.pdf").ID, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, b, views, _ := v.Size(); n != 1 || b != len("pdf-small") || views != 2 {
+		t.Fatalf("cache %d PDFs (%d bytes), %d views", n, b, views)
+	}
+}
