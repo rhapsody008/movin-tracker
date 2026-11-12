@@ -2,6 +2,13 @@
 
 One entry per working session: what was done, what is next, blockers. Newest first.
 
+## 2026-11-12 — milestones + morning check-in
+- Planner on the backlog (NKP not ready): plan merged into plan.md; ZY accepted all recommendations (decisions.md), quiet days explained (default: no message).
+- Built and committed M.1–M.4 (milestone flag + done day on entries, agent tools/prompt, web dialog + timeline, guide + eval 12/12 on Sonnet 5.5) and C.1–C.5 (agenda, checkin.json claim protocol + CHECKIN_SCHEDULE/CHECKIN_CHAT, messages + buttons + /checkin, once-a-minute loop with catch-up until 20:00, Telegram-tab status + guide). UI check 79/79 on the throwaway app.
+- Dev app: `.env` has `CHECKIN_SCHEDULE=off` (container recreated before the loop was wired) so the hot-reloading dev bot sends nothing until ZY approves the live check.
+- Strict review of da0320d..HEAD started (report only).
+- Next: ZY's go-ahead for the live check (`/checkin` in the real group, then remove `CHECKIN_SCHEDULE=off` for a scheduled run); ZY reads the review; push.
+
 ## 2026-11-12 — review fixes
 - ZY read the strict review (review-2026-11-12.md, REJECT) and chose fixes: the blocker and all majors (9af245e, eb1ef86, 65415b5, 9b58984), then the five minors + cache-mark guard (727ebe4), the docs/raw/ Deny in the IAM policy (5f5bc19, files only), and both memory/lock suggestions (25001c9; found the stdout cap had never applied).
 - Re-review by the strict reviewer before pushing: APPROVE WITH NITS. N1–N5 and Q1 fixed (3b2d49f); N6 nits and the remaining lint extras left by choice.
