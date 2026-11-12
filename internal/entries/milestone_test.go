@@ -3,6 +3,7 @@ package entries_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -169,5 +170,38 @@ func TestSearchMilestones(t *testing.T) {
 	var f entries.Filter
 	if err := json.Unmarshal([]byte(`{"milestone":true}`), &f); err != nil || f.Milestone == nil || !*f.Milestone {
 		t.Fatalf("filter JSON: %+v %v", f, err)
+	}
+}
+
+// UpdateIf's check runs against the entry as written: when another copy of
+// the app changed it after this one last read it, the retry re-checks and
+// the update is cancelled instead of overwriting that change.
+func TestUpdateIfRechecksAfterAConflict(t *testing.T) {
+	ctx := context.Background()
+	store := objstore.NewMemory()
+	a, b := load(t, store), load(t, store)
+	e, _ := create(t, a, zyWeb, `{"title":"Book movers","kind":"task","date":"2026-11-11"}`)
+	if err := b.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// b (web) marks it done; a (the bot) still has the old copy cached.
+	if _, err := b.Update(ctx, zyWeb, e.ID, patch(t, `{"status":"done"}`)); err != nil {
+		t.Fatal(err)
+	}
+	errDone := errors.New("already done")
+	checks := 0
+	_, err := a.UpdateIf(ctx, ptTg, e.ID, func(cur entries.Entry) error {
+		checks++
+		if cur.Status == "done" {
+			return errDone
+		}
+		return nil
+	}, patch(t, `{"date":"2026-11-13"}`))
+	if !errors.Is(err, errDone) || checks != 2 {
+		t.Fatalf("want the re-check to refuse (2 checks), got %v after %d", err, checks)
+	}
+	snap, _ := a.Current(ctx)
+	if got, _ := snap.Doc.Find(e.ID); got.Status != "done" || *got.Date != "2026-11-11" {
+		t.Fatalf("the web change was overwritten: %+v", got)
 	}
 }

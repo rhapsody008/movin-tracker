@@ -231,26 +231,6 @@ func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name strin
 		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "")
 		return
 	}
-	snap, err := b.Entries.Current(ctx)
-	if err != nil {
-		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "Couldn't read the entries right now.")
-		return
-	}
-	e, ok := snap.Doc.Find(id)
-	switch {
-	case !ok:
-		b.closeAsk(ctx, cb, "That entry is gone.")
-		return
-	case e.Archived:
-		b.closeAsk(ctx, cb, "That entry was archived.")
-		return
-	case e.Status == entries.StatusDone:
-		b.closeAsk(ctx, cb, "Already done.")
-		return
-	case e.Date == nil || *e.Date != asked:
-		b.closeAsk(ctx, cb, "That task was moved since ("+orNone(e.Date)+"), so I left it.")
-		return
-	}
 	var patch map[string]any
 	switch op {
 	case "d":
@@ -271,10 +251,23 @@ func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name strin
 		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "")
 		return
 	}
+	// The checks run inside the write, against the entry as it is then, so
+	// an edit made meanwhile (web, chat) can't be overwritten.
+	check := func(e entries.Entry) error {
+		switch {
+		case e.Archived:
+			return staleAsk("That entry was archived.")
+		case e.Status == entries.StatusDone:
+			return staleAsk("Already done.")
+		case e.Date == nil || *e.Date != asked:
+			return staleAsk("That task was moved since (" + orNone(e.Date) + "), so I left it.")
+		}
+		return nil
+	}
 	p, err := entries.PatchFromMap(patch)
 	if err == nil {
 		var res entries.Result
-		if res, err = b.Entries.Update(ctx, entries.Actor{By: name, Channel: "telegram"}, id, p); err == nil {
+		if res, err = b.Entries.UpdateIf(ctx, entries.Actor{By: name, Channel: "telegram"}, id, check, p); err == nil {
 			line := agent.ChangeText(res.Changes[0])
 			b.closeAsk(ctx, cb, truncate(line, 190))
 			who := ""
@@ -285,9 +278,22 @@ func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name strin
 			return
 		}
 	}
-	b.Log.Warn("telegram check-in update failed", "by", name, "entryId", id, "err", err)
-	_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "Couldn't save that; try again or tell me in words.")
+	var stale staleAsk
+	switch {
+	case errors.As(err, &stale):
+		b.closeAsk(ctx, cb, string(stale))
+	case errors.Is(err, entries.ErrEntryNotFound):
+		b.closeAsk(ctx, cb, "That entry is gone.")
+	default:
+		b.Log.Warn("telegram check-in update failed", "by", name, "entryId", id, "err", err)
+		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "Couldn't save that; try again or tell me in words.")
+	}
 }
+
+// staleAsk is why a check-in button no longer applies (the answer shown).
+type staleAsk string
+
+func (s staleAsk) Error() string { return string(s) }
 
 func orNone(p *string) string {
 	if p == nil {

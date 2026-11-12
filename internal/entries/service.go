@@ -312,12 +312,24 @@ func (s *Service) Create(ctx context.Context, a Actor, patches []Patch) (Result,
 
 // Update changes fields of one entry.
 func (s *Service) Update(ctx context.Context, a Actor, id string, p Patch) (Result, error) {
+	return s.UpdateIf(ctx, a, id, nil, p)
+}
+
+// UpdateIf is Update with a precondition: check sees the entry as it is in
+// the document being written (re-run if another write wins the race), and
+// an error from it cancels the update and is returned as is.
+func (s *Service) UpdateIf(ctx context.Context, a Actor, id string, check func(Entry) error, p Patch) (Result, error) {
 	var res Result
 	snap, err := s.mutate(ctx, func(d *Doc) error {
 		res = Result{}
 		i := d.find(id)
 		if i < 0 {
 			return fmt.Errorf("%w: %s", ErrEntryNotFound, id)
+		}
+		if check != nil {
+			if err := check(d.Entries[i]); err != nil {
+				return err
+			}
 		}
 		before, e := d.Entries[i], d.Entries[i] // value copies; see Entry
 		if err := p.Apply(&e); err != nil {
