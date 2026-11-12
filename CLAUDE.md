@@ -3,7 +3,7 @@
 Go service: a renovation agent (Telegram bot + web management page) over structured entries stored in S3.
 
 ## Current work: v2 reorg
-Before doing anything on the v2 reorg, read `.claude/work/movin-v2/`:
+Before doing anything on the v2 reorg, read `.claude/work/movin-v2/`, starting with `README.md` (status, backlog, how work is done, environment notes):
 - `plan.md`: the approved plan (steps per phase)
 - `progress.md`: which steps are done, with verification evidence
 - `decisions.md`: what ZY decided and why; don't re-open these without asking

@@ -15,7 +15,7 @@ All decided by ZY unless noted. Newest at the bottom of each section.
 - Kanban: four merged columns, Idea/To do · Shortlisted/Doing · Decided · Done (F4).
 - Costs: estimate = quoted, actual = paid, to-pay = estimate − actual. Header totals count only tasks and decided/done entries (F3).
 - Header keeps the move-in countdown and the quoted/paid/to-pay totals.
-- Agent tools: add_entry, update_entry, search_entries, set_dates, undo_change, ask_drawings (1.5). Archiving via update_entry; hard delete is web-only (F2).
+- Agent tools: add_entry, update_entry, search_entries, set_dates, undo_change, ~~ask_drawings (1.5)~~ (became the three document tools, see "Connections + documents plan answers"). Archiving via update_entry; hard delete is web-only (F2).
 
 ## Telegram
 - Long polling inside the app process; outbound only; single replica required (one poller per token).
@@ -33,7 +33,7 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 
 ## Management plane
 - Storage section is **read-only** (bucket, region, prefix, credential source, test connection). Credentials and bucket stay in env/Secret, because settings.json itself lives in S3 and the pod is stateless.
-- LLM editable (as today). Telegram: status + editable allowlist (users, groups) in settings.json; token stays in the Secret. Drawings: sheet list + Sync now.
+- LLM editable (as today). Telegram: status + editable allowlist (users, groups) in settings.json; token stays in the Secret. Drawings: sheet list + Sync now (built as the **Documents** tab). Later the Telegram tab also got the editable check-in time and chat (2026-11-12).
 
 ## Deployment and safety
 - No egress restrictions assumed.
@@ -89,12 +89,12 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 - First upload: `docs/raw/1.1 Type C5 Unit Layout Plan.pdf` (2026-11-11).
 
 ## Checkpoint before the Phase 1.5 planner (2026-11-11)
-- LLM: **Claude** is the plan for now (may switch later), through the OpenAI-compatible endpoint `https://api.anthropic.com/v1/`. Recommendation given: `claude-opus-5-5` (best on dense drawings and tool use); `claude-sonnet-5-5` is the faster, cheaper option. ZY picks in Settings → LLM.
+- LLM: **Claude** is the plan for now (may switch later), ~~through the OpenAI-compatible endpoint `https://api.anthropic.com/v1/`~~ (superseded: Claude native connection, built in 1.15; saved connection today is Claude native, Opus 5.5). Recommendation given: `claude-opus-5-5` (best on dense drawings and tool use); `claude-sonnet-5-5` is the faster, cheaper option. ZY picks in Settings → LLM.
 - Scanned / image-only documents (list in plan.md 'Later phase: scanned documents') go to a later phase; 1.5 covers documents with a text layer plus drawing images.
 - Deleted the 20 `._*` files from `docs/raw/` (ZY OK).
 - Entries from the documents: broadband + router (ZY: needed before smart home works), Fermax activation, ask Fermax before renovation, defects via Novade, contacts.
 - Novade password in 3.1: ZY already changed it; no special handling needed for that document.
-- Bucket versioning stays **off** for now (ZY, 2026-11-11), until there is a need. Consequence: no S3-level undo; the in-app journal (last 200 changes) is the only undo. The admin guide's "Recover older data" applies only once versioning is on.
+- ~~Bucket versioning stays **off** for now (ZY, 2026-11-11), until there is a need.~~ Superseded 2026-11-12: versioning **on** (see the end of this file). Consequence: no S3-level undo; the in-app journal (last 200 changes) is the only undo. The admin guide's "Recover older data" applies only once versioning is on.
 - LLM connection gets **two kinds** (ZY): OpenAI-compatible (vMLX now, NAI later) and **Claude native** (Messages API, for prompt caching). Planned together with the widened Phase 1.5.
 
 ## Connections + documents plan answers (2026-11-11)

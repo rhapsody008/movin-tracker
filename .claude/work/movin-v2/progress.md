@@ -2,6 +2,8 @@
 
 Tick a step only after its verification passes; put the evidence (command + result) next to it.
 
+> **Status 2026-11-12:** all steps below are done (summary in `README.md`; the latest state is in "Status (2026-11-12)" at the end). The UI check script now lives in `tools/ui-check/` (it was in git-ignored `tmp/ui-check/` when older entries were written).
+
 ## Phase 1
 - [x] 1.0 Baseline — 2026-11-11: `make lint` → lint ok; `make test` → board, objstore, server ok. Committed 155d264.
 - [x] 1.1 Entries model — 2026-11-11: `internal/entries/model.go` + `model_test.go`; `make lint` → lint ok; `make test` → all packages ok; entries: 41 test cases pass (field rules, status per kind, kind-change remap, time needs date, decode normalisation, deep clone, meta).

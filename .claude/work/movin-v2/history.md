@@ -4,6 +4,7 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 
 ## 2026-11-12 (end) — phase close
 - ZY pushed (…2c43940) and turned bucket versioning on (+ 90-day noncurrent rule). All planned work done; open: admin guide review. Next session: backlog when ZY picks it (scanned documents, Phase 2, NKP).
+- Final tidy-up of this folder: `README.md` (start here: status, files, how work is done, environment notes), status notes at the top of plan.md and progress.md, superseded decisions marked, a Phase 2 brief for the planner in plan.md, the UI check kept in `tools/ui-check/` with `run.sh` (87/87 from there).
 
 ## 2026-11-12 (later) — after acceptance
 - ZY accepted milestones + check-in; check-in live in the dev app (first sent 12:23); page order milestones → calendar → board; 'Jump to calendar' removed; ZY pushed (…f13a50c).

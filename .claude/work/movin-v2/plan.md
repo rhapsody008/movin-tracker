@@ -1,5 +1,7 @@
 # movin-tracker v2: plan
 
+> **Status 2026-11-12:** every phase below up to "Milestones + morning check-in" is built and accepted; see `README.md` for the summary and `progress.md` for evidence. Next work comes from "Backlog" at the end (Phase 2 brief there). Early design sections are kept as written; where the build differs, a note says so.
+
 Source: planner, 2026-11-11 (original plan + delta for ZY's decisions and the management plane). Decisions live in `decisions.md`; progress in `progress.md`.
 
 Rules for every step: changes are to the local repo only; `make lint && make test` green after each step; rollback = revert that step's files against baseline `155d264`. Deletions, new vendored dependencies, `kubectl apply`, IAM changes and secrets need ZY's approval.
@@ -26,7 +28,7 @@ Phase 1.5 documents (Goal B): 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5 → 
 (Table updated 2026-11-12 to match the code; the original plan had PDFium, crop.go and a Tracked decorator, none of which were built.)
 
 ## Design
-### Entries (`<prefix>/entries.json`)
+### Entries (`entries.json` at the bucket root; there is no prefix now)
 - `{schema, meta{moveDate,keyDate}, entries[], changes[]}`.
 - Entry: `id, kind, title, room?, category, status, cost{estimate?,actual?}, vendor, date?, time?, source, notes, tags[], archived, by, channel, created, updated`.
 - Status validated per kind (task: todo/doing/done; others: idea/shortlisted/decided/done); kind change remaps status. `time` requires `date`.
@@ -37,7 +39,7 @@ Phase 1.5 documents (Goal B): 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5 → 
 - `Runner.Run(ctx, Request{By, Channel, Turns}, cfg, emit) -> Result{Reply, Changes[{ID,Text}], Model}`.
 - Confirmations are built by the server from Changes (always confirmed, always with an undo handle).
 - Prompt: rules, rooms, compact index of ~150 most recent non-archived entries, sheet index (1.5).
-- Tools: add_entry (entries[], cap 30), update_entry (incl. archived), search_entries, set_dates, undo_change, ask_drawings (1.5.8).
+- Tools: add_entry (entries[], cap 30), update_entry (incl. archived), search_entries, set_dates, undo_change; ~~ask_drawings~~ became search_documents / read_document_page / view_document_page in 1.5. Entries later gained `milestone` and `completed` (M.1).
 - Rules: classify kind/room; one short question when genuinely ambiguous and write nothing; never invent dates/costs/vendors; update rather than duplicate.
 - Both channels resolve LLM settings per message; bot forces Streaming=false.
 
@@ -61,7 +63,7 @@ Phase 1.5 documents (Goal B): 1.5.1 → 1.5.2 → 1.5.3 → 1.5.4 → 1.5.5 → 
 ### Storage admin
 - Read-only: bucket, region, prefix, endpoint, credential source label (env keys / IRSA / profile / instance role / other). Never return key material.
 - Last successful write via a `Tracked` objstore decorator.
-- Test connection on `<prefix>/_probe/<ulid>.json`, single-flight, per-step: create If-None-Match, head, get, stale-ETag put (expect 412), correct-ETag put, delete. A denied delete is reported as its own failed step.
+- Test connection on `_probe/<ulid>.json`, single-flight, per-step: create If-None-Match, head, get, stale-ETag put (expect 412), correct-ETag put, delete. A denied delete is reported as its own failed step.
 
 ### Drawings (1.5) — superseded by "Connections and documents" below (kept for history)
 - Converter: PDFium WASM in-process (go-pdfium/wazero) behind an interface; poppler sidecar fallback. Lazy runtime per sync, closed after; one render at a time.
@@ -197,20 +199,35 @@ Order: M.1 → M.2 → M.3 → M.4 → C.1 → C.2 → C.3 → C.4 → C.5; then
 **C.5 Admin + guide** — check-in status in GET /api/admin/telegram + one line on the Telegram tab; guide. **Live check in the real chat needs ZY's go-ahead.**
 
 ### Risks
-- After M.1 an older build that writes entries.json drops `milestone`/`completed` from every entry (unknown JSON fields are discarded) and versioning is off: rebuild before running any image against the bucket; don't revert M.1 casually.
+- After M.1 an older build that writes entries.json drops `milestone`/`completed` from every entry (unknown JSON fields are discarded): rebuild before running any image against the bucket; don't revert M.1 casually. (Versioning was off then; it is on since 2026-11-12, so an older entries.json version can be restored.)
 - A crash mid-send may repeat part of a check-in after 10 minutes (accepted). A proactive daily post extends 'the bot stays silent in the group' (ZY asked for it; quiet days stay silent).
 
-## Backlog: ideas for the planner after current work (ZY, 2026-11-11; planned 2026-11-12, see above)
+## Backlog: ideas for the planner after current work (ZY, 2026-11-11; done: planned and built 2026-11-12, see above)
 - **Milestones:** a "Checked milestones" record — milestone events with their date — to keep track of what has been done (ZY: "in history"; shape to be decided: likely a new entry kind or a flag on done entries, shown on the web page).
 - **Morning check-in:** every day at 09:30 SGT the bot messages ZY on Telegram with today's tasks and yesterday's tasks, asks whether yesterday's are done, and offers per task: mark done (and add to milestones) or reschedule. Questions for the planner: private chat vs the group, one message vs one per task, buttons vs free text, what counts as "a task for today" (dated tasks, overdue ones), quiet days, and the single-replica scheduler (same constraint as the bot poller; also the document sync's daily schedule).
 
-## Backlog (ZY, 2026-11-12)
-- Scanned documents (see 'Later phase: scanned documents').
-- Phase 2: photos and voice notes (below).
-- NKP deployment (D.*): when the cluster is ready.
+## Backlog (ZY, 2026-11-12) — next work starts here
+- **Phase 2: photos and voice notes** (brief below).
+- **Scanned documents** (see 'Later phase: scanned documents').
+- **NKP deployment** (D.*): when the cluster is ready.
 
-## Phase 2 (room left, not built)
-attachments[]{key,mime} on entries + `<prefix>/media/`; agent.Request.Images; Telegram dispatch by message type; settings `stt` section; `docs/facts/<sheet>.json` + reviewed flag.
+## Phase 2: photos and voice notes (brief for the planner; not planned yet)
+**Goal (ZY's original direction):** besides text, the bot takes photos (a quote, a site photo, a receipt, a sketch) and voice notes, records what they say as entries, and keeps the photo with the entry. Today non-text messages get "I can only read text for now…" (`internal/telegram/bot.go` `handle`).
+
+**Already in place to build on:**
+- Telegram client: `GetFile` + `Download` (20 MB cap, token scrubbed), kept on purpose for this phase (`internal/telegram/client.go`); `Message` has `Photo`, `Document`, `Voice`.
+- Images to the model: `llm.Message.Images` with Claude image blocks and OpenAI image parts (1.5.10); the saved connection's `vision` flag (Claude: always); images never kept in chat history; a per-message image cap (`agent.MaxImagesPerTurn` = 6).
+- Storage: `objstore.Blobs` (`List`, `PutBlob`); one bucket, versioning on.
+- Entries: journal + Undo, ETag writes, `UpdateIf` for preconditions; the web page has a card dialog to extend.
+
+**Earlier sketch (2026-11-11):** `attachments[]{key, mime}` on entries + a `media/` folder in the bucket; `agent.Request.Images`; Telegram dispatch by message type; a settings `stt` section (speech-to-text) for voice; `docs/facts/<sheet>.json` + a reviewed flag (facts pulled from drawings).
+
+**Questions for the planner / ZY:**
+- Photos: keep the original in the bucket and link it from the entry (thumbnails on the page?), or only use it to fill the entry? Size limits and the 256 MiB pod.
+- Voice: which speech-to-text (Claude can't take audio today; a separate STT API or a local model), its key and cost; transcript shown before saving?
+- PDFs sent in Telegram: still no (ZY, 1.5.14) — or now?
+- Old entries.json readers: adding `attachments` has the same "older build drops the field" hazard as milestones.
+- Web page: show/upload photos on entries?
 
 ## Risks
 - Bot token leaking through URL errors (scrub; tested in 1.8).
