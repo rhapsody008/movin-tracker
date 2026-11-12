@@ -30,7 +30,6 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/docs/convert"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
-	"github.com/rhapsody008/movin-tracker/internal/sched"
 	"github.com/rhapsody008/movin-tracker/internal/server"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 	"github.com/rhapsody008/movin-tracker/internal/telegram"
@@ -126,8 +125,8 @@ func serve() error {
 	var bot *telegram.Bot
 	if c.TelegramToken != "" {
 		bot = &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Docs: syncer, Log: log}
-		if hh, mm, on, _ := sched.Parse("CHECKIN_SCHEDULE", c.Checkin, "09:30"); on {
-			bot.Checkin = &telegram.Checkin{Hour: hh, Minute: mm, Chat: c.CheckinChat, State: &telegram.CheckinStore{Store: store, Now: time.Now}}
+		if c.CheckinOn {
+			bot.Checkin = &telegram.Checkin{Hour: c.CheckinHour, Minute: c.CheckinMinute, Chat: c.CheckinChat, State: &telegram.CheckinStore{Store: store}}
 		} else {
 			log.Info("CHECKIN_SCHEDULE is off; no morning check-in")
 		}

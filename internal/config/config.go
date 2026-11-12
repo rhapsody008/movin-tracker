@@ -11,8 +11,10 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/docs"
 	"github.com/rhapsody008/movin-tracker/internal/sched"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
-	"github.com/rhapsody008/movin-tracker/internal/telegram"
 )
+
+// DefaultCheckin is CHECKIN_SCHEDULE's default.
+const DefaultCheckin = "09:30"
 
 type Config struct {
 	ListenAddr string
@@ -32,8 +34,11 @@ type Config struct {
 
 	DocsSync string // DOCS_SYNC_SCHEDULE: HH:MM in TZ, or off; default 03:00
 
-	Checkin     string // CHECKIN_SCHEDULE: HH:MM in TZ, or off; default 09:30
-	CheckinChat int64  // CHECKIN_CHAT: where the check-in goes; 0 = the first allowed group, else the first person
+	// CHECKIN_SCHEDULE: HH:MM in TZ, or off; default 09:30.
+	Checkin                    string
+	CheckinOn                  bool
+	CheckinHour, CheckinMinute int
+	CheckinChat                int64 // CHECKIN_CHAT: where the check-in goes; 0 = the first allowed group, else the first person
 
 	TelegramToken string            // empty: the bot does not start
 	Telegram      settings.Telegram // env-level allowlist; settings.json overrides
@@ -103,15 +108,16 @@ func Load() (Config, error) {
 			return c, fmt.Errorf("LLM_THINK_ON_DEMAND: %w", err)
 		}
 	}
-	c.DocsSync = env("DOCS_SYNC_SCHEDULE", "03:00")
-	if _, _, _, err := docs.ParseSchedule(c.DocsSync); err != nil {
+	c.DocsSync = env("DOCS_SYNC_SCHEDULE", docs.DefaultSyncSchedule)
+	if _, _, _, err := sched.Parse("DOCS_SYNC_SCHEDULE", c.DocsSync, docs.DefaultSyncSchedule); err != nil {
 		return c, err
 	}
-	c.Checkin = env("CHECKIN_SCHEDULE", "09:30")
-	if hh, _, on, err := sched.Parse("CHECKIN_SCHEDULE", c.Checkin, "09:30"); err != nil {
+	c.Checkin = env("CHECKIN_SCHEDULE", DefaultCheckin)
+	if c.CheckinHour, c.CheckinMinute, c.CheckinOn, err = sched.Parse("CHECKIN_SCHEDULE", c.Checkin, DefaultCheckin); err != nil {
 		return c, err
-	} else if on && hh >= telegram.CheckinCutoff {
-		return c, fmt.Errorf("CHECKIN_SCHEDULE must be before %d:00 (later check-ins are skipped)", telegram.CheckinCutoff)
+	}
+	if c.CheckinOn && c.CheckinHour >= sched.CheckinCutoff {
+		return c, fmt.Errorf("CHECKIN_SCHEDULE must be before %d:00 (later check-ins are skipped)", sched.CheckinCutoff)
 	}
 	if v := env("CHECKIN_CHAT", ""); v != "" {
 		if c.CheckinChat, err = strconv.ParseInt(v, 10, 64); err != nil || c.CheckinChat == 0 {

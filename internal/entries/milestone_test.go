@@ -89,6 +89,13 @@ func TestCompletedDayFollowsStatus(t *testing.T) {
 	if _, err := svc.Update(ctx, zyWeb, res.Entries[0].ID, patch(t, `{"status":"todo","completed":"2026-11-10"}`)); err == nil || !strings.Contains(err.Error(), "completed needs status done") {
 		t.Fatalf("want 'completed needs status done', got %v", err)
 	}
+	// Clearing the day of a done entry keeps the day it had.
+	if res, _ := svc.Update(ctx, zyWeb, e.ID, patch(t, `{"completed":null}`)); day(res.Entries[0]) != "2026-11-10" {
+		t.Fatalf("cleared day: %s", day(res.Entries[0]))
+	}
+	if res, _ := svc.Update(ctx, zyWeb, e.ID, patch(t, `{"completed":""}`)); day(res.Entries[0]) != "2026-11-10" {
+		t.Fatalf("emptied day: %s", day(res.Entries[0]))
+	}
 	if _, err := svc.Update(ctx, zyWeb, e.ID, patch(t, `{"completed":"10/11/2026"}`)); err == nil {
 		t.Fatal("bad completed date accepted")
 	}

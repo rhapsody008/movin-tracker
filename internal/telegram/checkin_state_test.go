@@ -32,63 +32,70 @@ func TestCheckinDue(t *testing.T) {
 func TestCheckinClaim(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 11, 12, 1, 30, 0, 0, time.UTC)
-	st := &telegram.CheckinStore{Store: objstore.NewMemory(), Now: func() time.Time { return now }}
+	st := &telegram.CheckinStore{Store: objstore.NewMemory()}
 
-	// First ever: claimed, nothing to ask from before.
-	prev, tag, ok, err := st.Claim(ctx, "2026-11-12", "-100")
-	if err != nil || !ok || prev.Since() != "" {
-		t.Fatalf("first claim: %+v %v %v", prev, ok, err)
+	// First ever: claimed, asks about yesterday (no window yet).
+	c, _, err := st.Claim(ctx, "2026-11-12", "-100", now)
+	if err != nil || c == nil || c.Record.Since != "" {
+		t.Fatalf("first claim: %+v %v", c, err)
 	}
-	// While it is being sent, nobody else gets it.
-	if _, _, ok, _ := st.Claim(ctx, "2026-11-12", "-100"); ok {
-		t.Fatal("second claim while sending")
+	// While it is being sent, nobody else gets it, and it isn't finished.
+	if c2, cur, _ := st.Claim(ctx, "2026-11-12", "-100", now); c2 != nil || cur.Finished("2026-11-12") || !cur.Taken("2026-11-12", now) {
+		t.Fatalf("second claim while sending: %+v %+v", c2, cur)
 	}
-	r, _, _ := st.Load(ctx)
-	if err := st.Finish(ctx, tag, r, telegram.CheckinSent); err != nil {
+	if err := st.Finish(ctx, c, telegram.CheckinSent, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok, _ := st.Claim(ctx, "2026-11-12", "-100"); ok {
-		t.Fatal("claimed again after sent")
+	if c2, cur, _ := st.Claim(ctx, "2026-11-12", "-100", now); c2 != nil || !cur.Finished("2026-11-12") {
+		t.Fatalf("claimed again after sent: %+v", cur)
 	}
-	// Next day: claimed, asks from the day after the last one.
+	// Next day: the 12th's tasks were "today" then, so the 13th asks from the 12th.
 	now = now.Add(24 * time.Hour)
-	prev, tag, ok, _ = st.Claim(ctx, "2026-11-13", "-100")
-	if !ok || prev.Since() != "2026-11-13" {
-		t.Fatalf("next day: %+v %v", prev, ok)
+	c, _, _ = st.Claim(ctx, "2026-11-13", "-100", now)
+	if c == nil || c.Record.Since != "2026-11-12" || c.Prev.Day != "2026-11-12" {
+		t.Fatalf("next day: %+v", c)
 	}
-	// A failed send gives the day back with the old record, so the retry
-	// still asks from the same day.
-	if err := st.Release(ctx, tag, prev); err != nil {
+	// A failed send gives the day back with the old record; the retry asks
+	// about the same days.
+	if err := st.Release(ctx, c); err != nil {
 		t.Fatal(err)
 	}
-	prev, _, ok, _ = st.Claim(ctx, "2026-11-13", "-100")
-	if !ok || prev.Since() != "2026-11-13" {
-		t.Fatalf("retry after release: %+v %v", prev, ok)
+	c, _, _ = st.Claim(ctx, "2026-11-13", "-100", now)
+	if c == nil || c.Record.Since != "2026-11-12" {
+		t.Fatalf("retry after release: %+v", c)
 	}
-	// A crash mid-send: the claim holds for StaleClaim, then can be retaken,
-	// and that check-in asks about the crashed day's tasks again.
+	// A crash mid-send: the claim holds for StaleClaim, then is taken over
+	// with the crashed claim's window, not an empty one.
 	now = now.Add(telegram.StaleClaim - time.Second)
-	if _, _, ok, _ := st.Claim(ctx, "2026-11-13", "-100"); ok {
+	if c2, _, _ := st.Claim(ctx, "2026-11-13", "-100", now); c2 != nil {
 		t.Fatal("fresh claim retaken")
 	}
 	now = now.Add(2 * time.Second)
-	prev, _, ok, _ = st.Claim(ctx, "2026-11-13", "-100")
-	if !ok || prev.Status != telegram.CheckinSending || prev.Since() != "2026-11-13" {
-		t.Fatalf("stale claim: %+v %v", prev, ok)
+	c, _, _ = st.Claim(ctx, "2026-11-13", "-100", now)
+	if c == nil || c.Prev.Status != telegram.CheckinSending || c.Record.Since != "2026-11-12" {
+		t.Fatalf("stale claim: %+v", c)
+	}
+	// A quiet day also moves the window on.
+	if err := st.Finish(ctx, c, telegram.CheckinQuiet, now); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(24 * time.Hour)
+	if c, _, _ = st.Claim(ctx, "2026-11-14", "-100", now); c == nil || c.Record.Since != "2026-11-13" {
+		t.Fatalf("after a quiet day: %+v", c)
 	}
 }
 
 func TestCheckinReleaseOfFirstEver(t *testing.T) {
 	ctx := context.Background()
-	st := &telegram.CheckinStore{Store: objstore.NewMemory(), Now: time.Now}
-	prev, tag, ok, _ := st.Claim(ctx, "2026-11-12", "1")
-	if !ok {
+	st := &telegram.CheckinStore{Store: objstore.NewMemory()}
+	c, _, _ := st.Claim(ctx, "2026-11-12", "1", time.Now())
+	if c == nil {
 		t.Fatal("no claim")
 	}
-	if err := st.Release(ctx, tag, prev); err != nil {
+	if err := st.Release(ctx, c); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok, _ := st.Claim(ctx, "2026-11-12", "1"); !ok {
+	if c, _, _ := st.Claim(ctx, "2026-11-12", "1", time.Now()); c == nil {
 		t.Fatal("not claimable after release")
 	}
 }
@@ -104,12 +111,12 @@ func TestCheckinOneWinner(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					st := &telegram.CheckinStore{Store: store, Now: time.Now}
-					_, _, ok, err := st.Claim(context.Background(), "2026-11-12", "1")
+					st := &telegram.CheckinStore{Store: store}
+					c, _, err := st.Claim(context.Background(), "2026-11-12", "1", time.Now())
 					if err != nil {
 						t.Error(err)
 					}
-					wins <- ok
+					wins <- c != nil
 				}()
 			}
 			wg.Wait()

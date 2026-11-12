@@ -7,22 +7,14 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/sched"
 )
 
-// ParseSchedule reads DOCS_SYNC_SCHEDULE: "HH:MM" (24 h, in the app's time
-// zone) or "off". Empty means the default, 03:00.
-func ParseSchedule(s string) (hour, minute int, on bool, err error) {
-	return sched.Parse("DOCS_SYNC_SCHEDULE", s, "03:00")
-}
-
-// NextRun is the next time after now that the clock in loc shows hh:mm.
-func NextRun(now time.Time, hh, mm int, loc *time.Location) time.Time {
-	return sched.NextRun(now, hh, mm, loc)
-}
+// DefaultSyncSchedule is DOCS_SYNC_SCHEDULE's default.
+const DefaultSyncSchedule = "03:00"
 
 // Background runs the startup sync, the daily sync and a once-a-minute
 // check for index changes made by another copy of the app (dev and
 // production share the bucket). It returns when ctx ends.
 func (s *Syncer) Background(ctx context.Context, schedule string, loc *time.Location) error {
-	hh, mm, on, err := ParseSchedule(schedule)
+	hh, mm, on, err := sched.Parse("DOCS_SYNC_SCHEDULE", schedule, DefaultSyncSchedule)
 	if err != nil {
 		return err
 	}
@@ -39,7 +31,7 @@ func (s *Syncer) Background(ctx context.Context, schedule string, loc *time.Loca
 		if !on {
 			return
 		}
-		next := NextRun(s.now(), hh, mm, loc)
+		next := sched.NextRun(s.now(), hh, mm, loc)
 		s.Log.Info("next daily document sync", "at", next.Format(time.RFC3339))
 		if timer != nil {
 			timer.Stop()

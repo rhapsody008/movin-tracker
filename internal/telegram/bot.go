@@ -47,7 +47,7 @@ type Bot struct {
 	st      Status
 	wg      sync.WaitGroup // running workers
 
-	checkinDay string // the day this process last saw handled (saves a read a minute)
+	checkinDay string // the last day this process saw finished (saves a read a minute)
 }
 
 type chatHistory struct {
@@ -120,9 +120,6 @@ func (b *Bot) setErr(err error) {
 func (b *Bot) Run(ctx context.Context) error {
 	if b.PollSeconds <= 0 {
 		b.PollSeconds = 50
-	}
-	if b.IdleReset <= 0 {
-		b.IdleReset = 2 * time.Hour
 	}
 	if b.ConflictWait <= 0 {
 		b.ConflictWait = 15 * time.Second
@@ -398,13 +395,9 @@ func (b *Bot) converse(ctx context.Context, m *Message, name, text string, think
 	if group {
 		content = name + ": " + text
 	}
+	userTurn := agent.Turn{Role: "user", Content: content}
 	b.mu.Lock()
-	h := b.history[m.Chat.ID]
-	if h == nil || b.now().Sub(h.last) > b.IdleReset {
-		h = &chatHistory{}
-		b.history[m.Chat.ID] = h
-	}
-	turns := append(append([]agent.Turn{}, h.turns...), agent.Turn{Role: "user", Content: content})
+	turns := append(append([]agent.Turn{}, b.historyFor(m.Chat.ID).turns...), userTurn)
 	b.mu.Unlock()
 
 	stop := b.typing(ctx, m.Chat.ID)
@@ -413,15 +406,18 @@ func (b *Bot) converse(ctx context.Context, m *Message, name, text string, think
 	res, err := b.Agent.Run(ctx, agent.Request{By: name, Channel: "telegram", Group: group, Think: think, Turns: turns}, cfg, nil)
 	stop()
 
+	// Append to the history as it is now: the morning check-in may have
+	// added to it while the agent was working.
 	b.mu.Lock()
-	h.last = b.now()
+	h := b.historyFor(m.Chat.ID)
 	if err == nil {
-		h.turns = turns // the user turn stays even when the bot keeps quiet
+		h.turns = append(h.turns, userTurn) // stays even when the bot keeps quiet
 		if !res.Silent {
 			h.turns = append(h.turns, agent.Turn{Role: "assistant", Content: res.Reply})
 		}
 		h.turns = agent.CleanTurns(h.turns)
 	}
+	h.last = b.now()
 	b.mu.Unlock()
 
 	if err != nil {
@@ -441,6 +437,24 @@ func (b *Bot) converse(ctx context.Context, m *Message, name, text string, think
 		out += "\n\n" + changeText(res.Changes)
 	}
 	b.reply(ctx, m, out, undoKeyboard(res.Changes))
+}
+
+// historyFor returns a chat's history, starting a new one after IdleReset
+// of silence (callers hold b.mu).
+func (b *Bot) historyFor(chatID int64) *chatHistory {
+	if b.history == nil {
+		b.history = map[int64]*chatHistory{}
+	}
+	idle := b.IdleReset
+	if idle <= 0 {
+		idle = 2 * time.Hour
+	}
+	h := b.history[chatID]
+	if h == nil || b.now().Sub(h.last) > idle {
+		h = &chatHistory{last: b.now()}
+		b.history[chatID] = h
+	}
+	return h
 }
 
 // typing shows "typing…" until the returned stop is called (Telegram drops

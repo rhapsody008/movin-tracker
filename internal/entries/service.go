@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
+	"github.com/rhapsody008/movin-tracker/internal/sched"
 )
 
 const Key = "entries.json"
@@ -100,7 +101,7 @@ func (s *Service) SetLocation(loc *time.Location) {
 	}
 }
 
-func (s *Service) today() string { return s.now().In(s.loc).Format("2006-01-02") }
+func (s *Service) today() string { return sched.Day(s.now(), s.loc) }
 
 // SetClock replaces the time source (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }

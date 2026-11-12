@@ -688,7 +688,7 @@ func TestTelegramAdminCheckinStatus(t *testing.T) {
 		t.Fatalf("off: %s", body)
 	}
 	// On, nowhere to send yet, nothing sent.
-	bot.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: store, Now: time.Now}}
+	bot.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: store}}
 	_, m, body = e.do(t, "GET", "/api/admin/telegram", "")
 	c, _ := m["checkin"].(map[string]any)
 	if c["on"] != true || c["at"] != "09:30" || c["until"] != "20:00" || !strings.Contains(fmt.Sprint(c["error"]), "no group or person") || c["last"] != nil {
@@ -696,9 +696,14 @@ func TestTelegramAdminCheckinStatus(t *testing.T) {
 	}
 	// The saved group is the target; the last record shows.
 	e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"111","name":"ZY"}],"groups":["-1001"]}`)
-	st := &telegram.CheckinStore{Store: store, Now: time.Now}
-	_, tag, _, _ := st.Claim(context.Background(), "2026-11-12", "-1001")
-	st.Finish(context.Background(), tag, telegram.CheckinRecord{Day: "2026-11-12", Chat: "-1001"}, telegram.CheckinSent)
+	st := &telegram.CheckinStore{Store: store}
+	claim, _, err := st.Claim(context.Background(), "2026-11-12", "-1001", time.Now())
+	if err != nil || claim == nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if err := st.Finish(context.Background(), claim, telegram.CheckinSent, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	_, m, body = e.do(t, "GET", "/api/admin/telegram", "")
 	c, _ = m["checkin"].(map[string]any)
 	last, _ := c["last"].(map[string]any)

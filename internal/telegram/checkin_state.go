@@ -26,7 +26,7 @@ const (
 // CheckinCutoff is the local hour after which a missed check-in is skipped
 // for the day rather than sent late; config refuses a schedule at or after
 // it.
-const CheckinCutoff = 20
+const CheckinCutoff = sched.CheckinCutoff
 
 // StaleClaim is how long a "sending" claim holds; after that (a crash
 // mid-send) another run may take the day over.
@@ -37,14 +37,17 @@ type CheckinRecord struct {
 	Schema int    `json:"schema"`
 	Day    string `json:"day"` // YYYY-MM-DD in the app's TZ
 	Status string `json:"status"`
-	At     string `json:"at"`             // RFC 3339, when the status was set
-	Chat   string `json:"chat,omitempty"` // where it went
+	// Since is the first day this check-in asks about (tasks dated from
+	// Since to the day before Day); kept so a run that takes over a crashed
+	// claim asks about the same days.
+	Since string `json:"since,omitempty"`
+	At    string `json:"at"`             // RFC 3339, when the status was set
+	Chat  string `json:"chat,omitempty"` // where it went
 }
 
 // CheckinStore reads and claims the record with conditional writes.
 type CheckinStore struct {
 	Store objstore.Store
-	Now   func() time.Time
 }
 
 // Load returns the record and its ETag ("" and a zero record when there is
@@ -64,71 +67,86 @@ func (s *CheckinStore) Load(ctx context.Context) (CheckinRecord, string, error) 
 	return r, etag, nil
 }
 
-// Done reports whether day is already handled (sent, quiet, or being sent
-// by someone else within StaleClaim).
-func (r CheckinRecord) Done(day string, now time.Time) bool {
-	if r.Day != day {
-		return false
-	}
-	if r.Status != CheckinSending {
+// Finished reports whether day's check-in went out or was quiet.
+func (r CheckinRecord) Finished(day string) bool {
+	return r.Day == day && (r.Status == CheckinSent || r.Status == CheckinQuiet)
+}
+
+// Taken reports whether day is finished or being sent by someone within
+// StaleClaim.
+func (r CheckinRecord) Taken(day string, now time.Time) bool {
+	if r.Finished(day) {
 		return true
+	}
+	if r.Day != day || r.Status != CheckinSending {
+		return false
 	}
 	at, err := time.Parse(time.RFC3339, r.At)
 	return err == nil && now.Sub(at) < StaleClaim
 }
 
-// Since is the first day the next check-in should ask about: the day after
-// the last one that went out (or was quiet); the same day again if that
-// one may not have finished; "" when there was none.
-func (r CheckinRecord) Since() string {
+// NextSince is the first day the next check-in should ask about. A
+// check-in on day D listed D's tasks as "today" without asking, so the next
+// one asks from D. A claim that may not have finished asks its own days
+// again. "" when there was none (the agenda then asks about yesterday).
+func (r CheckinRecord) NextSince() string {
 	switch {
 	case r.Day == "":
 		return ""
-	case r.Status == CheckinSending:
-		return r.Day
+	case r.Status == CheckinSending && r.Since != "":
+		return r.Since
 	default:
-		return sched.AddDays(r.Day, 1)
+		return r.Day
 	}
 }
 
-// Claim takes day for this run. It returns ok=false when the day is
-// already handled or another run won the conditional write. prev is the
-// record it replaced (for Since and for Release); etag is the claim's.
-func (s *CheckinStore) Claim(ctx context.Context, day, chat string) (prev CheckinRecord, etag string, ok bool, err error) {
+// CheckinClaim is a day this run has taken.
+type CheckinClaim struct {
+	Record CheckinRecord // what was written: Day, Since, Chat
+	Prev   CheckinRecord // what it replaced (Release puts it back)
+	ETag   string
+}
+
+// Claim takes day for this run. It returns nil when the day is already
+// taken or another run won the conditional write, together with the record
+// as read.
+func (s *CheckinStore) Claim(ctx context.Context, day, chat string, now time.Time) (*CheckinClaim, CheckinRecord, error) {
 	prev, prevTag, err := s.Load(ctx)
 	if err != nil {
-		return prev, "", false, err
+		return nil, prev, err
 	}
-	if prev.Done(day, s.Now()) {
-		return prev, "", false, nil
+	if prev.Taken(day, now) {
+		return nil, prev, nil
 	}
-	etag, err = s.put(ctx, CheckinRecord{Day: day, Status: CheckinSending, At: s.stamp(), Chat: chat}, prevTag)
+	rec := CheckinRecord{Day: day, Status: CheckinSending, Since: prev.NextSince(), At: stamp(now), Chat: chat}
+	if prev.Day == day && prev.Status == CheckinSending {
+		rec.Since = prev.Since // taking over a crashed claim: the same days
+	}
+	etag, err := s.put(ctx, rec, prevTag)
 	if errors.Is(err, objstore.ErrPrecondition) {
-		return prev, "", false, nil
+		return nil, prev, nil
 	}
 	if err != nil {
-		return prev, "", false, err
+		return nil, prev, err
 	}
-	return prev, etag, true, nil
+	return &CheckinClaim{Record: rec, Prev: prev, ETag: etag}, prev, nil
 }
 
 // Finish marks the claimed day sent or quiet.
-func (s *CheckinStore) Finish(ctx context.Context, etag string, r CheckinRecord, status string) error {
-	r.Status, r.At = status, s.stamp()
-	_, err := s.put(ctx, r, etag)
+func (s *CheckinStore) Finish(ctx context.Context, c *CheckinClaim, status string, now time.Time) error {
+	r := c.Record
+	r.Status, r.At = status, stamp(now)
+	_, err := s.put(ctx, r, c.ETag)
 	return err
 }
 
 // Release gives a claimed day back after a failed send, restoring the
-// previous record as it was (its time too, so a stale claim stays stale)
-// and the next try asks about the same days.
-func (s *CheckinStore) Release(ctx context.Context, etag string, prev CheckinRecord) error {
-	if prev.Day == "" {
-		// There was no record: leave an empty one (a conditional delete
-		// isn't available), which reads as "never sent".
-		prev = CheckinRecord{}
-	}
-	_, err := s.put(ctx, prev, etag)
+// previous record as it was (its time too, so a stale claim stays stale),
+// so the next try asks about the same days.
+func (s *CheckinStore) Release(ctx context.Context, c *CheckinClaim) error {
+	// With no previous record this writes an empty one (a conditional
+	// delete isn't available), which reads as "never sent".
+	_, err := s.put(ctx, c.Prev, c.ETag)
 	return err
 }
 
@@ -141,7 +159,7 @@ func (s *CheckinStore) put(ctx context.Context, r CheckinRecord, ifMatch string)
 	return s.Store.Put(ctx, CheckinKey, body, ifMatch)
 }
 
-func (s *CheckinStore) stamp() string { return s.Now().UTC().Format(time.RFC3339) }
+func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 // CheckinDue reports whether a check-in scheduled at hh:mm should go out
 // at now: from that time until CheckinCutoff, local time in loc.

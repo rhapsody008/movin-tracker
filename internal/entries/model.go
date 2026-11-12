@@ -416,8 +416,9 @@ const StatusDone = "done"
 
 // settleCompleted keeps Completed in step with the status after p was
 // applied to e (before is the entry as it was; nil for a new one): moving to
-// done stamps today unless p sets a day itself; leaving done clears it; a day
-// on an entry that isn't done is refused.
+// done stamps today unless p sets a day itself; clearing the day of a done
+// entry keeps the day it had (or today); leaving done clears it; a day on an
+// entry that isn't done is refused.
 func settleCompleted(before *Entry, e *Entry, p Patch, today string) error {
 	_, explicit := p["completed"]
 	if e.Status != StatusDone {
@@ -428,8 +429,11 @@ func settleCompleted(before *Entry, e *Entry, p Patch, today string) error {
 		return nil
 	}
 	wasDone := before != nil && before.Status == StatusDone
-	if !wasDone && !explicit {
+	switch {
+	case !wasDone && (!explicit || e.Completed == nil):
 		e.Completed = &today
+	case explicit && e.Completed == nil:
+		e.Completed = before.Completed // a done entry keeps its day
 	}
 	return nil
 }

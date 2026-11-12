@@ -38,6 +38,10 @@ func NextRun(now time.Time, hh, mm int, loc *time.Location) time.Time {
 	return next
 }
 
+// CheckinCutoff is the local hour after which a missed morning check-in is
+// skipped for the day; CHECKIN_SCHEDULE must be earlier.
+const CheckinCutoff = 20
+
 // Day is now's calendar day in loc (YYYY-MM-DD).
 func Day(now time.Time, loc *time.Location) string { return now.In(loc).Format("2006-01-02") }
 

@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -41,12 +40,17 @@ func (b *Bot) loc() *time.Location {
 	return time.UTC
 }
 
-// checkinChat is where the scheduled check-in goes.
+// checkinChat is where the scheduled check-in goes. CHECKIN_CHAT must be
+// on the allowlist, or every button press there would be refused.
 func (b *Bot) checkinChat(ctx context.Context) (int64, error) {
-	if b.Checkin != nil && b.Checkin.Chat != 0 {
-		return b.Checkin.Chat, nil
-	}
 	tg := b.Settings.ResolveTelegram(ctx)
+	if b.Checkin != nil && b.Checkin.Chat != 0 {
+		id := b.Checkin.Chat
+		if _, ok := tg.UserName(id); ok || tg.GroupAllowed(id) {
+			return id, nil
+		}
+		return 0, fmt.Errorf("CHECKIN_CHAT %d is not an allowed group or person (Settings → Telegram)", id)
+	}
 	for _, g := range tg.Groups {
 		if id, err := strconv.ParseInt(g, 10, 64); err == nil {
 			return id, nil
@@ -128,12 +132,16 @@ func askText(e entries.Entry, today string) string {
 	return when + ": " + agendaLine(e) + "\nDone?"
 }
 
-func askKeyboard(id string) *InlineKeyboardMarkup {
+// askKeyboard's buttons carry the task's date as asked (YYYYMMDD), so a
+// press after the task was moved elsewhere changes nothing:
+// ci:<op>:<id>:<date>[:<days>], at most 44 bytes (Telegram allows 64).
+func askKeyboard(e entries.Entry) *InlineKeyboardMarkup {
+	base := e.ID + ":" + strings.ReplaceAll(*e.Date, "-", "")
 	return &InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{{
-		{Text: "Done", CallbackData: checkinPrefix + "d:" + id},
-		{Text: "Done ★", CallbackData: checkinPrefix + "m:" + id},
-		{Text: "Tomorrow", CallbackData: checkinPrefix + "r:" + id + ":1"},
-		{Text: "+1 week", CallbackData: checkinPrefix + "r:" + id + ":7"},
+		{Text: "Done", CallbackData: checkinPrefix + "d:" + base},
+		{Text: "Done ★", CallbackData: checkinPrefix + "m:" + base},
+		{Text: "Tomorrow", CallbackData: checkinPrefix + "r:" + base + ":1"},
+		{Text: "+1 week", CallbackData: checkinPrefix + "r:" + base + ":7"},
 	}}}
 }
 
@@ -156,7 +164,7 @@ func (b *Bot) sendCheckin(ctx context.Context, chatID int64, today string, ag en
 	var asked []string
 	for _, e := range asks {
 		txt := askText(e, today)
-		if _, err := b.API.SendMessage(ctx, SendMessage{ChatID: chatID, Text: txt, ReplyMarkup: askKeyboard(e.ID)}); err != nil {
+		if _, err := b.API.SendMessage(ctx, SendMessage{ChatID: chatID, Text: txt, ReplyMarkup: askKeyboard(e)}); err != nil {
 			b.setErr(err)
 			b.Log.Warn("telegram check-in task message failed", "chatId", chatID, "entryId", e.ID, "err", err)
 			continue
@@ -177,23 +185,9 @@ func (b *Bot) sendCheckin(ctx context.Context, chatID int64, today string, ag en
 func (b *Bot) remember(chatID int64, turns ...agent.Turn) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.history == nil {
-		b.history = map[int64]*chatHistory{}
-	}
-	h := b.history[chatID]
-	if h == nil || b.now().Sub(h.last) > b.idleReset() {
-		h = &chatHistory{}
-		b.history[chatID] = h
-	}
+	h := b.historyFor(chatID)
 	h.turns = agent.CleanTurns(append(h.turns, turns...))
 	h.last = b.now()
-}
-
-func (b *Bot) idleReset() time.Duration {
-	if b.IdleReset > 0 {
-		return b.IdleReset
-	}
-	return 2 * time.Hour
 }
 
 // checkinCommand sends the check-in to this chat now. It doesn't touch the
@@ -209,7 +203,7 @@ func (b *Bot) checkinCommand(ctx context.Context, m *Message) {
 	if b.Checkin != nil && b.Checkin.State != nil {
 		// Days missed since the last check-in are asked about too.
 		if r, _, err := b.Checkin.State.Load(ctx); err == nil {
-			if s := r.Since(); s != "" && s < sched.AddDays(today, -1) {
+			if s := r.NextSince(); s != "" && s < sched.AddDays(today, -1) {
 				since = s
 			}
 		}
@@ -224,16 +218,17 @@ func (b *Bot) checkinCommand(ctx context.Context, m *Message) {
 	}
 }
 
-// checkinCallback handles a check-in button: ci:d:<id> done, ci:m:<id>
-// done + milestone, ci:r:<id>:<days> move the date to today + days.
+// checkinCallback handles a check-in button (see askKeyboard): d done,
+// m done + milestone, r move the date to today + days.
 func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name string) {
 	m := cb.Message
 	parts := strings.Split(strings.TrimPrefix(cb.Data, checkinPrefix), ":")
-	if len(parts) < 2 {
+	if len(parts) < 3 || len(parts[2]) != 8 {
 		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "")
 		return
 	}
 	op, id := parts[0], parts[1]
+	asked := parts[2][:4] + "-" + parts[2][4:6] + "-" + parts[2][6:]
 	snap, err := b.Entries.Current(ctx)
 	if err != nil {
 		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "Couldn't read the entries right now.")
@@ -250,6 +245,9 @@ func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name strin
 	case e.Status == entries.StatusDone:
 		b.closeAsk(ctx, cb, "Already done.")
 		return
+	case e.Date == nil || *e.Date != asked:
+		b.closeAsk(ctx, cb, "That task was moved since ("+orNone(e.Date)+"), so I left it.")
+		return
 	}
 	var patch map[string]any
 	switch op {
@@ -259,8 +257,8 @@ func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name strin
 		patch = map[string]any{"status": entries.StatusDone, "milestone": true}
 	case "r":
 		days := 0
-		if len(parts) == 3 {
-			days, _ = strconv.Atoi(parts[2])
+		if len(parts) == 4 {
+			days, _ = strconv.Atoi(parts[3])
 		}
 		if days < 1 || days > 31 {
 			_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "")
@@ -271,22 +269,29 @@ func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name strin
 		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "")
 		return
 	}
-	raw, _ := json.Marshal(patch)
-	var p entries.Patch
-	_ = json.Unmarshal(raw, &p)
-	res, err := b.Entries.Update(ctx, entries.Actor{By: name, Channel: "telegram"}, id, p)
-	if err != nil {
-		b.Log.Warn("telegram check-in update failed", "by", name, "entryId", id, "err", err)
-		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "Couldn't save that; try again or tell me in words.")
-		return
+	p, err := entries.PatchFromMap(patch)
+	if err == nil {
+		var res entries.Result
+		if res, err = b.Entries.Update(ctx, entries.Actor{By: name, Channel: "telegram"}, id, p); err == nil {
+			line := agent.ChangeText(res.Changes[0])
+			b.closeAsk(ctx, cb, truncate(line, 190))
+			who := ""
+			if m.Chat.IsGroup() {
+				who = name + ": "
+			}
+			b.reply(ctx, m, "✓ "+who+line, undoKeyboard([]agent.ChangeLine{{ID: res.Changes[0].ID, Text: line}}))
+			return
+		}
 	}
-	line := agent.ChangeText(res.Changes[0])
-	b.closeAsk(ctx, cb, truncate(line, 190))
-	who := ""
-	if m.Chat.IsGroup() {
-		who = name + ": "
+	b.Log.Warn("telegram check-in update failed", "by", name, "entryId", id, "err", err)
+	_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "Couldn't save that; try again or tell me in words.")
+}
+
+func orNone(p *string) string {
+	if p == nil {
+		return "no date"
 	}
-	b.reply(ctx, m, "✓ "+who+line, undoKeyboard([]agent.ChangeLine{{ID: res.Changes[0].ID, Text: line}}))
+	return shortDay(*p)
 }
 
 // closeAsk answers the button press and removes that message's buttons, so
@@ -322,19 +327,24 @@ func (b *Bot) CheckinLoop(ctx context.Context, every time.Duration) {
 
 // CheckinTick sends today's check-in if it is due and nobody has yet.
 func (b *Bot) CheckinTick(ctx context.Context) {
-	now := b.now()
 	ci := b.Checkin
+	if ci == nil || ci.State == nil {
+		return
+	}
+	now := b.now()
 	if !CheckinDue(now, ci.Hour, ci.Minute, b.loc()) {
 		return
 	}
 	day := sched.Day(now, b.loc())
 	b.mu.Lock()
-	handled := b.checkinDay == day
+	finished := b.checkinDay == day
 	b.mu.Unlock()
-	if handled {
+	if finished {
 		return
 	}
-	markHandled := func() {
+	// Remember only a finished day: while someone else's claim is fresh,
+	// keep checking, so a copy that crashed mid-send is taken over.
+	markFinished := func() {
 		b.mu.Lock()
 		b.checkinDay = day
 		b.mu.Unlock()
@@ -342,46 +352,49 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	chat, err := b.checkinChat(ctx)
 	if err != nil {
 		b.Log.Warn("morning check-in skipped today", "err", err)
-		markHandled()
+		markFinished()
 		return
 	}
-	prev, tag, ok, err := ci.State.Claim(ctx, day, strconv.FormatInt(chat, 10))
+	claim, cur, err := ci.State.Claim(ctx, day, strconv.FormatInt(chat, 10), now)
 	if err != nil {
 		b.Log.Warn("morning check-in: couldn't read or claim the day; will retry", "err", err)
 		return
 	}
-	if !ok { // already sent, quiet, or another copy of the app is sending it
-		markHandled()
+	if claim == nil {
+		if cur.Finished(day) {
+			markFinished()
+		}
 		return
 	}
-	claim := CheckinRecord{Day: day, Chat: strconv.FormatInt(chat, 10)}
+	release := func(why string, err error) {
+		b.Log.Warn("morning check-in: "+why+"; will retry", "err", err)
+		if err := ci.State.Release(ctx, claim); err != nil {
+			b.Log.Warn("morning check-in: couldn't give the day back; it can be retaken in 10 minutes", "err", err)
+		}
+	}
 	snap, err := b.Entries.Current(ctx)
 	if err != nil {
-		b.Log.Warn("morning check-in: couldn't read the entries; will retry", "err", err)
-		_ = ci.State.Release(ctx, tag, prev)
+		release("couldn't read the entries", err)
 		return
 	}
-	ag := snap.Doc.Agenda(day, prev.Since())
+	ag := snap.Doc.Agenda(day, claim.Record.Since)
 	if ag.Quiet() {
-		if err := ci.State.Finish(ctx, tag, claim, CheckinQuiet); err != nil {
+		if err := ci.State.Finish(ctx, claim, CheckinQuiet, b.now()); err != nil {
 			b.Log.Warn("morning check-in: couldn't record a quiet day", "err", err)
 		}
 		b.Log.Info("morning check-in: nothing to report today", "day", day)
-		markHandled()
+		markFinished()
 		return
 	}
 	if err := b.sendCheckin(ctx, chat, day, ag); err != nil {
-		b.Log.Warn("morning check-in couldn't be sent; will retry", "chatId", chat, "err", err)
-		if err := ci.State.Release(ctx, tag, prev); err != nil {
-			b.Log.Warn("morning check-in: couldn't give the day back; it can be retaken in 10 minutes", "err", err)
-		}
+		release("couldn't send it", err)
 		return
 	}
-	if err := ci.State.Finish(ctx, tag, claim, CheckinSent); err != nil {
+	if err := ci.State.Finish(ctx, claim, CheckinSent, b.now()); err != nil {
 		b.Log.Warn("morning check-in sent but not recorded", "err", err)
 	}
 	b.Log.Info("morning check-in sent", "day", day, "chatId", chat, "today", len(ag.Today), "asked", len(ag.Ask), "overdue", len(ag.Overdue))
-	markHandled()
+	markFinished()
 }
 
 // CheckinView is the check-in's state for the admin page.

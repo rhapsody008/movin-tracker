@@ -98,7 +98,8 @@ func TestCheckinCommandAndButtons(t *testing.T) {
 		}
 		title := strings.TrimSuffix(strings.TrimPrefix(strings.SplitN(a.Text, "\n", 2)[0], "Yesterday: "), " (living)")
 		id := ids[title]
-		want := []string{"ci:d:" + id, "ci:m:" + id, "ci:r:" + id + ":1", "ci:r:" + id + ":7"}
+		base := id + ":20261111"
+		want := []string{"ci:d:" + base, "ci:m:" + base, "ci:r:" + base + ":1", "ci:r:" + base + ":7"}
 		for i, b := range a.Buttons {
 			if b.CallbackData != want[i] {
 				t.Fatalf("%s button %d = %q, want %q", title, i, b.CallbackData, want[i])
@@ -107,9 +108,9 @@ func TestCheckinCommandAndButtons(t *testing.T) {
 	}
 
 	// Done, Done ★, +1 week: one journaled change each, with an Undo.
-	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"], groupID, 2001)
-	press(r, partnerID, "Pat", "ci:m:"+ids["Order tiles"], groupID, 2002)
-	press(r, zyID, "Zhou", "ci:r:"+ids["Measure windows"]+":7", groupID, 2003)
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", groupID, 2001)
+	press(r, partnerID, "Pat", "ci:m:"+ids["Order tiles"]+":20261111", groupID, 2002)
+	press(r, zyID, "Zhou", "ci:r:"+ids["Measure windows"]+":20261111:7", groupID, 2003)
 	sent = r.tg.waitSent(t, 7)
 	wantReplies := []string{
 		"✓ ZY: Updated: Book movers (status done)",
@@ -141,12 +142,12 @@ func TestCheckinCommandAndButtons(t *testing.T) {
 
 	// A second press on an answered task writes nothing.
 	changes := len(r.doc(t).Changes)
-	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"], groupID, 2001)
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", groupID, 2001)
 	if a := r.tg.waitAnswers(t, 4); a[3] != "Already done." {
 		t.Errorf("stale press answer %q", a[3])
 	}
 	// A stranger in the group can't press them.
-	press(r, 333, "Stranger", "ci:d:"+ids["Old one"], groupID, 2004)
+	press(r, 333, "Stranger", "ci:d:"+ids["Old one"]+":20261107", groupID, 2004)
 	if a := r.tg.waitAnswers(t, 5); !strings.Contains(a[4], "not on this bot's list") {
 		t.Errorf("stranger: %q", a[4])
 	}
@@ -223,7 +224,7 @@ func scheduled(t *testing.T, now *time.Time) (*botRig, objstore.Store) {
 	r := startBot(t, func(b *telegram.Bot) {
 		b.Now = func() time.Time { return *now }
 		b.Agent.Now, b.Agent.Loc = b.Now, sg
-		b.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state, Now: b.Now}}
+		b.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state}}
 	})
 	return r, state
 }
@@ -238,7 +239,7 @@ func sgt(s string) time.Time {
 
 func record(t *testing.T, store objstore.Store) telegram.CheckinRecord {
 	t.Helper()
-	r, _, err := (&telegram.CheckinStore{Store: store, Now: time.Now}).Load(context.Background())
+	r, _, err := (&telegram.CheckinStore{Store: store}).Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,24 +266,65 @@ func TestCheckinScheduleCatchUpOncePerDay(t *testing.T) {
 	now = sgt("2026-11-12T14:05:00")
 	// Another copy of the app (production) on the same bucket.
 	other := &telegram.Bot{API: r.bot.API, Entries: r.ents, Settings: r.sets, Agent: r.bot.Agent, Log: r.bot.Log, Now: r.bot.Now,
-		Checkin: &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state, Now: r.bot.Now}}}
+		Checkin: &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state}}}
 	other.CheckinTick(ctx)
 	time.Sleep(100 * time.Millisecond)
 	if n := len(r.tg.sentCopy()); n != 2 {
 		t.Fatalf("sent twice: %d messages", n)
 	}
 
-	// The 13th and 14th are missed (Mac off); on the 15th both days' tasks
-	// are asked about, and the 12th's (it was "today" then) is overdue.
-	seed(t, r, task("Paint touch-up", "2026-11-13"), task("Sweep", "2026-11-14"))
-	now = sgt("2026-11-15T09:31:00")
+	// The next morning asks about the 12th's task (it was "today" on the
+	// 12th); the 11th's, already asked about, is overdue.
+	now = sgt("2026-11-13T09:30:00")
 	r.bot.CheckinTick(ctx)
-	sent = r.tg.waitSent(t, 5)
-	if !strings.HasPrefix(sent[3].Text, "Fri 13 Nov: Paint touch-up") || !strings.HasPrefix(sent[4].Text, "Yesterday: Sweep") {
-		t.Fatalf("missed days not asked: %+v", sent[2:])
+	sent = r.tg.waitSent(t, 4)
+	if !strings.HasPrefix(sent[3].Text, "Yesterday: Electrician") || !strings.Contains(sent[2].Text, "Not marked done yet (1)") || !strings.Contains(sent[2].Text, "Still overdue (1):\n• Book movers") {
+		t.Fatalf("back-to-back day: %q / %q", sent[2].Text, sent[3].Text)
 	}
-	if !strings.Contains(sent[2].Text, "Not marked done yet (2)") || !strings.Contains(sent[2].Text, "Still overdue (2)") || !strings.Contains(sent[2].Text, "Book movers") || !strings.Contains(sent[2].Text, "Electrician") {
-		t.Fatalf("summary on the 15th:\n%s", sent[2].Text)
+
+	// The 14th and 15th are missed (Mac off); on the 16th both days' tasks
+	// are asked about, and the older ones are overdue.
+	seed(t, r, task("Paint touch-up", "2026-11-14"), task("Sweep", "2026-11-15"))
+	now = sgt("2026-11-16T09:31:00")
+	r.bot.CheckinTick(ctx)
+	sent = r.tg.waitSent(t, 7)
+	if !strings.HasPrefix(sent[5].Text, "Sat 14 Nov: Paint touch-up") || !strings.HasPrefix(sent[6].Text, "Yesterday: Sweep") {
+		t.Fatalf("missed days not asked: %+v", sent[4:])
+	}
+	if s := sent[4].Text; !strings.Contains(s, "Not marked done yet (2)") || !strings.Contains(s, "Still overdue (2)") || !strings.Contains(s, "Book movers") || !strings.Contains(s, "Electrician") {
+		t.Fatalf("summary on the 16th:\n%s", s)
+	}
+}
+
+// Another copy claimed the day and died mid-send: this one keeps checking
+// and takes over after StaleClaim, asking about the crashed claim's days.
+func TestCheckinTakesOverACrashedClaim(t *testing.T) {
+	ctx := context.Background()
+	now := sgt("2026-11-13T09:30:00")
+	r, state := scheduled(t, &now)
+	seed(t, r, task("Electrician", "2026-11-12"))
+	st := &telegram.CheckinStore{Store: state}
+	// The 12th went out (from another copy), then the 13th was claimed and lost.
+	c, _, _ := st.Claim(ctx, "2026-11-12", fmt.Sprint(groupID), now.Add(-24*time.Hour))
+	st.Finish(ctx, c, telegram.CheckinSent, now.Add(-24*time.Hour))
+	if c, _, _ = st.Claim(ctx, "2026-11-13", fmt.Sprint(groupID), now); c == nil {
+		t.Fatal("no crash claim")
+	}
+	r.bot.CheckinTick(ctx)
+	now = now.Add(5 * time.Minute)
+	r.bot.CheckinTick(ctx)
+	time.Sleep(100 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 0 {
+		t.Fatalf("sent while the other claim was fresh: %d", n)
+	}
+	now = now.Add(6 * time.Minute)
+	r.bot.CheckinTick(ctx)
+	sent := r.tg.waitSent(t, 2)
+	if !strings.HasPrefix(sent[1].Text, "Yesterday: Electrician") {
+		t.Fatalf("takeover asked: %+v", sent)
+	}
+	if rec := record(t, state); rec.Status != telegram.CheckinSent || rec.Since != "2026-11-12" {
+		t.Fatalf("record after takeover: %+v", rec)
 	}
 }
 
@@ -339,4 +381,88 @@ func mustPatchMap(t *testing.T, m map[string]any) entries.Patch {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// A task moved elsewhere after the check-in asked about it: its buttons
+// change nothing.
+func TestCheckinButtonAfterTheTaskMoved(t *testing.T) {
+	r := startBot(t, fixedNow)
+	ids := seed(t, r, task("Book movers", "2026-11-11"))
+	r.tg.push(inGroup(groupID, zyID, "Zhou", "/checkin", 70))
+	sent := r.tg.waitSent(t, 2)
+	tomorrow := sent[1].Buttons[2].CallbackData
+	if tomorrow != "ci:r:"+ids["Book movers"]+":20261111:1" {
+		t.Fatalf("button data %q", tomorrow)
+	}
+	// Moved to Friday in the chat or on the web page.
+	if _, err := r.ents.Update(context.Background(), entries.Actor{By: "Partner", Channel: "web"}, ids["Book movers"], mustPatchMap(t, map[string]any{"date": "2026-11-13"})); err != nil {
+		t.Fatal(err)
+	}
+	changes := len(r.doc(t).Changes)
+	press(r, zyID, "Zhou", tomorrow, groupID, 3001)
+	if a := r.tg.waitAnswers(t, 1); a[0] != "That task was moved since (Fri 13 Nov), so I left it." {
+		t.Fatalf("answer %q", a[0])
+	}
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", groupID, 3002)
+	r.tg.waitAnswers(t, 2)
+	if e, _ := r.doc(t).Find(ids["Book movers"]); len(r.doc(t).Changes) != changes || *e.Date != "2026-11-13" || e.Status != "todo" {
+		t.Fatalf("a moved task was changed: %+v", e)
+	}
+	// Malformed data (an old button without the date) does nothing either.
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"], groupID, 3003)
+	r.tg.waitAnswers(t, 3)
+	if len(r.doc(t).Changes) != changes {
+		t.Fatal("malformed button changed something")
+	}
+}
+
+// The check-in arrives while the agent is still answering a message in the
+// same chat: both end up in the chat's history.
+func TestCheckinDuringAnAgentTurnKeepsBoth(t *testing.T) {
+	ctx := context.Background()
+	now := sgt("2026-11-12T09:30:00")
+	r, _ := scheduled(t, &now)
+	r.llm.delay = 400 * time.Millisecond
+	seed(t, r, task("Book movers", "2026-11-11"))
+	r.tg.push(inGroup(groupID, zyID, "Zhou", "hello there", 80))
+	for i := 0; i < 100 && r.llm.inFlight.Load() == 0; i++ {
+		time.Sleep(5 * time.Millisecond)
+	}
+	r.bot.CheckinTick(ctx) // lands mid-turn
+	r.tg.waitSent(t, 3)    // summary, ask, and the "ok" reply
+	r.tg.push(inGroup(groupID, zyID, "Zhou", "booked them", 81))
+	r.tg.waitSent(t, 4)
+	r.llm.mu.Lock()
+	last := r.llm.requests[len(r.llm.requests)-1]
+	r.llm.mu.Unlock()
+	var hello, checkin bool
+	for _, m := range last {
+		c, _ := m["content"].(string)
+		hello = hello || (m["role"] == "user" && strings.Contains(c, "hello there"))
+		checkin = checkin || (m["role"] == "assistant" && strings.Contains(c, "Good morning!"))
+	}
+	if !hello || !checkin {
+		t.Fatalf("history lost a part (hello %v, check-in %v): %+v", hello, checkin, last)
+	}
+}
+
+// CHECKIN_CHAT must be on the allowlist: elsewhere every button would be refused.
+func TestCheckinChatMustBeAllowed(t *testing.T) {
+	ctx := context.Background()
+	now := sgt("2026-11-12T09:30:00")
+	r, state := scheduled(t, &now)
+	seed(t, r, task("Book movers", "2026-11-11"))
+	r.bot.Checkin.Chat = -999
+	if v := r.bot.CheckinStatus(ctx); !strings.Contains(v.Error, "CHECKIN_CHAT -999 is not an allowed group or person") {
+		t.Fatalf("status: %+v", v)
+	}
+	r.bot.CheckinTick(ctx)
+	time.Sleep(100 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 0 || record(t, state).Day != "" {
+		t.Fatalf("sent to a chat that isn't allowed: %d", n)
+	}
+	r.bot.Checkin.Chat = zyID // a person on the list: fine (private chat)
+	if v := r.bot.CheckinStatus(ctx); v.Error != "" || v.Chat != fmt.Sprint(zyID) {
+		t.Fatalf("allowed person: %+v", v)
+	}
 }
