@@ -28,6 +28,7 @@ type Bot struct {
 	Entries  *entries.Service
 	Settings *settings.Service
 	Docs     *docs.Syncer // nil: documents are off
+	Checkin  *Checkin     // nil: no morning check-in
 	Log      *slog.Logger
 
 	// PollSeconds is how long getUpdates may wait for news (default 50).
@@ -501,6 +502,10 @@ func (b *Bot) handleCallback(ctx context.Context, cb *CallbackQuery) {
 	name, why := b.authorise(ctx, m.Chat, &cb.From)
 	if why != "" {
 		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "You're not on this bot's list.")
+		return
+	}
+	if strings.HasPrefix(cb.Data, checkinPrefix) {
+		b.checkinCallback(ctx, cb, name)
 		return
 	}
 	id, ok := strings.CutPrefix(cb.Data, "undo:")

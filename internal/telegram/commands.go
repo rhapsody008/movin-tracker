@@ -17,6 +17,7 @@ var Commands = []BotCommand{
 	{Command: "recent", Description: "Show the last 10 changes"},
 	{Command: "undo", Description: "Undo my last change"},
 	{Command: "sync", Description: "Re-read the documents now"},
+	{Command: "checkin", Description: "Today's and yesterday's tasks, now"},
 	{Command: "help", Description: "What I can do"},
 }
 
@@ -33,6 +34,7 @@ Every change comes back with an Undo button.
 /recent  the last 10 changes
 /undo    undo your last change
 /sync    re-read the documents now (they also sync every night)
+/checkin today's tasks and yesterday's open ones, with Done buttons (also sent every morning)
 /help    this message`
 
 // command handles a /command. In groups, "/cmd@otherbot" is for another bot
@@ -62,6 +64,8 @@ func (b *Bot) command(ctx context.Context, m *Message, name, text string) {
 		b.undoLast(ctx, m, name)
 	case "sync":
 		b.syncCommand(ctx, m)
+	case "checkin":
+		b.checkinCommand(ctx, m)
 	default:
 		b.reply(ctx, m, "I don't know /"+cmd+". Send /help to see what I can do.", nil)
 	}
