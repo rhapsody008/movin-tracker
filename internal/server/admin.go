@@ -169,10 +169,12 @@ type telegramView struct {
 	// one is set.
 	Status    telegram.Status       `json:"status"`
 	Allowlist settings.TelegramView `json:"allowlist"`
+	// Checkin is the morning check-in (absent when the bot is off).
+	Checkin *telegram.CheckinView `json:"checkin,omitempty"`
 }
 
 func (s *Server) getTelegram(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: s.Settings.ViewTelegram(r.Context())})
+	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: s.Settings.ViewTelegram(r.Context()), Checkin: s.Bot.CheckinStatus(r.Context())})
 }
 
 func (s *Server) putTelegram(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +187,7 @@ func (s *Server) putTelegram(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: v})
+	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: v, Checkin: s.Bot.CheckinStatus(r.Context())})
 }
 
 // ---------- admin: guide ----------

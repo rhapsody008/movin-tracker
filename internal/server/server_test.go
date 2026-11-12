@@ -653,6 +653,9 @@ func TestTelegramAdmin(t *testing.T) {
 	if code != 200 || st["tokenSet"] != false || st["running"] != false || al["fromEnv"] != true || len(al["users"].([]any)) != 0 {
 		t.Fatalf("no bot: %d %s", code, body)
 	}
+	if _, ok := m["checkin"]; ok {
+		t.Fatalf("no bot, but a check-in status: %s", body)
+	}
 	// The allowlist is editable even without a token.
 	code, m, body = e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"111","name":"ZY"},{"id":"222","name":"Partner"}],"groups":["-1001"]}`)
 	al, _ = m["allowlist"].(map[string]any)
@@ -669,6 +672,38 @@ func TestTelegramAdmin(t *testing.T) {
 	}
 	if code, m, _ := e.do(t, "PUT", "/api/settings/telegram", `{"useEnv":true}`); code != 200 || m["allowlist"].(map[string]any)["fromEnv"] != true {
 		t.Fatalf("useEnv: %d %v", code, m)
+	}
+}
+
+func TestTelegramAdminCheckinStatus(t *testing.T) {
+	store := objstore.NewMemory()
+	var bot *telegram.Bot
+	e := setup(t, store, func(s *server.Server) {
+		bot = &telegram.Bot{API: telegram.New("1:x", "http://127.0.0.1:1"), Settings: s.Settings, Log: s.Log}
+		s.Bot = bot
+	})
+	// Bot without a check-in: off.
+	_, m, body := e.do(t, "GET", "/api/admin/telegram", "")
+	if c, _ := m["checkin"].(map[string]any); c == nil || c["on"] != false {
+		t.Fatalf("off: %s", body)
+	}
+	// On, nowhere to send yet, nothing sent.
+	bot.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: store, Now: time.Now}}
+	_, m, body = e.do(t, "GET", "/api/admin/telegram", "")
+	c, _ := m["checkin"].(map[string]any)
+	if c["on"] != true || c["at"] != "09:30" || c["until"] != "20:00" || !strings.Contains(fmt.Sprint(c["error"]), "no group or person") || c["last"] != nil {
+		t.Fatalf("on, no target: %s", body)
+	}
+	// The saved group is the target; the last record shows.
+	e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"111","name":"ZY"}],"groups":["-1001"]}`)
+	st := &telegram.CheckinStore{Store: store, Now: time.Now}
+	_, tag, _, _ := st.Claim(context.Background(), "2026-11-12", "-1001")
+	st.Finish(context.Background(), tag, telegram.CheckinRecord{Day: "2026-11-12", Chat: "-1001"}, telegram.CheckinSent)
+	_, m, body = e.do(t, "GET", "/api/admin/telegram", "")
+	c, _ = m["checkin"].(map[string]any)
+	last, _ := c["last"].(map[string]any)
+	if c["chat"] != "-1001" || c["error"] != nil || last["day"] != "2026-11-12" || last["status"] != "sent" {
+		t.Fatalf("with group and record: %s", body)
 	}
 }
 

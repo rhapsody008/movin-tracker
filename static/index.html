@@ -361,6 +361,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
   </div>
   <div class="panel" id="panel-telegram" role="tabpanel" aria-labelledby="tab-telegram" hidden>
     <p class="stline" id="tgStatus">Loading…</p>
+    <p class="hint" id="tgCheckin" hidden></p>
     <p class="sub" id="tgSource"></p>
     <h3>People</h3>
     <p class="sub">Telegram user ID and the name entries will show as "by". Allowed people can use the bot in a private chat, and in any allowed group.</p>
@@ -1126,7 +1127,7 @@ async function loadTelegram(){
   renderTelegram();
 }
 async function refreshTelegramStatus(){
-  try{ const d = await api("GET", "/api/admin/telegram"); tgState = {...tgState, status:d.status}; renderTGStatus(); renderTGRejected(); }catch{}
+  try{ const d = await api("GET", "/api/admin/telegram"); tgState = {...tgState, status:d.status, checkin:d.checkin}; renderTGStatus(); renderTGRejected(); }catch{}
 }
 function renderTGStatus(){
   const st = tgState.status, el = $("tgStatus");
@@ -1136,6 +1137,24 @@ function renderTGStatus(){
   else { cls += " bad"; t = "The bot is not running."; }
   if(st.lastError) t += ` Last error ${ago(st.lastErrorAt)}: ${st.lastError}`;
   el.className = cls; el.textContent = t;
+  renderTGCheckin();
+}
+/* Morning check-in: read-only (CHECKIN_SCHEDULE / CHECKIN_CHAT on the server). */
+function renderTGCheckin(){
+  const c = tgState.checkin, el = $("tgCheckin");
+  if(!c){ el.hidden = true; return; }
+  el.hidden = false;
+  if(!c.on){ el.textContent = "Morning check-in: off (CHECKIN_SCHEDULE=off on the server)."; return; }
+  const al = tgState.allowlist || {}, users = al.users || [];
+  const where = !c.chat ? "" : (al.groups||[]).includes(c.chat) ? "the group " + c.chat
+    : (users.find(u=>u.id===c.chat) ? users.find(u=>u.id===c.chat).name + " (private chat)" : "chat " + c.chat);
+  let t = `Morning check-in at ${c.at} (sent late until ${c.until} if the app was off), to ${where || "nowhere: " + c.error}.`;
+  const l = c.last;
+  if(l){
+    const day = fmtDate(l.day);
+    t += l.status==="sent" ? ` Last sent ${day}.` : l.status==="quiet" ? ` ${day}: nothing to report, so nothing sent.` : ` ${day}: being sent.`;
+  } else t += " Not sent yet.";
+  el.textContent = t;
 }
 function renderTGRejected(){
   const list = (tgState.status.rejected||[]);

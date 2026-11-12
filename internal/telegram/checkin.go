@@ -383,3 +383,33 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	b.Log.Info("morning check-in sent", "day", day, "chatId", chat, "today", len(ag.Today), "asked", len(ag.Ask), "overdue", len(ag.Overdue))
 	markHandled()
 }
+
+// CheckinView is the check-in's state for the admin page.
+type CheckinView struct {
+	On    bool           `json:"on"`
+	At    string         `json:"at,omitempty"`    // HH:MM
+	Until string         `json:"until,omitempty"` // HH:MM cutoff
+	Chat  string         `json:"chat,omitempty"`  // where it goes
+	Error string         `json:"error,omitempty"` // why it can't go anywhere
+	Last  *CheckinRecord `json:"last,omitempty"`
+}
+
+// CheckinStatus reports the check-in for the admin page (nil without a bot).
+func (b *Bot) CheckinStatus(ctx context.Context) *CheckinView {
+	if b == nil {
+		return nil
+	}
+	if b.Checkin == nil || b.Checkin.State == nil {
+		return &CheckinView{}
+	}
+	v := &CheckinView{On: true, At: fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), Until: fmt.Sprintf("%02d:00", CheckinCutoff)}
+	if chat, err := b.checkinChat(ctx); err != nil {
+		v.Error = err.Error()
+	} else {
+		v.Chat = strconv.FormatInt(chat, 10)
+	}
+	if r, _, err := b.Checkin.State.Load(ctx); err == nil && r.Day != "" {
+		v.Last = &r
+	}
+	return v
+}
