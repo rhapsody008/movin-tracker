@@ -320,8 +320,7 @@ func (b *Bot) CheckinLoop(ctx context.Context, every time.Duration) {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return
 	}
-	cfg, _ := b.Settings.ResolveCheckin(ctx)
-	b.Log.Info("morning check-in loop running", "schedule", cfg.Schedule, "until", fmt.Sprintf("%02d:00", sched.CheckinCutoff))
+	b.Log.Info("morning check-in loop running", "until", fmt.Sprintf("%02d:00", sched.CheckinCutoff))
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -416,11 +415,14 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 }
 
 // warnCheckin logs a warning once per key (a problem that persists is
-// checked every minute; one line a day is enough).
+// checked every minute; one line a day is enough). Keys hold the day.
 func (b *Bot) warnCheckin(key, msg string, err error) {
 	b.mu.Lock()
-	warn := b.checkinWarned != key
-	b.checkinWarned = key
+	if b.checkinWarned == nil || len(b.checkinWarned) > 50 { // keys are per day: keep it small
+		b.checkinWarned = map[string]bool{}
+	}
+	warn := !b.checkinWarned[key]
+	b.checkinWarned[key] = true
 	b.mu.Unlock()
 	if warn {
 		b.Log.Warn(msg, "err", err)
@@ -449,11 +451,16 @@ func (b *Bot) CheckinStatus(ctx context.Context) *CheckinView {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return &CheckinView{}
 	}
+	v := &CheckinView{Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff)}
+	if r, _, err := b.Checkin.State.Load(ctx); err == nil && r.Day != "" {
+		v.Last = &r
+	}
 	cfg, err := b.Settings.ResolveCheckin(ctx)
 	if err != nil {
-		return &CheckinView{Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff), Error: err.Error()}
+		v.Error = err.Error()
+		return v
 	}
-	v := &CheckinView{On: cfg.On, Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff)}
+	v.On = cfg.On
 	if cfg.On {
 		v.At = cfg.Schedule
 		if chat, err := b.checkinChat(ctx, cfg); err != nil {
@@ -461,9 +468,6 @@ func (b *Bot) CheckinStatus(ctx context.Context) *CheckinView {
 		} else {
 			v.Chat = strconv.FormatInt(chat, 10)
 		}
-	}
-	if r, _, err := b.Checkin.State.Load(ctx); err == nil && r.Day != "" {
-		v.Last = &r
 	}
 	return v
 }

@@ -24,7 +24,7 @@ func TestCheckinSettings(t *testing.T) {
 	for env, val := range map[string]string{"CHECKIN_SCHEDULE": "9am", "CHECKIN_CHAT": "the group"} {
 		t.Run(env, func(t *testing.T) {
 			t.Setenv(env, val)
-			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), env) {
+			if _, err := config.Load(); err == nil || !strings.HasPrefix(err.Error(), env+": ") {
 				t.Fatalf("%s=%q: %v", env, val, err)
 			}
 		})

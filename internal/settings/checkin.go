@@ -53,6 +53,9 @@ type CheckinSetting struct {
 	Checkin
 	Updated string `json:"updated,omitempty"`
 	By      string `json:"by,omitempty"`
+	// Unreadable: settings.json couldn't be read, so what is saved is
+	// unknown (the fields show the server's defaults).
+	Unreadable bool `json:"unreadable,omitempty"`
 }
 
 // ParseCheckin checks a schedule ("HH:MM" before the cutoff, or "off";
@@ -114,8 +117,8 @@ func (s *Service) ResolveCheckin(ctx context.Context) (Checkin, error) {
 }
 
 func (s *Service) ViewCheckin(ctx context.Context) CheckinSetting {
-	st := s.current(ctx)
-	v := CheckinSetting{Checkin: s.resolveCheckin(st)}
+	st, err := s.currentErr(ctx)
+	v := CheckinSetting{Checkin: s.resolveCheckin(st), Unreadable: err != nil}
 	if st.Checkin != nil {
 		v.Updated, v.By = st.Checkin.Updated, st.Checkin.By
 	}

@@ -1181,10 +1181,11 @@ function renderTGCheckin(){
 }
 function renderCheckinForm(){
   const c = tgState.checkin; if(!c) return;
-  const st = c.setting || {}, off = st.schedule === "off", al = tgState.allowlist || {};
+  const st = c.setting || {}, off = st.schedule === "off";
   $("ciOff").checked = off; $("ciTime").value = off ? "09:30" : (st.schedule || "09:30"); $("ciTime").disabled = off;
   ciChatOptions(st.chat || "");
-  $("ciSource").textContent = st.fromEnv ? "Using the server's defaults (CHECKIN_SCHEDULE and CHECKIN_CHAT). Saving here replaces them; it applies within a minute."
+  $("ciSource").textContent = st.unreadable ? "Couldn't read the saved setting right now; the fields show the server's defaults. Saving here replaces whatever is saved."
+    : st.fromEnv ? "Using the server's defaults (CHECKIN_SCHEDULE and CHECKIN_CHAT). Saving here replaces them; it applies within a minute."
     : `Saved${st.updated ? " " + new Date(st.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"}) : ""}${st.by ? " by " + st.by : ""}. This replaces the server's defaults.`;
   $("ciUseEnv").hidden = !!st.fromEnv;
 }

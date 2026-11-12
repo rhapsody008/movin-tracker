@@ -537,7 +537,11 @@ func TestCheckinSkipsWhenSettingsUnreadable(t *testing.T) {
 	r, state := scheduled(t, &now)
 	seed(t, r, task("Book movers", "2026-11-11"))
 	setCheckin(t, r, "off", "")
+	// The same allowlist (the group) but a settings.json that can't be read:
+	// were the defaults used, the check-in would go to the group now.
+	tg, _ := settings.ParseTelegramEnv(fmt.Sprintf("%d=ZY,%d=Partner", zyID, partnerID), fmt.Sprint(groupID))
 	broken, _ := settings.NewService(settingsReadFails{objstore.NewMemory()}, settings.Defaults, "", r.bot.Log)
+	broken.WithTelegramEnv(tg)
 	r.bot.Settings = broken
 	r.bot.CheckinTick(ctx)
 	time.Sleep(100 * time.Millisecond)
@@ -546,5 +550,14 @@ func TestCheckinSkipsWhenSettingsUnreadable(t *testing.T) {
 	}
 	if v := r.bot.CheckinStatus(ctx); !strings.Contains(v.Error, "read settings.json") || v.On {
 		t.Fatalf("status: %+v", v)
+	}
+	// Control: the same broken service, read as the defaults, does send —
+	// so the test above would catch a fallback.
+	ok, _ := settings.NewService(objstore.NewMemory(), settings.Defaults, "", r.bot.Log)
+	ok.WithTelegramEnv(tg)
+	r.bot.Settings = ok
+	r.bot.CheckinTick(ctx)
+	if s := r.tg.waitSent(t, 2); s[0].ChatID != groupID {
+		t.Fatalf("control: %+v", s)
 	}
 }

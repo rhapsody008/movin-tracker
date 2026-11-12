@@ -129,7 +129,7 @@ type Service struct {
 	ciEnv     Checkin  // from CHECKIN_SCHEDULE / CHECKIN_CHAT
 
 	warnMu   sync.Mutex
-	lastWarn string
+	lastWarn map[string]string // message → details last logged
 	fkey     *fernet.Key
 	log      *slog.Logger
 	now      func() time.Time
@@ -158,15 +158,19 @@ func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) 
 	return s, nil
 }
 
-// warnOnce logs a warning only when it differs from the last one it logged
-// (settings are resolved for every message; one line per change is enough).
+// warnOnce logs a warning only when its details differ from the last time
+// that same message was logged (settings are resolved for every message;
+// one line per change is enough, even with several problems at once).
 func (s *Service) warnOnce(msg string, args ...any) {
-	key := fmt.Sprint(msg, args)
+	details := fmt.Sprint(args...)
 	s.warnMu.Lock()
-	same := s.lastWarn == key
-	s.lastWarn = key
+	if s.lastWarn == nil {
+		s.lastWarn = map[string]string{}
+	}
+	prev, seen := s.lastWarn[msg]
+	s.lastWarn[msg] = details
 	s.warnMu.Unlock()
-	if !same {
+	if !seen || prev != details {
 		s.log.Warn(msg, args...)
 	}
 }
@@ -191,10 +195,9 @@ func (s *Service) ClaudeBaseURL() string { return s.claudeURL }
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
 // current returns settings.json as of at most ttl ago. A missing file reads
-// as empty; an unreadable one is logged and reads as empty (env applies),
-// and is not cached so a fix shows up on the next call.
-// current is the stored settings; an unreadable file reads as empty (the
-// env defaults apply), which is right for the LLM and the allowlist.
+// as empty; an unreadable one is logged and reads as empty (the env
+// defaults apply, which is right for the LLM and the allowlist), and is not
+// cached so a fix shows up on the next call.
 func (s *Service) current(ctx context.Context) stored {
 	st, err := s.currentErr(ctx)
 	if err != nil {

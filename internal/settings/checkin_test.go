@@ -77,3 +77,22 @@ func TestCheckinUnreadableAndInvalid(t *testing.T) {
 		t.Fatalf("warned %d times", n)
 	}
 }
+
+// Two different problems at once: each warning is logged once, not every
+// time they alternate.
+func TestTwoWarningsEachOnce(t *testing.T) {
+	ctx := context.Background()
+	store := objstore.NewMemory()
+	store.Put(ctx, settings.Key, []byte(`{"schema":1,"checkin":{"schedule":"25:00"},"telegram":{"users":[{"id":"-1","name":"x"}],"groups":[]}}`), "")
+	logs := &testutil.SyncBuffer{}
+	s, _ := settings.NewService(store, settings.Defaults, "", testutil.Logger(logs))
+	for i := 0; i < 3; i++ {
+		s.ResolveCheckin(ctx)
+		s.ResolveTelegram(ctx)
+	}
+	for _, w := range []string{"checkin section of settings.json is invalid", "telegram section of settings.json is invalid"} {
+		if n := strings.Count(logs.String(), w); n != 1 {
+			t.Errorf("%q logged %d times", w, n)
+		}
+	}
+}
