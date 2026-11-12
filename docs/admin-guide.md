@@ -122,6 +122,8 @@ Managed on the web page: **Settings → Telegram**. The env vars `TELEGRAM_ALLOW
 
 Roll back: set the previous `newTag` and apply again, or `kubectl -n <namespace> rollout undo deploy/movin`.
 
+**Don't roll back past the milestones release** (or run an older image against the bucket): older builds don't know an entry's `milestone` and `completed` fields and drop them from every entry the next time they save `entries.json`. With bucket versioning off they can't be recovered. Rebuild from the current code instead.
+
 ### Planned: OCI artifact + Flux in the NKP project
 
 Designed, not built (see [.claude/work/movin-v2/plan.md](../.claude/work/movin-v2/plan.md), "Deployment"). Once it lands:
@@ -140,6 +142,7 @@ This section will be rewritten with exact commands when the deployment steps are
 - Filters (room, kind, category, search) apply to the board and the calendar, and are remembered per browser.
 - The header totals count **tasks and anything decided or done**. Priced ideas show separately as "Not yet decided".
 - After any change you see a banner with **Undo**.
+- **Milestones**: tick **Milestone ★** in an entry's dialog to mark a notable step (keys collected, kitchen installed). Done milestones are listed under the calendar, newest first, by month; click one to open it. Every entry records the day it moved to done (**Done on**, shown once the status is Done and filled with today); change it there if it happened on another day. Moving an entry out of Done clears its day.
 
 ### Settings → Storage
 
@@ -243,6 +246,7 @@ Tell it what's happening, in plain words. It records ideas, decisions, quotes, p
 - "What did we decide for the kitchen and what did it cost?"
 - "How do I defrost the fridge?" or "Who do we contact about defects?" (it searches the documents and says which document and page it used)
 - "Where is the DB on the power plan?" (it looks at the drawing)
+- "We collected the keys today, that's a milestone" or "What milestones have we hit so far?" (it marks milestones only when you call something one)
 
 If something is unclear (which bathroom?), it asks instead of guessing. In the group it stays quiet for ordinary chat between the two of you.
 
@@ -343,5 +347,6 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 - **Scanned documents**: reading pages that are pictures only (OCR or the model's vision), and the garbled text layers. Listed today, not searchable.
 - **Photos and voice notes** on entries.
 - **OCI + Flux deployment** in the NKP project, replacing the manual apply.
+- **Morning check-in**: a 09:30 message with today's and yesterday's tasks and Done / Done ★ / reschedule buttons (being built).
 
 This guide gets updated when each lands.

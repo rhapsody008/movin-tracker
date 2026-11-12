@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	_ "time/tzdata"
@@ -196,6 +197,29 @@ func cases(now time.Time) []evalCase {
 			}
 			return nil
 		}},
+		{msg: "We collected the keys today, that's a milestone", check: func(b, a *entries.Doc, _ agent.Result) error {
+			before, after := milestones(b), milestones(a)
+			if len(after) != len(before)+1 {
+				return fmt.Errorf("want one new milestone, got %d → %d", len(before), len(after))
+			}
+			e := after[len(after)-1]
+			if today := now.Format("2006-01-02"); e.Completed == nil || *e.Completed != today {
+				return fmt.Errorf("milestone %q done on %v, want %s", e.Title, deref(e.Completed), today)
+			}
+			if !regexp.MustCompile(`(?i)key`).MatchString(e.Title) {
+				return fmt.Errorf("milestone title %q doesn't mention the keys", e.Title)
+			}
+			return nil
+		}},
+		{msg: "What milestones have we hit so far?", check: func(b, a *entries.Doc, res agent.Result) error {
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			if !regexp.MustCompile(`(?i)key`).MatchString(res.Reply) {
+				return fmt.Errorf("reply should mention collecting the keys: %q", res.Reply)
+			}
+			return nil
+		}},
 		{msg: "Partner: ok see you at dinner", group: true, check: func(b, a *entries.Doc, res agent.Result) error {
 			if err := unchanged(b, a); err != nil {
 				return err
@@ -206,6 +230,18 @@ func cases(now time.Time) []evalCase {
 			return nil
 		}},
 	}
+}
+
+// milestones are the done, flagged entries, oldest change first.
+func milestones(d *entries.Doc) []entries.Entry {
+	var out []entries.Entry
+	for _, e := range d.Entries {
+		if !e.Archived && e.IsMilestone() {
+			out = append(out, e)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Updated < out[j].Updated })
+	return out
 }
 
 func deref[T any](p *T) any {
@@ -415,7 +451,7 @@ func diff(a, b *entries.Doc) []string {
 		seen[e.ID] = true
 		prev, ok := old[e.ID]
 		if !ok {
-			j, _ := json.Marshal(map[string]any{"kind": e.Kind, "room": e.Room, "category": e.Category, "status": e.Status, "date": e.Date, "time": e.Time, "vendor": e.Vendor, "estimate": e.Cost.Estimate, "actual": e.Cost.Actual})
+			j, _ := json.Marshal(map[string]any{"kind": e.Kind, "room": e.Room, "category": e.Category, "status": e.Status, "date": e.Date, "time": e.Time, "vendor": e.Vendor, "estimate": e.Cost.Estimate, "actual": e.Cost.Actual, "milestone": e.Milestone, "completed": e.Completed})
 			out = append(out, fmt.Sprintf("+ %q %s", e.Title, j))
 			continue
 		}
@@ -437,6 +473,8 @@ func diff(a, b *entries.Doc) []string {
 		cmp("actual", deref(prev.Cost.Actual), deref(e.Cost.Actual))
 		cmp("notes", prev.Notes, e.Notes)
 		cmp("archived", prev.Archived, e.Archived)
+		cmp("milestone", prev.Milestone, e.Milestone)
+		cmp("completed", deref(prev.Completed), deref(e.Completed))
 		if len(ch) > 0 {
 			out = append(out, fmt.Sprintf("~ %q %s", prev.Title, strings.Join(ch, ", ")))
 		}
