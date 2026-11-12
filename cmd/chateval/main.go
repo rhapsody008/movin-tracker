@@ -96,188 +96,141 @@ func fridays(now time.Time) []string {
 	return []string{d.Format("2006-01-02"), d.AddDate(0, 0, 7).Format("2006-01-02")}
 }
 
+//nolint:gocognit // a table of small checks, one per message; clearer inline
 func cases(now time.Time) []evalCase {
 	return []evalCase{
-		{msg: "We move in on 5 Dec", check: checkMoveInDate(now)},
-		{msg: "Thinking of fluted glass for the dry kitchen sliding door", check: checkIdeaWithRoom()},
-		{msg: "Decided: Daikin system 4 aircon, 5.8k from CoolAir", check: checkDecisionWithCost()},
-		{msg: "Electrician coming Friday 2pm to check the DB", check: checkFridayTask(now)},
-		{msg: "Lim quoted 18k for carpentry, paid 30% today", check: checkQuoteThenPaid()},
-		{msg: "Put the grey tiles in the bathroom", check: checkAmbiguousBathroom()},
-		{msg: "What did we decide for the kitchen countertop and how much was it?", check: checkCountertopQuestion()},
-		{msg: "Drop the post-reno cleaning", check: checkDropArchives()},
-		{msg: "Undo that", check: checkUndoRestores()},
-		{msg: "We collected the keys today, that's a milestone", check: checkMilestoneRecorded(now)},
-		{msg: "What milestones have we hit so far?", check: checkMilestonesListed()},
-		{msg: "Partner: ok see you at dinner", group: true, check: checkGroupChatter()},
-	}
-}
-
-func checkMoveInDate(now time.Time) check {
-	return func(_, a *entries.Doc, _ agent.Result) error {
-		if want := nextDec5(now); a.Meta.MoveDate == nil || *a.Meta.MoveDate != want {
-			return fmt.Errorf("moveDate = %v, want %s", deref(a.Meta.MoveDate), want)
-		}
-		return nil
-	}
-}
-
-func checkIdeaWithRoom() check {
-	return func(b, a *entries.Doc, _ agent.Result) error {
-		n := added(b, a)
-		if len(n) != 1 {
-			return fmt.Errorf("want one new entry, got %d", len(n))
-		}
-		e := n[0]
-		if e.Kind != "idea" || e.Room == nil || *e.Room != "dry kitchen" {
-			return fmt.Errorf("got kind=%s room=%v, want idea / dry kitchen", e.Kind, deref(e.Room))
-		}
-		if e.Date != nil || e.Cost.Estimate != nil || e.Vendor != "" {
-			return fmt.Errorf("invented a date, cost or vendor: %+v", e)
-		}
-		return nil
-	}
-}
-
-func checkDecisionWithCost() check {
-	return func(b, a *entries.Doc, _ agent.Result) error {
-		n := added(b, a)
-		if len(n) != 1 {
-			return fmt.Errorf("want one new entry, got %d", len(n))
-		}
-		e := n[0]
-		if e.Kind != "decision" && e.Status != "decided" {
-			return fmt.Errorf("got kind=%s status=%s, want a decision", e.Kind, e.Status)
-		}
-		if !eq(e.Cost.Estimate, 5800) && !eq(e.Cost.Actual, 5800) {
-			return fmt.Errorf("cost = %+v, want 5800", e.Cost)
-		}
-		if !strings.Contains(strings.ToLower(e.Vendor), "coolair") {
-			return fmt.Errorf("vendor = %q, want CoolAir", e.Vendor)
-		}
-		return nil
-	}
-}
-
-func checkFridayTask(now time.Time) check {
-	return func(b, a *entries.Doc, _ agent.Result) error {
-		n := added(b, a)
-		if len(n) != 1 {
-			return fmt.Errorf("want one new entry, got %d", len(n))
-		}
-		e := n[0]
-		ok := e.Date != nil && (*e.Date == fridays(now)[0] || *e.Date == fridays(now)[1])
-		if e.Kind != "task" || !ok || e.Time == nil || *e.Time != "14:00" {
-			return fmt.Errorf("got kind=%s date=%v time=%v, want task / %s / 14:00", e.Kind, deref(e.Date), deref(e.Time), fridays(now)[0])
-		}
-		return nil
-	}
-}
-
-func checkQuoteThenPaid() check {
-	return func(b, a *entries.Doc, _ agent.Result) error {
-		es := live(a, "carpent")
-		if len(es) != 1 {
-			return fmt.Errorf("want exactly one live carpentry entry (update, not duplicate), got %d", len(es))
-		}
-		e := es[0]
-		if !eq(e.Cost.Estimate, 18000) || !eq(e.Cost.Actual, 5400) {
-			return fmt.Errorf("carpentry estimate=%v actual=%v, want 18000 / 5400", deref(e.Cost.Estimate), deref(e.Cost.Actual))
-		}
-		if !strings.Contains(strings.ToLower(e.Vendor+" "+e.Title+" "+e.Notes), "lim") {
-			return fmt.Errorf("carpentry entry does not mention Lim")
-		}
-		return nil
-	}
-}
-
-func checkAmbiguousBathroom() check {
-	return func(b, a *entries.Doc, res agent.Result) error {
-		// Two bathrooms and no tiles on record: it should ask, not guess.
-		if err := unchanged(b, a); err != nil {
-			return err
-		}
-		if !strings.Contains(res.Reply, "?") {
-			return fmt.Errorf("expected a clarifying question, got %q", res.Reply)
-		}
-		return nil
-	}
-}
-
-func checkCountertopQuestion() check {
-	return func(b, a *entries.Doc, res agent.Result) error {
-		if err := unchanged(b, a); err != nil {
-			return err
-		}
-		r := strings.ReplaceAll(strings.ToLower(res.Reply), ",", "")
-		if !strings.Contains(r, "sintered") || !strings.Contains(r, "4200") && !strings.Contains(r, "4.2k") {
-			return fmt.Errorf("reply should name sintered stone and 4,200: %q", res.Reply)
-		}
-		return nil
-	}
-}
-
-func checkDropArchives() check {
-	return func(_, a *entries.Doc, _ agent.Result) error {
-		e, ok := a.Find(seedCleaning)
-		if !ok {
-			return fmt.Errorf("post-reno cleaning was hard-deleted; it should be archived")
-		}
-		if !e.Archived {
-			return fmt.Errorf("post-reno cleaning is not archived")
-		}
-		return nil
-	}
-}
-
-func checkUndoRestores() check {
-	return func(_, a *entries.Doc, _ agent.Result) error {
-		e, ok := a.Find(seedCleaning)
-		if !ok || e.Archived {
-			return fmt.Errorf("post-reno cleaning should be back (not archived)")
-		}
-		return nil
-	}
-}
-
-func checkMilestoneRecorded(now time.Time) check {
-	return func(b, a *entries.Doc, _ agent.Result) error {
-		before, after := milestones(b), milestones(a)
-		if len(after) != len(before)+1 {
-			return fmt.Errorf("want one new milestone, got %d → %d", len(before), len(after))
-		}
-		e := after[len(after)-1]
-		if today := now.Format("2006-01-02"); e.Completed == nil || *e.Completed != today {
-			return fmt.Errorf("milestone %q done on %v, want %s", e.Title, deref(e.Completed), today)
-		}
-		if !regexp.MustCompile(`(?i)key`).MatchString(e.Title) {
-			return fmt.Errorf("milestone title %q doesn't mention the keys", e.Title)
-		}
-		return nil
-	}
-}
-
-func checkMilestonesListed() check {
-	return func(b, a *entries.Doc, res agent.Result) error {
-		if err := unchanged(b, a); err != nil {
-			return err
-		}
-		if !regexp.MustCompile(`(?i)key`).MatchString(res.Reply) {
-			return fmt.Errorf("reply should mention collecting the keys: %q", res.Reply)
-		}
-		return nil
-	}
-}
-
-func checkGroupChatter() check {
-	return func(b, a *entries.Doc, res agent.Result) error {
-		if err := unchanged(b, a); err != nil {
-			return err
-		}
-		if !res.Silent {
-			return fmt.Errorf("group chatter should get no reply, got %q", res.Reply)
-		}
-		return nil
+		{msg: "We move in on 5 Dec", check: func(_, a *entries.Doc, _ agent.Result) error {
+			if want := nextDec5(now); a.Meta.MoveDate == nil || *a.Meta.MoveDate != want {
+				return fmt.Errorf("moveDate = %v, want %s", deref(a.Meta.MoveDate), want)
+			}
+			return nil
+		}},
+		{msg: "Thinking of fluted glass for the dry kitchen sliding door", check: func(b, a *entries.Doc, _ agent.Result) error {
+			n := added(b, a)
+			if len(n) != 1 {
+				return fmt.Errorf("want one new entry, got %d", len(n))
+			}
+			e := n[0]
+			if e.Kind != "idea" || e.Room == nil || *e.Room != "dry kitchen" {
+				return fmt.Errorf("got kind=%s room=%v, want idea / dry kitchen", e.Kind, deref(e.Room))
+			}
+			if e.Date != nil || e.Cost.Estimate != nil || e.Vendor != "" {
+				return fmt.Errorf("invented a date, cost or vendor: %+v", e)
+			}
+			return nil
+		}},
+		{msg: "Decided: Daikin system 4 aircon, 5.8k from CoolAir", check: func(b, a *entries.Doc, _ agent.Result) error {
+			n := added(b, a)
+			if len(n) != 1 {
+				return fmt.Errorf("want one new entry, got %d", len(n))
+			}
+			e := n[0]
+			if e.Kind != "decision" && e.Status != "decided" {
+				return fmt.Errorf("got kind=%s status=%s, want a decision", e.Kind, e.Status)
+			}
+			if !eq(e.Cost.Estimate, 5800) && !eq(e.Cost.Actual, 5800) {
+				return fmt.Errorf("cost = %+v, want 5800", e.Cost)
+			}
+			if !strings.Contains(strings.ToLower(e.Vendor), "coolair") {
+				return fmt.Errorf("vendor = %q, want CoolAir", e.Vendor)
+			}
+			return nil
+		}},
+		{msg: "Electrician coming Friday 2pm to check the DB", check: func(b, a *entries.Doc, _ agent.Result) error {
+			n := added(b, a)
+			if len(n) != 1 {
+				return fmt.Errorf("want one new entry, got %d", len(n))
+			}
+			e := n[0]
+			ok := e.Date != nil && (*e.Date == fridays(now)[0] || *e.Date == fridays(now)[1])
+			if e.Kind != "task" || !ok || e.Time == nil || *e.Time != "14:00" {
+				return fmt.Errorf("got kind=%s date=%v time=%v, want task / %s / 14:00", e.Kind, deref(e.Date), deref(e.Time), fridays(now)[0])
+			}
+			return nil
+		}},
+		{msg: "Lim quoted 18k for carpentry, paid 30% today", check: func(b, a *entries.Doc, _ agent.Result) error {
+			es := live(a, "carpent")
+			if len(es) != 1 {
+				return fmt.Errorf("want exactly one live carpentry entry (update, not duplicate), got %d", len(es))
+			}
+			e := es[0]
+			if !eq(e.Cost.Estimate, 18000) || !eq(e.Cost.Actual, 5400) {
+				return fmt.Errorf("carpentry estimate=%v actual=%v, want 18000 / 5400", deref(e.Cost.Estimate), deref(e.Cost.Actual))
+			}
+			if !strings.Contains(strings.ToLower(e.Vendor+" "+e.Title+" "+e.Notes), "lim") {
+				return fmt.Errorf("carpentry entry does not mention Lim")
+			}
+			return nil
+		}},
+		{msg: "Put the grey tiles in the bathroom", check: func(b, a *entries.Doc, res agent.Result) error {
+			// Two bathrooms and no tiles on record: it should ask, not guess.
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			if !strings.Contains(res.Reply, "?") {
+				return fmt.Errorf("expected a clarifying question, got %q", res.Reply)
+			}
+			return nil
+		}},
+		{msg: "What did we decide for the kitchen countertop and how much was it?", check: func(b, a *entries.Doc, res agent.Result) error {
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			r := strings.ReplaceAll(strings.ToLower(res.Reply), ",", "")
+			if !strings.Contains(r, "sintered") || !strings.Contains(r, "4200") && !strings.Contains(r, "4.2k") {
+				return fmt.Errorf("reply should name sintered stone and 4,200: %q", res.Reply)
+			}
+			return nil
+		}},
+		{msg: "Drop the post-reno cleaning", check: func(_, a *entries.Doc, _ agent.Result) error {
+			e, ok := a.Find(seedCleaning)
+			if !ok {
+				return fmt.Errorf("post-reno cleaning was hard-deleted; it should be archived")
+			}
+			if !e.Archived {
+				return fmt.Errorf("post-reno cleaning is not archived")
+			}
+			return nil
+		}},
+		{msg: "Undo that", check: func(_, a *entries.Doc, _ agent.Result) error {
+			e, ok := a.Find(seedCleaning)
+			if !ok || e.Archived {
+				return fmt.Errorf("post-reno cleaning should be back (not archived)")
+			}
+			return nil
+		}},
+		{msg: "We collected the keys today, that's a milestone", check: func(b, a *entries.Doc, _ agent.Result) error {
+			before, after := milestones(b), milestones(a)
+			if len(after) != len(before)+1 {
+				return fmt.Errorf("want one new milestone, got %d → %d", len(before), len(after))
+			}
+			e := after[len(after)-1]
+			if today := now.Format("2006-01-02"); e.Completed == nil || *e.Completed != today {
+				return fmt.Errorf("milestone %q done on %v, want %s", e.Title, deref(e.Completed), today)
+			}
+			if !regexp.MustCompile(`(?i)key`).MatchString(e.Title) {
+				return fmt.Errorf("milestone title %q doesn't mention the keys", e.Title)
+			}
+			return nil
+		}},
+		{msg: "What milestones have we hit so far?", check: func(b, a *entries.Doc, res agent.Result) error {
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			if !regexp.MustCompile(`(?i)key`).MatchString(res.Reply) {
+				return fmt.Errorf("reply should mention collecting the keys: %q", res.Reply)
+			}
+			return nil
+		}},
+		{msg: "Partner: ok see you at dinner", group: true, check: func(b, a *entries.Doc, res agent.Result) error {
+			if err := unchanged(b, a); err != nil {
+				return err
+			}
+			if !res.Silent {
+				return fmt.Errorf("group chatter should get no reply, got %q", res.Reply)
+			}
+			return nil
+		}},
 	}
 }
 

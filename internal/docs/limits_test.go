@@ -21,7 +21,7 @@ func TestPDFSizeLimit(t *testing.T) {
 	calls := r.conv.CallCount()
 	r.run(t)
 	d := r.doc(t, "docs/raw/Huge.pdf")
-	if d.Status != docs.StatusFailed || !strings.Contains(d.Reason+d.Error, "too large to read (32 MB; the limit is 32 MB)") || r.conv.CallCount() != calls {
+	if d.Status != docs.StatusFailed || !strings.Contains(d.Reason+d.Error, "too large to read (33 MB; the limit is 32 MB)") || r.conv.CallCount() != calls {
 		t.Fatalf("huge PDF: %+v, converter calls %d → %d", d, calls, r.conv.CallCount())
 	}
 

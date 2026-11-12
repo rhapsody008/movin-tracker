@@ -320,7 +320,7 @@ func (b *Bot) CheckinLoop(ctx context.Context, every time.Duration) {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return
 	}
-	cfg := b.Settings.ResolveCheckin(ctx)
+	cfg, _ := b.Settings.ResolveCheckin(ctx)
 	b.Log.Info("morning check-in loop running", "schedule", cfg.Schedule, "until", fmt.Sprintf("%02d:00", sched.CheckinCutoff))
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -340,12 +340,19 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	if ci == nil || ci.State == nil {
 		return
 	}
-	cfg := b.Settings.ResolveCheckin(ctx)
 	now := b.now()
+	day := sched.Day(now, b.loc())
+	cfg, err := b.Settings.ResolveCheckin(ctx)
+	if err != nil {
+		// Never fall back to the defaults here: a check-in saved as Off
+		// (or to a private chat) must not go to the group after one failed
+		// read. The next minute tries again.
+		b.warnCheckin("read "+day, "morning check-in: couldn't read the settings; skipping this minute", err)
+		return
+	}
 	if !cfg.On || !CheckinDue(now, cfg.Hour, cfg.Minute, b.loc()) {
 		return
 	}
-	day := sched.Day(now, b.loc())
 	b.mu.Lock()
 	finished := b.checkinDay == day
 	b.mu.Unlock()
@@ -362,14 +369,8 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	chat, err := b.checkinChat(ctx, cfg)
 	if err != nil {
 		// Not remembered as finished: fixing the allowlist on the web page
-		// lets it go out the same day. Warned once a day.
-		b.mu.Lock()
-		warn := b.checkinWarned != day
-		b.checkinWarned = day
-		b.mu.Unlock()
-		if warn {
-			b.Log.Warn("morning check-in can't go out until this is fixed", "err", err)
-		}
+		// lets it go out the same day.
+		b.warnCheckin("chat "+day, "morning check-in can't go out until this is fixed", err)
 		return
 	}
 	claim, cur, err := ci.State.Claim(ctx, day, strconv.FormatInt(chat, 10), now)
@@ -414,6 +415,18 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	markFinished()
 }
 
+// warnCheckin logs a warning once per key (a problem that persists is
+// checked every minute; one line a day is enough).
+func (b *Bot) warnCheckin(key, msg string, err error) {
+	b.mu.Lock()
+	warn := b.checkinWarned != key
+	b.checkinWarned = key
+	b.mu.Unlock()
+	if warn {
+		b.Log.Warn(msg, "err", err)
+	}
+}
+
 // CheckinView is the check-in's state for the admin page.
 type CheckinView struct {
 	On    bool           `json:"on"`
@@ -425,7 +438,7 @@ type CheckinView struct {
 	// NoBot: there is no bot (no token), so nothing is sent.
 	NoBot bool `json:"noBot,omitempty"`
 	// Setting is the editable setting behind it (filled by the server).
-	Setting settings.CheckinView `json:"setting"`
+	Setting settings.CheckinSetting `json:"setting"`
 }
 
 // CheckinStatus reports the check-in for the admin page (nil without a bot).
@@ -436,7 +449,10 @@ func (b *Bot) CheckinStatus(ctx context.Context) *CheckinView {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return &CheckinView{}
 	}
-	cfg := b.Settings.ResolveCheckin(ctx)
+	cfg, err := b.Settings.ResolveCheckin(ctx)
+	if err != nil {
+		return &CheckinView{Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff), Error: err.Error()}
+	}
 	v := &CheckinView{On: cfg.On, Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff)}
 	if cfg.On {
 		v.At = cfg.Schedule

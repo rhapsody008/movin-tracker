@@ -108,8 +108,12 @@ func Load() (Config, error) {
 	if _, _, _, err := sched.Parse("DOCS_SYNC_SCHEDULE", c.DocsSync, docs.DefaultSyncSchedule); err != nil {
 		return c, err
 	}
-	if c.Checkin, err = settings.ParseCheckin(env("CHECKIN_SCHEDULE", settings.DefaultCheckin), env("CHECKIN_CHAT", "")); err != nil {
-		return c, fmt.Errorf("CHECKIN_SCHEDULE / CHECKIN_CHAT: %w", err)
+	schedule := env("CHECKIN_SCHEDULE", settings.DefaultCheckin)
+	if _, err := settings.ParseCheckin(schedule, ""); err != nil {
+		return c, fmt.Errorf("CHECKIN_SCHEDULE: %w", err)
+	}
+	if c.Checkin, err = settings.ParseCheckin(schedule, env("CHECKIN_CHAT", "")); err != nil {
+		return c, fmt.Errorf("CHECKIN_CHAT: %w", err)
 	}
 	c.TelegramToken = env("TELEGRAM_BOT_TOKEN", "")
 	if c.Telegram, err = settings.ParseTelegramEnv(env("TELEGRAM_ALLOWED_IDS", ""), env("TELEGRAM_ALLOWED_CHATS", "")); err != nil {

@@ -1139,6 +1139,10 @@ async function loadTelegram(){
   const a = tgState.allowlist;
   tgDraft = {users:(a.users||[]).map(u=>({...u})), groups:[...(a.groups||[])]};
   renderTelegram();
+  // The check-in form is filled here and after its own save only, so
+  // editing the lists above never resets what was typed into it.
+  $("ciResult").textContent = ""; $("ciResult").className = "result";
+  renderCheckinForm();
 }
 async function refreshTelegramStatus(){
   try{ const d = await api("GET", "/api/admin/telegram"); tgState = {...tgState, status:d.status, checkin:d.checkin}; renderTGStatus(); renderTGRejected(); }catch{}
@@ -1163,6 +1167,7 @@ function renderTGCheckin(){
   if(!c){ el.textContent = ""; return; }
   let t;
   if(c.noBot) t = "No bot is running (TELEGRAM_BOT_TOKEN is not set), so nothing is sent. You can still set it up below.";
+  else if(!c.on && c.error) t = "Couldn't read the setting: " + c.error;
   else if(!c.on) t = "Off: no morning check-in is sent.";
   else t = `Sent at ${c.at} (or as soon as the app starts, until ${c.until}) to ${c.chat ? chatName(c.chat) : "nowhere: " + c.error}.`;
   const l = c.last;
@@ -1178,15 +1183,20 @@ function renderCheckinForm(){
   const c = tgState.checkin; if(!c) return;
   const st = c.setting || {}, off = st.schedule === "off", al = tgState.allowlist || {};
   $("ciOff").checked = off; $("ciTime").value = off ? "09:30" : (st.schedule || "09:30"); $("ciTime").disabled = off;
-  const opts = [["", "Default: the first allowed group"]]
+  ciChatOptions(st.chat || "");
+  $("ciSource").textContent = st.fromEnv ? "Using the server's defaults (CHECKIN_SCHEDULE and CHECKIN_CHAT). Saving here replaces them; it applies within a minute."
+    : `Saved${st.updated ? " " + new Date(st.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"}) : ""}${st.by ? " by " + st.by : ""}. This replaces the server's defaults.`;
+  $("ciUseEnv").hidden = !!st.fromEnv;
+}
+/* The Send to list follows the saved allowlist; the choice is kept. */
+function ciChatOptions(selected){
+  const al = tgState.allowlist || {};
+  const opts = [["", "Default: first group (or person)"]]
     .concat((al.groups||[]).map(g=>[g, "Group " + g]))
     .concat((al.users||[]).map(u=>[u.id, u.name + " (private chat; needs /start once)"]));
-  if(st.chat && !opts.some(o=>o[0]===st.chat)) opts.push([st.chat, "Chat " + st.chat + " (not on the list above)"]);
+  if(selected && !opts.some(o=>o[0]===selected)) opts.push([selected, "Chat " + selected + " (not on the list above)"]);
   $("ciChat").innerHTML = opts.map(([v,n])=>`<option value="${esc(v)}">${esc(n)}</option>`).join("");
-  $("ciChat").value = st.chat || "";
-  $("ciSource").textContent = st.fromEnv ? "Using the server's defaults (CHECKIN_SCHEDULE and CHECKIN_CHAT). Saving here replaces them; it applies within a minute."
-    : `Saved ${new Date(st.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${st.by}. This replaces the server's defaults.`;
-  $("ciUseEnv").hidden = !!st.fromEnv;
+  $("ciChat").value = selected;
 }
 $("ciOff").onchange = ()=>{ $("ciTime").disabled = $("ciOff").checked; };
 async function saveCheckin(body, okMsg){
@@ -1197,7 +1207,10 @@ async function saveCheckin(body, okMsg){
     r.className = "result ok"; r.textContent = okMsg;
   }catch(e){ r.className = "result bad"; r.textContent = e.message; }
 }
-$("ciSave").onclick = ()=>saveCheckin({schedule: $("ciOff").checked ? "off" : $("ciTime").value, chat: $("ciChat").value}, "Saved. It applies within a minute.");
+$("ciSave").onclick = ()=>{
+  if(!$("ciOff").checked && !$("ciTime").value){ $("ciResult").className = "result bad"; $("ciResult").textContent = "Pick a time, or tick Off."; return; }
+  saveCheckin({schedule: $("ciOff").checked ? "off" : $("ciTime").value, chat: $("ciChat").value}, "Saved. It applies within a minute.");
+};
 $("ciUseEnv").onclick = ()=>{ if(confirm("Drop the check-in setting saved here and use the server's defaults again?")) saveCheckin({useEnv:true}, "Back on the server's defaults."); };
 function renderTGRejected(){
   const list = (tgState.status.rejected||[]);
@@ -1213,7 +1226,6 @@ function renderTGRejected(){
   }).join("");
 }
 function renderTelegram(){
-  $("ciResult").textContent = ""; $("ciResult").className = "result";
   renderTGStatus();
   const a = tgState.allowlist;
   $("tgSource").textContent = a.fromEnv ? "Using the server's defaults (TELEGRAM_ALLOWED_IDS and TELEGRAM_ALLOWED_CHATS). Saving here replaces them."
@@ -1224,7 +1236,7 @@ function renderTelegram(){
   $("tgGroups").innerHTML = tgDraft.groups.map((g,i)=>`<div class="rowi g"><input inputmode="numeric" placeholder="-100…" aria-label="Group chat ID" value="${esc(g)}" data-tgg="${i}"><button class="rm" type="button" aria-label="Remove" data-tgrmg="${i}">×</button></div>`).join("")
     || `<p class="sub">No groups yet.</p>`;
   renderTGRejected();
-  renderCheckinForm();
+  if(tgState.checkin) ciChatOptions($("ciChat").value);
   tgDirty();
 }
 function tgDirty(){

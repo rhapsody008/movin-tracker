@@ -23,6 +23,10 @@ const MaxViewWords = 300
 // view): the app runs in 256 MiB and the largest PDF today is 14 MB.
 const MaxPDFBytes = 32 << 20
 
+// mbUp is n bytes in whole MiB, rounded up (so just over the limit never
+// reads as the limit).
+func mbUp(n int64) int64 { return (n + 1<<20 - 1) >> 20 }
+
 // ErrNotViewable is returned for documents that can't be shown.
 var ErrNotViewable = errors.New("not viewable")
 
@@ -114,7 +118,7 @@ func (v *Viewer) pdf(ctx context.Context, d Doc) ([]byte, error) {
 		return b, nil
 	}
 	if d.Size > MaxPDFBytes {
-		return nil, fmt.Errorf("%w: %s is too large to view (%d MB; the limit is %d MB)", ErrNotViewable, d.Name(), d.Size>>20, MaxPDFBytes>>20)
+		return nil, fmt.Errorf("%w: %s is too large to view (%d MB; the limit is %d MB)", ErrNotViewable, d.Name(), mbUp(d.Size), MaxPDFBytes>>20)
 	}
 	b, etag, err := v.Sync.Store.Get(ctx, d.Key)
 	if err != nil {

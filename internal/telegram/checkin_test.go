@@ -518,3 +518,33 @@ func TestCheckinTimeFromSettings(t *testing.T) {
 		t.Fatalf("after turning it back on: %+v", s)
 	}
 }
+
+// settingsReadFails fails reads of settings.json only.
+type settingsReadFails struct{ objstore.Store }
+
+func (s settingsReadFails) Get(ctx context.Context, k string) ([]byte, string, error) {
+	if k == settings.Key {
+		return nil, "", fmt.Errorf("503 slow down")
+	}
+	return s.Store.Get(ctx, k)
+}
+
+// A check-in saved as Off stays off when settings.json can't be read: the
+// tick skips instead of falling back to the defaults (on, 09:30, group).
+func TestCheckinSkipsWhenSettingsUnreadable(t *testing.T) {
+	ctx := context.Background()
+	now := sgt("2026-11-12T10:00:00")
+	r, state := scheduled(t, &now)
+	seed(t, r, task("Book movers", "2026-11-11"))
+	setCheckin(t, r, "off", "")
+	broken, _ := settings.NewService(settingsReadFails{objstore.NewMemory()}, settings.Defaults, "", r.bot.Log)
+	r.bot.Settings = broken
+	r.bot.CheckinTick(ctx)
+	time.Sleep(100 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 0 || record(t, state).Day != "" {
+		t.Fatalf("sent on a failed settings read: %d", n)
+	}
+	if v := r.bot.CheckinStatus(ctx); !strings.Contains(v.Error, "read settings.json") || v.On {
+		t.Fatalf("status: %+v", v)
+	}
+}

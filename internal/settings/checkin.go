@@ -48,8 +48,8 @@ type CheckinInput struct {
 	UseEnv   bool   `json:"useEnv"`
 }
 
-// CheckinView is what the admin page shows.
-type CheckinView struct {
+// CheckinSetting is the setting as the admin page shows it.
+type CheckinSetting struct {
 	Checkin
 	Updated string `json:"updated,omitempty"`
 	By      string `json:"by,omitempty"`
@@ -94,21 +94,28 @@ func (s *Service) resolveCheckin(st stored) Checkin {
 	}
 	c, err := ParseCheckin(st.Checkin.Schedule, st.Checkin.Chat)
 	if err != nil {
-		s.log.Warn("checkin section of settings.json is invalid, using the server's setting", "err", err)
+		s.warnOnce("checkin section of settings.json is invalid, using the server's setting", "err", err)
 		return s.resolveCheckin(stored{})
 	}
 	return c
 }
 
 // ResolveCheckin returns the check-in setting to use right now (the bot
-// reads it every minute, so a change applies without a restart).
-func (s *Service) ResolveCheckin(ctx context.Context) Checkin {
-	return s.resolveCheckin(s.current(ctx))
+// reads it every minute, so a change applies without a restart). Unlike the
+// other sections, a settings.json that can't be read is an error, not the
+// env defaults: a check-in saved as Off must not go out because of one
+// failed read.
+func (s *Service) ResolveCheckin(ctx context.Context) (Checkin, error) {
+	st, err := s.currentErr(ctx)
+	if err != nil {
+		return Checkin{}, fmt.Errorf("read settings.json: %w", err)
+	}
+	return s.resolveCheckin(st), nil
 }
 
-func (s *Service) ViewCheckin(ctx context.Context) CheckinView {
+func (s *Service) ViewCheckin(ctx context.Context) CheckinSetting {
 	st := s.current(ctx)
-	v := CheckinView{Checkin: s.resolveCheckin(st)}
+	v := CheckinSetting{Checkin: s.resolveCheckin(st)}
 	if st.Checkin != nil {
 		v.Updated, v.By = st.Checkin.Updated, st.Checkin.By
 	}
@@ -116,12 +123,12 @@ func (s *Service) ViewCheckin(ctx context.Context) CheckinView {
 }
 
 // SaveCheckin writes the checkin section, keeping every other section.
-func (s *Service) SaveCheckin(ctx context.Context, by string, in CheckinInput) (CheckinView, error) {
+func (s *Service) SaveCheckin(ctx context.Context, by string, in CheckinInput) (CheckinSetting, error) {
 	var c Checkin
 	if !in.UseEnv {
 		var err error
 		if c, err = ParseCheckin(in.Schedule, in.Chat); err != nil {
-			return CheckinView{}, err
+			return CheckinSetting{}, err
 		}
 	}
 	err := s.modify(ctx, func(raw map[string]json.RawMessage) error {
@@ -133,7 +140,7 @@ func (s *Service) SaveCheckin(ctx context.Context, by string, in CheckinInput) (
 		return nil
 	})
 	if err != nil {
-		return CheckinView{}, err
+		return CheckinSetting{}, err
 	}
 	s.log.Info("check-in setting saved", "by", by, "schedule", c.Schedule, "chat", c.Chat, "useEnv", in.UseEnv)
 	return s.ViewCheckin(ctx), nil

@@ -186,12 +186,6 @@ type Patch map[string]json.RawMessage
 
 var textLimits = map[string]int{"vendor": 200, "source": 500, "notes": 4000, "category": 40}
 
-var patchable = map[string]bool{
-	"kind": true, "title": true, "room": true, "category": true, "status": true,
-	"cost": true, "vendor": true, "date": true, "time": true, "source": true,
-	"notes": true, "tags": true, "archived": true, "milestone": true, "completed": true,
-}
-
 // PatchFromMap builds a Patch from already-decoded values (used by agent tools).
 func PatchFromMap(m map[string]any) (Patch, error) {
 	p := Patch{}
@@ -232,7 +226,7 @@ func maxLen(k, s string, n int) error {
 // an unspecified state, so callers apply to a copy.
 func (p Patch) Apply(e *Entry) error {
 	for k := range p {
-		if !patchable[k] {
+		if _, ok := setters[k]; !ok && k != "kind" {
 			return invalid("unknown field %q", k)
 		}
 	}
@@ -277,6 +271,7 @@ func (p Patch) applyKind(e *Entry, raw json.RawMessage) error {
 // depend on each other).
 type setter func(p Patch, e *Entry, k string, raw json.RawMessage) error
 
+// setters are the patchable fields (with kind, applied first).
 var setters = map[string]setter{
 	"title": setTitle, "vendor": setText, "source": setText, "notes": setText, "category": setText,
 	"room": setRoom, "status": setStatus, "date": setDateTime, "time": setDateTime,

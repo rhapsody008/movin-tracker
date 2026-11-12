@@ -412,7 +412,7 @@ func (s *Syncer) fail(res Sync, err error) (Sync, error) {
 // the document's fields. The summary is redone when a Summariser is set.
 func (s *Syncer) convert(ctx context.Context, d *Doc, o objstore.ObjectInfo) error {
 	if o.Size > MaxPDFBytes {
-		return fmt.Errorf("too large to read (%d MB; the limit is %d MB)", o.Size>>20, MaxPDFBytes>>20)
+		return fmt.Errorf("too large to read (%d MB; the limit is %d MB)", mbUp(o.Size), MaxPDFBytes>>20)
 	}
 	pdf, etag, err := s.Store.Get(ctx, o.Key)
 	if err != nil {

@@ -167,7 +167,7 @@ func (s *Service) resolveTelegram(st stored) Telegram {
 	// Re-validate what was stored; a hand-edited file falls back to env.
 	u, g, err := validTelegram(st.Telegram.Users, st.Telegram.Groups)
 	if err != nil {
-		s.log.Warn("telegram section of settings.json is invalid, using env allowlist", "err", err)
+		s.warnOnce("telegram section of settings.json is invalid, using env allowlist", "err", err)
 		return s.resolveTelegram(stored{})
 	}
 	return Telegram{Users: u, Groups: g}

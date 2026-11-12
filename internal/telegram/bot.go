@@ -48,7 +48,7 @@ type Bot struct {
 	wg      sync.WaitGroup // running workers
 
 	checkinDay    string // the last day this process saw finished (saves a read a minute)
-	checkinWarned string // the last day it warned there was nowhere to send
+	checkinWarned string // the last check-in warning's key (warnCheckin)
 }
 
 type chatHistory struct {

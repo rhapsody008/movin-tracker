@@ -193,12 +193,24 @@ func (s *Service) SetClock(now func() time.Time) { s.now = now }
 // current returns settings.json as of at most ttl ago. A missing file reads
 // as empty; an unreadable one is logged and reads as empty (env applies),
 // and is not cached so a fix shows up on the next call.
+// current is the stored settings; an unreadable file reads as empty (the
+// env defaults apply), which is right for the LLM and the allowlist.
 func (s *Service) current(ctx context.Context) stored {
+	st, err := s.currentErr(ctx)
+	if err != nil {
+		s.warnOnce("settings.json unreadable, using env defaults", "err", err)
+	}
+	return st
+}
+
+// currentErr is current, but reports a failed read (other than "no file
+// yet") instead of falling back, for callers that must not act on defaults.
+func (s *Service) currentErr(ctx context.Context) (stored, error) {
 	s.mu.Lock()
 	if s.has && s.now().Sub(s.at) < s.ttl {
 		st := s.cached
 		s.mu.Unlock()
-		return st
+		return st, nil
 	}
 	gen := s.gen
 	s.mu.Unlock()
@@ -213,10 +225,9 @@ func (s *Service) current(ctx context.Context) stored {
 			s.cached, s.at, s.has = st, s.now(), true
 		}
 		s.mu.Unlock()
-		return st
+		return st, nil
 	default:
-		s.log.Warn("settings.json unreadable, using env defaults", "err", err)
-		return stored{}
+		return stored{}, err
 	}
 }
 
