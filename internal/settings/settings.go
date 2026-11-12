@@ -127,15 +127,18 @@ type Service struct {
 	env       LLM      // values from LLM_* env vars, layered over Defaults
 	tgEnv     Telegram // from TELEGRAM_ALLOWED_IDS / TELEGRAM_ALLOWED_CHATS
 	ciEnv     Checkin  // from CHECKIN_SCHEDULE / CHECKIN_CHAT
-	fkey      *fernet.Key
-	log       *slog.Logger
-	now       func() time.Time
-	ttl       time.Duration
-	mu        sync.Mutex
-	cached    stored
-	at        time.Time
-	has       bool
-	gen       uint64 // bumped by every save, so a slower read can't cache older data
+
+	warnMu   sync.Mutex
+	lastWarn string
+	fkey     *fernet.Key
+	log      *slog.Logger
+	now      func() time.Time
+	ttl      time.Duration
+	mu       sync.Mutex
+	cached   stored
+	at       time.Time
+	has      bool
+	gen      uint64 // bumped by every save, so a slower read can't cache older data
 }
 
 // NewService takes the env-level defaults and the SETTINGS_SECRET Fernet key
@@ -153,6 +156,19 @@ func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) 
 		s.fkey = k
 	}
 	return s, nil
+}
+
+// warnOnce logs a warning only when it differs from the last one it logged
+// (settings are resolved for every message; one line per change is enough).
+func (s *Service) warnOnce(msg string, args ...any) {
+	key := fmt.Sprint(msg, args)
+	s.warnMu.Lock()
+	same := s.lastWarn == key
+	s.lastWarn = key
+	s.warnMu.Unlock()
+	if !same {
+		s.log.Warn(msg, args...)
+	}
 }
 
 // WithTelegramEnv sets the env-level Telegram allowlist (the default that a
@@ -308,7 +324,7 @@ func (s *Service) resolve(st stored) (LLM, bool) {
 			// process would send it elsewhere (another kind from env, a
 			// test override of the Claude origin, a hand-edited file), it
 			// is not used.
-			s.log.Warn("stored API key belongs to another host; not using it", "savedFor", originOf(l.BaseURL), "target", originOf(&out.BaseURL))
+			s.warnOnce("stored API key belongs to another host; not using it", "savedFor", originOf(l.BaseURL), "target", originOf(&out.BaseURL))
 		default:
 			out.APIKey, keyFromEnv = k, false
 		}
@@ -467,7 +483,9 @@ func (s *Service) Save(ctx context.Context, by string, in Input) (View, error) {
 		}
 		// A saved key belongs to its endpoint: moving to another host
 		// without typing a key drops it instead of sending it there.
-		if keep != nil && enc == nil && old.BaseURL != nil && !SameOrigin(baseURL, *old.BaseURL) {
+		// (A key saved without a URL, from a hand-edited file, has no host to
+		// belong to, so it is dropped too.)
+		if keep != nil && enc == nil && (old.BaseURL == nil || !SameOrigin(baseURL, *old.BaseURL)) {
 			keep = nil
 		}
 		if enc != nil {

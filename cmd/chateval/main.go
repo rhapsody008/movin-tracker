@@ -175,7 +175,7 @@ func cases(now time.Time) []evalCase {
 				return err
 			}
 			r := strings.ReplaceAll(strings.ToLower(res.Reply), ",", "")
-			if !strings.Contains(r, "sintered") || !(strings.Contains(r, "4200") || strings.Contains(r, "4.2k")) {
+			if !strings.Contains(r, "sintered") || !strings.Contains(r, "4200") && !strings.Contains(r, "4.2k") {
 				return fmt.Errorf("reply should name sintered stone and 4,200: %q", res.Reply)
 			}
 			return nil
@@ -260,7 +260,7 @@ func main() {
 
 func run() error {
 	if os.Getenv("S3_BUCKET") == "" {
-		os.Setenv("S3_BUCKET", "unused") // config requires it; chat-eval uses memory
+		_ = os.Setenv("S3_BUCKET", "unused") // config requires it; chat-eval uses memory
 	}
 	saved := flag.Bool("saved", false, "use the LLM connection saved on the web page (settings.json in the configured bucket, read only) instead of LLM_* from .env; run it where the app's S3 settings and SETTINGS_SECRET are, e.g. docker compose exec app")
 	kind := flag.String("kind", "", "switch the connection kind for this run: claude (keeps the key only if it belongs to the Claude origin)")

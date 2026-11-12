@@ -165,7 +165,7 @@ func (c *claude) call(ctx context.Context, params anthropic.BetaMessageNewParams
 		return msg, nil
 	}
 	stream := c.client.Beta.Messages.NewStreaming(ctx, params)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	var msg anthropic.BetaMessage
 	for stream.Next() {
 		ev := stream.Current()

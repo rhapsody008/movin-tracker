@@ -210,7 +210,7 @@ func (c *Client) call(ctx context.Context, method string, params, out any, timeo
 	if err != nil {
 		return c.scrub(method, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var env struct {
 		OK          bool            `json:"ok"`
 		Result      json.RawMessage `json:"result"`
@@ -323,7 +323,7 @@ func (c *Client) Download(ctx context.Context, filePath string, maxBytes int64) 
 	if err != nil {
 		return nil, c.scrub("download", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.scrub("download", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}

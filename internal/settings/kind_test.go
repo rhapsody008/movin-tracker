@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/fernet/fernet-go"
@@ -232,5 +233,38 @@ func TestStoredKeyStaysWithItsHost(t *testing.T) {
 	r.svc.WithClaudeBaseURL(settings.ClaudeOrigin)
 	if l := r.svc.Resolve(ctx); l.APIKey != "sk-ant-real-8888" {
 		t.Fatalf("key lost on its own origin: %+v", l)
+	}
+}
+
+// A key saved without a URL (hand-edited file) has no host to belong to:
+// saving a connection without typing a key drops it instead of binding it
+// to the new URL. And the "belongs to another host" warning is logged once,
+// not on every message.
+func TestKeyWithoutURLAndOneWarning(t *testing.T) {
+	ctx := context.Background()
+	k := fernet.Key{}
+	k.Generate()
+	tok, _ := fernet.EncryptAndSign([]byte("sk-orphan-1234"), &k)
+	store := objstore.NewMemory()
+	store.Put(ctx, settings.Key, []byte(`{"schema":1,"llm":{"apiKeyEnc":"`+string(tok)+`","model":"q"}}`), "")
+	logs := &testutil.SyncBuffer{}
+	svc, err := settings.NewService(store, settings.Defaults, k.Encode(), testutil.Logger(logs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		if l := svc.Resolve(ctx); l.APIKey != "" {
+			t.Fatalf("URL-less key used: %+v", l)
+		}
+	}
+	if n := strings.Count(logs.String(), "belongs to another host"); n != 1 {
+		t.Fatalf("warning logged %d times, want once", n)
+	}
+	if _, err := svc.Save(ctx, "zy", settings.Input{Kind: settings.KindOpenAI, BaseURL: "https://llm.example/v1", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	body, _, _ := store.Get(ctx, settings.Key)
+	if strings.Contains(string(body), "apiKeyEnc") {
+		t.Fatalf("URL-less key kept and bound to the new URL: %s", body)
 	}
 }

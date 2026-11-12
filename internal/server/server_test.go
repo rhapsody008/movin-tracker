@@ -627,7 +627,7 @@ func (s staleAccepted) Put(ctx context.Context, k string, b []byte, m string) (s
 }
 
 func (s staleAccepted) etag(ctx context.Context, k string) string {
-	st, _ := s.Memory.Stat(ctx, k)
+	st, _ := s.Stat(ctx, k)
 	return st.ETag
 }
 

@@ -66,7 +66,7 @@ func (s *S3) Get(ctx context.Context, key string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", mapErr(err)
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 	body, err := io.ReadAll(out.Body)
 	if err != nil {
 		return nil, "", err

@@ -71,7 +71,7 @@ func (c *openAI) do(ctx context.Context, method, path string, body any) (*http.R
 		return nil, c.scrub(err)
 	}
 	if resp.StatusCode/100 != 2 {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
 		msg := strings.TrimSpace(string(b))
 		var e struct {
@@ -114,7 +114,7 @@ func (c *openAI) Models(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var out struct {
 		Data []struct {
 			ID string `json:"id"`
@@ -154,7 +154,7 @@ func (c *openAI) Complete(ctx context.Context, in Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if !in.Stream || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		var out struct {
 			Choices []struct {

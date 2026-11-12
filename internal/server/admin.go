@@ -227,5 +227,5 @@ func (s *Server) getGuide(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Write(b)
+	_, _ = w.Write(b)
 }

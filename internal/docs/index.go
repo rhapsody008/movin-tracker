@@ -154,7 +154,7 @@ func Garbled(text string) bool {
 		return true
 	}
 	words, novowel := 0, 0
-	for _, w := range strings.FieldsFunc(text, func(r rune) bool { return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') }) {
+	for _, w := range strings.FieldsFunc(text, func(r rune) bool { return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') }) {
 		if len(w) < 3 {
 			continue
 		}

@@ -353,9 +353,9 @@ func TestAuthorisation(t *testing.T) {
 		inGroup(groupID, 333, "Stranger", "record stranger in group", 6), // stranger in the allowed group
 		inGroup(groupID, partnerID, "P", "record Lift booking", 7),       // allowed user in the allowed group
 	)
-	sent := r.tg.waitSent(t, 1)
+	r.tg.waitSent(t, 1)
 	time.Sleep(300 * time.Millisecond) // give any wrongly accepted message time to show up
-	sent = r.tg.sentCopy()
+	sent := r.tg.sentCopy()
 	if len(sent) != 1 || sent[0].ChatID != groupID || sent[0].ReplyTo != 7 {
 		t.Fatalf("only the allowed group message should get a reply, threaded: %+v", sent)
 	}
@@ -446,9 +446,9 @@ func TestOneChatIsSerialisedTwoChatsRunInParallel(t *testing.T) {
 func TestGroupChatterGetsNoReply(t *testing.T) {
 	r := startBot(t)
 	r.tg.push(inGroup(groupID, partnerID, "P", "chat about dinner", 20), inGroup(groupID, zyID, "Zhou", "what's up?", 21))
-	sent := r.tg.waitSent(t, 1)
+	r.tg.waitSent(t, 1)
 	time.Sleep(200 * time.Millisecond)
-	sent = r.tg.sentCopy()
+	sent := r.tg.sentCopy()
 	if len(sent) != 1 || sent[0].ReplyTo != 21 {
 		t.Fatalf("only the question should get an answer: %+v", sent)
 	}
@@ -510,7 +510,7 @@ func TestCommands(t *testing.T) {
 	}
 	// A command for another bot in the group is ignored; one for us works.
 	r.tg.push(inGroup(groupID, zyID, "Zhou", "/recent@some_other_bot", 30), inGroup(groupID, zyID, "Zhou", "/sync@movin_test_bot", 31))
-	s = r.tg.waitSent(t, 4)
+	r.tg.waitSent(t, 4)
 	time.Sleep(200 * time.Millisecond)
 	if s = r.tg.sentCopy(); len(s) != 4 || s[3].ReplyTo != 31 || !strings.Contains(s[3].Text, "Documents aren't switched on") {
 		t.Fatalf("group commands: %+v", s[3:])

@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -106,7 +105,7 @@ func serve() error {
 		log.Warn("ALLOWED_EMAILS is empty; every user the proxy lets through can use the web page")
 	}
 
-	var static fs.FS = movintracker.Static()
+	static := movintracker.Static()
 	guide := func() ([]byte, error) { return movintracker.AdminGuide(), nil }
 	if c.StaticDir != "" {
 		static = os.DirFS(c.StaticDir)
@@ -218,7 +217,7 @@ func healthcheck() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("healthz returned %d", resp.StatusCode)
 	}

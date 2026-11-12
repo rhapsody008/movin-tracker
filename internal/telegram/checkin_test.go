@@ -46,9 +46,9 @@ func task(title, date string, extra ...string) map[string]any {
 	return m
 }
 
-func press(r *botRig, from int64, first, data string, chat int64, msgID int64) {
+func press(r *botRig, from int64, first, data string, msgID int64) {
 	r.tg.push(telegram.Update{CallbackQuery: &telegram.CallbackQuery{ID: fmt.Sprint("cb", msgID, data), From: telegram.User{ID: from, FirstName: first}, Data: data,
-		Message: &telegram.Message{MessageID: msgID, Chat: telegram.Chat{ID: chat, Type: "supergroup"},
+		Message: &telegram.Message{MessageID: msgID, Chat: telegram.Chat{ID: groupID, Type: "supergroup"},
 			ReplyMarkup: &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{{Text: "x", CallbackData: data}}}}}}})
 }
 
@@ -109,9 +109,9 @@ func TestCheckinCommandAndButtons(t *testing.T) {
 	}
 
 	// Done, Done ★, +1 week: one journaled change each, with an Undo.
-	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", groupID, 2001)
-	press(r, partnerID, "Pat", "ci:m:"+ids["Order tiles"]+":20261111", groupID, 2002)
-	press(r, zyID, "Zhou", "ci:r:"+ids["Measure windows"]+":20261111:7", groupID, 2003)
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", 2001)
+	press(r, partnerID, "Pat", "ci:m:"+ids["Order tiles"]+":20261111", 2002)
+	press(r, zyID, "Zhou", "ci:r:"+ids["Measure windows"]+":20261111:7", 2003)
 	sent = r.tg.waitSent(t, 7)
 	wantReplies := []string{
 		"✓ ZY: Updated: Book movers (status done)",
@@ -143,12 +143,12 @@ func TestCheckinCommandAndButtons(t *testing.T) {
 
 	// A second press on an answered task writes nothing.
 	changes := len(r.doc(t).Changes)
-	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", groupID, 2001)
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", 2001)
 	if a := r.tg.waitAnswers(t, 4); a[3] != "Already done." {
 		t.Errorf("stale press answer %q", a[3])
 	}
 	// A stranger in the group can't press them.
-	press(r, 333, "Stranger", "ci:d:"+ids["Old one"]+":20261107", groupID, 2004)
+	press(r, 333, "Stranger", "ci:d:"+ids["Old one"]+":20261107", 2004)
 	if a := r.tg.waitAnswers(t, 5); !strings.Contains(a[4], "not on this bot's list") {
 		t.Errorf("stranger: %q", a[4])
 	}
@@ -156,7 +156,7 @@ func TestCheckinCommandAndButtons(t *testing.T) {
 		t.Errorf("stale or refused presses changed something: %d → %d", changes, n)
 	}
 	// The Undo under a Done reply puts the task back.
-	press(r, zyID, "Zhou", sent[4].Buttons[0].CallbackData, groupID, 2005)
+	press(r, zyID, "Zhou", sent[4].Buttons[0].CallbackData, 2005)
 	r.tg.waitSent(t, 8)
 	if e, _ := r.doc(t).Find(ids["Book movers"]); e.Status != "todo" || e.Completed != nil {
 		t.Errorf("undo of Done: %+v", e)
@@ -405,17 +405,17 @@ func TestCheckinButtonAfterTheTaskMoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	changes := len(r.doc(t).Changes)
-	press(r, zyID, "Zhou", tomorrow, groupID, 3001)
+	press(r, zyID, "Zhou", tomorrow, 3001)
 	if a := r.tg.waitAnswers(t, 1); a[0] != "That task was moved since (Fri 13 Nov), so I left it." {
 		t.Fatalf("answer %q", a[0])
 	}
-	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", groupID, 3002)
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"]+":20261111", 3002)
 	r.tg.waitAnswers(t, 2)
 	if e, _ := r.doc(t).Find(ids["Book movers"]); len(r.doc(t).Changes) != changes || *e.Date != "2026-11-13" || e.Status != "todo" {
 		t.Fatalf("a moved task was changed: %+v", e)
 	}
 	// Malformed data (an old button without the date) does nothing either.
-	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"], groupID, 3003)
+	press(r, zyID, "Zhou", "ci:d:"+ids["Book movers"], 3003)
 	r.tg.waitAnswers(t, 3)
 	if len(r.doc(t).Changes) != changes {
 		t.Fatal("malformed button changed something")

@@ -68,13 +68,13 @@ func TestViewerDoesNotCacheHugePDFs(t *testing.T) {
 	if _, err := v.View(ctx, r.doc(t, "docs/raw/huge.pdf").ID, 1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if n, _, _, _ := v.Size(); n != 0 {
+	if n, _, _, _ := docs.CacheSize(v); n != 0 {
 		t.Fatalf("huge PDF cached")
 	}
 	if _, err := v.View(ctx, r.doc(t, "docs/raw/small.pdf").ID, 1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if n, b, views, _ := v.Size(); n != 1 || b != len("pdf-small") || views != 2 {
+	if n, b, views, _ := docs.CacheSize(v); n != 1 || b != len("pdf-small") || views != 2 {
 		t.Fatalf("cache %d PDFs (%d bytes), %d views", n, b, views)
 	}
 }
@@ -93,7 +93,7 @@ func TestViewerRefusesAnUnreadNewVersion(t *testing.T) {
 	if !errors.Is(err, docs.ErrNotViewable) || !strings.Contains(err.Error(), "waiting to be re-read") {
 		t.Fatalf("err %v", err)
 	}
-	if n, _, views, _ := v.Size(); n != 0 || views != 0 {
+	if n, _, views, _ := docs.CacheSize(v); n != 0 || views != 0 {
 		t.Fatalf("cached %d PDFs, %d views for a mismatched version", n, views)
 	}
 }

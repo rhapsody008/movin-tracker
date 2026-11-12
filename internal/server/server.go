@@ -105,7 +105,7 @@ func (s *Server) Handler() http.Handler {
 	for _, p := range []string{"/manifest.webmanifest", "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"} {
 		root.Handle("GET "+p, s.static())
 	}
-	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok\n")) })
+	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })
 	root.HandleFunc("GET /readyz", s.readyz)
 	root.Handle("/", s.auth(api))
 	return s.logRequests(root)
@@ -174,7 +174,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "S3 not reachable", http.StatusServiceUnavailable)
 		return
 	}
-	w.Write([]byte("ok\n"))
+	_, _ = w.Write([]byte("ok\n"))
 }
 
 // ---------- helpers ----------
@@ -182,7 +182,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v) // the client went away: nothing to do
 }
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
@@ -360,7 +360,7 @@ func startSSE(w http.ResponseWriter) *sse {
 	h.Set("X-Accel-Buffering", "no") // nginx ingress: do not buffer
 	w.WriteHeader(http.StatusOK)
 	rc := http.NewResponseController(w)
-	rc.SetWriteDeadline(time.Time{})
+	_ = rc.SetWriteDeadline(time.Time{}) // not every writer supports it
 	return &sse{w: w, rc: rc}
 }
 
@@ -472,13 +472,13 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := startSSE(w)
-	res, err := s.Agent.Run(r.Context(), req, cfg, func(e agent.Event) { out.send(e.Type, e) })
+	res, err := s.Agent.Run(r.Context(), req, cfg, func(e agent.Event) { _ = out.send(e.Type, e) }) // a closed stream ends with the request
 	if err != nil {
 		s.Log.Warn("chat failed", "by", user, "model", cfg.Model, "err", err)
-		out.send("error", map[string]any{"error": err.Error(), "changes": res.Changes, "model": cfg.Model})
+		_ = out.send("error", map[string]any{"error": err.Error(), "changes": res.Changes, "model": cfg.Model})
 		return
 	}
-	out.send("done", res)
+	_ = out.send("done", res)
 }
 
 // ---------- settings ----------

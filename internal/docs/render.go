@@ -43,11 +43,11 @@ type Viewer struct {
 // dozen renders (each 0.1–1 MB), bounded in bytes so big uploads can't
 // push the app past its memory limit.
 const (
-	maxCachedPDFs     = 3
-	maxCachedPDFBytes = 32 << 20
-	maxPDFToCache     = 16 << 20 // bigger PDFs are read again each time
-	maxCachedViews    = 24
-	maxCachedViewByte = 16 << 20
+	maxCachedPDFs      = 3
+	maxCachedPDFBytes  = 32 << 20
+	maxPDFToCache      = 16 << 20 // bigger PDFs are read again each time
+	maxCachedViews     = 24
+	maxCachedViewBytes = 16 << 20
 )
 
 // View is one rendered page or region.
@@ -99,7 +99,7 @@ func (v *Viewer) View(ctx context.Context, id string, n int, region *Region) (Vi
 		return View{}, err
 	}
 	v.mu.Lock()
-	v.views.put(key, png, maxCachedViews, maxCachedViewByte)
+	v.views.put(key, png, maxCachedViews, maxCachedViewBytes)
 	v.mu.Unlock()
 	out.PNG = png
 	return out, nil
@@ -202,11 +202,4 @@ func (c *byteLRU) drop(k string) {
 			return
 		}
 	}
-}
-
-// Size reports the cached PDFs and renders (entries, bytes), for tests.
-func (v *Viewer) Size() (pdfs, pdfBytes, views, viewBytes int) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return len(v.pdfs.keys), v.pdfs.bytes, len(v.views.keys), v.views.bytes
 }

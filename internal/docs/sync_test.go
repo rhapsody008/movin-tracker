@@ -49,6 +49,7 @@ type rig struct {
 }
 
 func newRig(t *testing.T) *rig {
+	t.Helper()
 	store := objstore.NewMemory()
 	conv := &convert.Fake{Pages: map[string][]docs.Page{
 		"pdf-manual-v1":  {a4(long), a4(long)},

@@ -350,7 +350,7 @@ func TestSystemSectionsListRecentEntriesOnly(t *testing.T) {
 		t.Fatal("n006 and n007 should be listed")
 	}
 	// Listed in creation order, and the rules come before the entries (stable prefix).
-	if i0, i7, i8 := strings.Index(p, `"n000"`), strings.Index(p, `"n007"`), strings.Index(p, `"n008"`); !(i0 < i7 && i7 < i8) {
+	if i0, i7, i8 := strings.Index(p, `"n000"`), strings.Index(p, `"n007"`), strings.Index(p, `"n008"`); i0 >= i7 || i7 >= i8 {
 		t.Fatal("entries should be in creation order")
 	}
 	if strings.Index(p, "Rules:") > strings.Index(p, "Current entries") {
