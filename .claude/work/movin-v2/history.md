@@ -2,6 +2,9 @@
 
 One entry per working session: what was done, what is next, blockers. Newest first.
 
+## 2026-11-12 (end) — phase close
+- ZY pushed (…2c43940) and turned bucket versioning on (+ 90-day noncurrent rule). All planned work done; open: admin guide review. Next session: backlog when ZY picks it (scanned documents, Phase 2, NKP).
+
 ## 2026-11-12 (later) — after acceptance
 - ZY accepted milestones + check-in; check-in live in the dev app (first sent 12:23); page order milestones → calendar → board; 'Jump to calendar' removed; ZY pushed (…f13a50c).
 - Backlog: scanned documents, Phase 2 media, NKP deployment. Pending on ZY: admin guide review; turning bucket versioning on in the console (+ 90-day noncurrent lifecycle rule).

@@ -145,4 +145,4 @@ ZY accepted the planner's recommendations (plan.md 'Milestones + morning check-i
 - Backlog (not now): scanned documents (vision/OCR), Phase 2 (photos and voice notes), NKP deployment (waits for the cluster).
 - Do now: move the group rule out of the cached rules section; check-in time and chat editable on the Telegram tab; the older review nits + lint extras; the two edge cases (no size cap on a viewed PDF; a check-in press racing a web edit).
 - **Bucket versioning: turn it on** (reverses 'versioning stays off'). ZY flips it in the console; docs updated.
-
+- 2026-11-12: ZY turned bucket versioning on in the S3 console, with a lifecycle rule deleting noncurrent versions after 90 days ("Recover older data" in the guide now applies).
