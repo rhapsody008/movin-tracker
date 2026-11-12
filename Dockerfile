@@ -22,14 +22,29 @@ ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/movin ./cmd/movin
 
-# ---- production: the binary plus poppler's PDF tools, non-root, read-only root filesystem ----
-# Alpine rather than distroless because the documents feature runs pdfinfo,
-# pdftotext and pdftocairo (GPL, unmodified packages). DejaVu is the fallback
-# for drawings whose fonts aren't embedded.
-FROM alpine:3.20
+# ---- the PDF tools the app runs; the production image and its poppler tests share it ----
+# Alpine 3.24 (supported until about May 2028), pinned by digest; poppler is
+# GPL, unmodified Alpine packages. DejaVu is the fallback for drawings whose
+# fonts aren't embedded.
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 RUN apk add --no-cache poppler-utils font-dejavu fontconfig \
  && fc-cache -f \
  && adduser -D -H -u 65532 nonroot
+
+# ---- `make test` (last step): the converter tests against the poppler that ships ----
+FROM base AS poppler-test-bin
+ARG TARGETOS TARGETARCH
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go test -c -o /out/convert.test ./internal/docs/convert
+FROM runtime AS poppler-test
+COPY --from=poppler-test-bin /out/convert.test /t/convert.test
+COPY internal/docs/convert/testdata /t/testdata
+WORKDIR /t
+USER 65532:65532
+RUN ./convert.test -test.count=1 -test.v | grep -E "^(--- |ok|FAIL|PASS)"; ./convert.test -test.count=1
+
+# ---- production: the binary on the runtime above, non-root, read-only root filesystem ----
+FROM runtime
 COPY --from=build /out/movin /movin
 USER 65532:65532
 # Fontconfig wants a per-user cache; /tmp is the one writable place.

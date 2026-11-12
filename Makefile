@@ -27,8 +27,9 @@ dev: .env ## Run the app with live reload at http://localhost:8080, on the real 
 down: ## Stop the stack
 	$(COMPOSE) --profile tools --profile prod down
 
-test: ## Unit + API tests in the container, against MinIO, with a stubbed LLM
+test: ## Unit + API tests in the container, against MinIO, with a stubbed LLM; then the PDF converter tests on the production image's poppler
 	$(TOOLS) go test -race -count=1 ./...
+	docker build -q --target poppler-test . >/dev/null && echo "poppler tests on the production runtime: ok"
 
 conflict-test: ## Two concurrent writers on one ETag; both changes must survive
 	$(TOOLS) go test -count=1 -v -run 'TestConditionalWrites|TestConflictBothChangesSurvive|TestConcurrentWriters|TestConflictReturns409' ./internal/...
