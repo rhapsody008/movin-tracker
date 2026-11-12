@@ -128,6 +128,20 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 .agenda .ev{white-space:normal;font-size:14.5px;padding:5px 8px;margin-bottom:4px}
 @media (max-width:700px){ .grid7{display:none} .agenda{display:block} }
 
+/* milestones */
+.miles{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;scroll-margin-top:16px}
+.miles h2{font-size:22px;margin-bottom:8px}
+.miles h3{font-family:var(--body);font-size:14px;color:var(--muted);font-weight:700;margin:12px 0 4px}
+.mi{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;background:none;border:0;border-left:3px solid var(--brass);padding:5px 8px;margin-bottom:4px;cursor:pointer;font:inherit;color:inherit}
+.mi:hover{background:var(--bg)}
+.mi .md{color:var(--muted);font-size:13.5px;white-space:nowrap;min-width:52px}
+.mi .mt{font-weight:700;overflow-wrap:anywhere}
+.mi .mw{color:var(--muted);font-size:13.5px}
+.star{color:var(--brass);margin-left:4px}
+label.row{display:flex;align-items:center;gap:8px;color:var(--ink)}
+label.row input{width:auto}
+#doneOnRow[hidden]{display:none}
+
 /* chat */
 .chat{background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;
   height:min(78vh,760px);position:sticky;top:calc(16px + env(safe-area-inset-top,0px))}
@@ -294,6 +308,10 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
         <div class="grid7" id="calGrid"></div>
         <div class="agenda" id="calAgenda"></div>
       </section>
+      <section class="miles" id="milestones" aria-label="Milestones">
+        <h2>Milestones</h2>
+        <div id="mileList"></div>
+      </section>
       <div class="foot">
         <button class="link" id="toggleArchived" type="button"></button>
       </div>
@@ -401,6 +419,8 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
       <label>Time<input type="time" name="time"></label>
       <label>Estimate or quote (S$)<input type="number" name="estimate" min="0" step="0.01" inputmode="decimal"></label>
       <label>Paid so far (S$)<input type="number" name="actual" min="0" step="0.01" inputmode="decimal"></label>
+      <label class="row"><input type="checkbox" name="milestone"> Milestone ★</label>
+      <label id="doneOnRow">Done on<input type="date" name="completed"></label>
     </div>
     <datalist id="catList"></datalist>
     <label>Vendor or contact<input name="vendor" maxlength="200"></label>
@@ -545,6 +565,8 @@ function clean(f){
   if("tags" in f) o.tags = String(f.tags||"").split(",").map(t=>t.trim().toLowerCase()).filter(Boolean).slice(0,20);
   if("notes" in f) o.notes = String(f.notes||"").slice(0,4000);
   if("archived" in f) o.archived = !!f.archived;
+  if("milestone" in f) o.milestone = !!f.milestone;
+  if("completed" in f) o.completed = isDate(f.completed) ? f.completed : null;
   return o;
 }
 function merge(e, body){ return {...e, ...body, cost: body.cost ? {...cost(e), ...body.cost} : e.cost}; }
@@ -671,6 +693,26 @@ function render(){
   $("toggleArchived").hidden = !archived;
   $("toggleArchived").textContent = S.showArchived ? "Hide archived" : `Show archived (${archived})`;
   renderCal();
+  renderMilestones();
+}
+/* A milestone is a flagged, done entry; its day is when it was done
+   (older entries without one: its date, else the day it last changed). */
+const doneDay = e => isDate(e.completed) ? e.completed : isDate(e.date) ? e.date : (e.updated ? iso(new Date(e.updated)) : "");
+function renderMilestones(){
+  const list = S.doc.entries.filter(e=>!e.archived && e.milestone && e.status==="done" && matches(e))
+    .map(e=>({e, d:doneDay(e)})).sort((a,b)=>b.d.localeCompare(a.d) || String(b.e.updated||"").localeCompare(String(a.e.updated||"")));
+  if(!list.length){
+    $("mileList").innerHTML = `<p class="empty">${filtering() ? "No milestones match the filters." : "None yet. Tick Milestone on something done, or tell the bot “that's a milestone”."}</p>`;
+    return;
+  }
+  let h = "", month = "";
+  for(const {e, d} of list){
+    const m = isDate(d) ? parse(d).toLocaleDateString("en-SG",{month:"long", year:"numeric"}) : "";
+    if(m !== month){ h += `<h3>${esc(m)}</h3>`; month = m; }
+    const day = isDate(d) ? parse(d).toLocaleDateString("en-SG",{day:"numeric", month:"short"}) : "";
+    h += `<button class="mi" type="button" data-edit="${esc(e.id)}"><span class="md">✓ ${esc(day)}</span><span class="mt">${esc(e.title)}</span>${e.room ? `<span class="mw">${esc(e.room)}</span>` : ""}</button>`;
+  }
+  $("mileList").innerHTML = h;
 }
 function card(e){
   const t = today(), k = kindOf(e);
@@ -684,7 +726,7 @@ function card(e){
   }
   const sts = statusesFor(k), next = sts[(sts.indexOf(e.status)+1) % sts.length];
   return `<div class="card ${e.status==="done"?"done":""} ${e.archived?"archived":""}" style="--c:${kindColor(k)}" ${e.archived||String(e.id).startsWith("tmp-")?"":`draggable="true"`} data-id="${esc(e.id)}">
-    <div class="kind">${kindName(k)}</div>
+    <div class="kind">${kindName(k)}${e.milestone ? `<span class="star" title="Milestone" aria-label="Milestone">★</span>` : ""}</div>
     <button class="ct" type="button" data-edit="${esc(e.id)}">${esc(e.title)}</button>
     ${where ? `<div class="cm">${where}</div>` : ""}
     ${isDate(e.date) ? `<div class="cm ${late?"late":""}">${late?"Overdue, ":""}${esc(fmtDate(e.date,e.time))}</div>` : ""}
@@ -787,7 +829,14 @@ function fillStatus(kind, cur){
   EF.status.innerHTML = statusesFor(kind).map(s=>`<option value="${s}">${ST_NAME[s]}</option>`).join("");
   EF.status.value = statusesFor(kind).includes(cur) ? cur : remap(cur, kind);
 }
-EF.kind.addEventListener("change", ()=>fillStatus(EF.kind.value, EF.status.value));
+EF.kind.addEventListener("change", ()=>{ fillStatus(EF.kind.value, EF.status.value); showDoneOn(); });
+/* 'Done on' only applies to done entries; picking Done fills in today. */
+function showDoneOn(){
+  const done = EF.status.value === "done";
+  $("doneOnRow").hidden = !done;
+  if(done && !EF.completed.value) EF.completed.value = today();
+}
+EF.status.addEventListener("change", showDoneOn);
 EF.date.addEventListener("change", ()=>{ EF.time.disabled = !EF.date.value; if(!EF.date.value) EF.time.value = ""; });
 $("newEntry").onclick = ()=>openEntry(null, {kind:S.f.kind||"note", room:S.f.room||null, category:S.f.cat||""});
 function openEntry(id, preset){
@@ -803,6 +852,8 @@ function openEntry(id, preset){
   EF.date.value = e.date||""; EF.time.value = e.time||""; EF.time.disabled = !e.date;
   EF.estimate.value = c.estimate ?? ""; EF.actual.value = c.actual ?? "";
   EF.vendor.value = e.vendor||""; EF.source.value = e.source||""; EF.tags.value = (e.tags||[]).join(", "); EF.notes.value = e.notes||"";
+  EF.milestone.checked = !!e.milestone; EF.completed.value = e.completed||"";
+  $("doneOnRow").hidden = EF.status.value !== "done";
   $("dlgMeta").textContent = id && e.updated ? `Last changed ${new Date(e.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${e.by||"?"}${e.channel==="telegram"?" in Telegram":""}.` : "";
   $("delBtn").hidden = $("archBtn").hidden = !id;
   $("archBtn").textContent = e.archived ? "Restore" : "Archive";
@@ -813,7 +864,8 @@ function openEntry(id, preset){
 function formData(){
   return {title:EF.title.value, kind:EF.kind.value, status:EF.status.value, room:EF.room.value, category:EF.category.value,
     date:EF.date.value, time:EF.time.value, estimate:EF.estimate.value, actual:EF.actual.value,
-    vendor:EF.vendor.value, source:EF.source.value, tags:EF.tags.value, notes:EF.notes.value};
+    vendor:EF.vendor.value, source:EF.source.value, tags:EF.tags.value, notes:EF.notes.value,
+    milestone:EF.milestone.checked, completed: EF.status.value==="done" ? EF.completed.value : ""};
 }
 EF.addEventListener("submit", ev=>{
   ev.preventDefault();
