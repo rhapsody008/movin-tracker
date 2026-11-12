@@ -11,14 +11,13 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/agent"
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/sched"
+	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
 
-// Checkin configures the morning check-in (nil on the Bot: off).
+// Checkin wires the morning check-in (nil on the Bot: off). Its time and
+// chat come from settings (Settings → Telegram, else CHECKIN_SCHEDULE /
+// CHECKIN_CHAT), read every minute.
 type Checkin struct {
-	Hour, Minute int
-	// Chat is where it goes; 0 = the first allowed group, else the first
-	// allowed person.
-	Chat  int64
 	State *CheckinStore
 }
 
@@ -31,7 +30,7 @@ const (
 )
 
 // ErrNoCheckinChat means there is nowhere to send the check-in.
-var ErrNoCheckinChat = errors.New("no group or person is allowed, and CHECKIN_CHAT is not set")
+var ErrNoCheckinChat = errors.New("no group or person is allowed, and no check-in chat is set")
 
 func (b *Bot) loc() *time.Location {
 	if b.Agent != nil && b.Agent.Loc != nil {
@@ -40,16 +39,15 @@ func (b *Bot) loc() *time.Location {
 	return time.UTC
 }
 
-// checkinChat is where the scheduled check-in goes. CHECKIN_CHAT must be
+// checkinChat is where the scheduled check-in goes. A chosen chat must be
 // on the allowlist, or every button press there would be refused.
-func (b *Bot) checkinChat(ctx context.Context) (int64, error) {
+func (b *Bot) checkinChat(ctx context.Context, cfg settings.Checkin) (int64, error) {
 	tg := b.Settings.ResolveTelegram(ctx)
-	if b.Checkin != nil && b.Checkin.Chat != 0 {
-		id := b.Checkin.Chat
+	if id := cfg.ChatID(); id != 0 {
 		if _, ok := tg.UserName(id); ok || tg.GroupAllowed(id) {
 			return id, nil
 		}
-		return 0, fmt.Errorf("CHECKIN_CHAT %d is not an allowed group or person (Settings → Telegram)", id)
+		return 0, fmt.Errorf("the check-in chat %d is not an allowed group or person (Settings → Telegram)", id)
 	}
 	for _, g := range tg.Groups {
 		if id, err := strconv.ParseInt(g, 10, 64); err == nil {
@@ -316,7 +314,8 @@ func (b *Bot) CheckinLoop(ctx context.Context, every time.Duration) {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return
 	}
-	b.Log.Info("morning check-in on", "at", fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), "until", fmt.Sprintf("%02d:00", sched.CheckinCutoff))
+	cfg := b.Settings.ResolveCheckin(ctx)
+	b.Log.Info("morning check-in loop running", "schedule", cfg.Schedule, "until", fmt.Sprintf("%02d:00", sched.CheckinCutoff))
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -335,8 +334,9 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	if ci == nil || ci.State == nil {
 		return
 	}
+	cfg := b.Settings.ResolveCheckin(ctx)
 	now := b.now()
-	if !CheckinDue(now, ci.Hour, ci.Minute, b.loc()) {
+	if !cfg.On || !CheckinDue(now, cfg.Hour, cfg.Minute, b.loc()) {
 		return
 	}
 	day := sched.Day(now, b.loc())
@@ -353,7 +353,7 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 		b.checkinDay = day
 		b.mu.Unlock()
 	}
-	chat, err := b.checkinChat(ctx)
+	chat, err := b.checkinChat(ctx, cfg)
 	if err != nil {
 		// Not remembered as finished: fixing the allowlist on the web page
 		// lets it go out the same day. Warned once a day.
@@ -416,6 +416,10 @@ type CheckinView struct {
 	Chat  string         `json:"chat,omitempty"`  // where it goes
 	Error string         `json:"error,omitempty"` // why it can't go anywhere
 	Last  *CheckinRecord `json:"last,omitempty"`
+	// NoBot: there is no bot (no token), so nothing is sent.
+	NoBot bool `json:"noBot,omitempty"`
+	// Setting is the editable setting behind it (filled by the server).
+	Setting settings.CheckinView `json:"setting"`
 }
 
 // CheckinStatus reports the check-in for the admin page (nil without a bot).
@@ -426,11 +430,15 @@ func (b *Bot) CheckinStatus(ctx context.Context) *CheckinView {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return &CheckinView{}
 	}
-	v := &CheckinView{On: true, At: fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff)}
-	if chat, err := b.checkinChat(ctx); err != nil {
-		v.Error = err.Error()
-	} else {
-		v.Chat = strconv.FormatInt(chat, 10)
+	cfg := b.Settings.ResolveCheckin(ctx)
+	v := &CheckinView{On: cfg.On, Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff)}
+	if cfg.On {
+		v.At = cfg.Schedule
+		if chat, err := b.checkinChat(ctx, cfg); err != nil {
+			v.Error = err.Error()
+		} else {
+			v.Chat = strconv.FormatInt(chat, 10)
+		}
 	}
 	if r, _, err := b.Checkin.State.Load(ctx); err == nil && r.Day != "" {
 		v.Last = &r

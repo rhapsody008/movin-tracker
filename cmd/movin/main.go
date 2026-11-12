@@ -98,7 +98,7 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	sets.WithTelegramEnv(c.Telegram).WithClaudeBaseURL(c.ClaudeBaseURL)
+	sets.WithTelegramEnv(c.Telegram).WithCheckinEnv(c.Checkin).WithClaudeBaseURL(c.ClaudeBaseURL)
 	if c.SettingsSecret == "" {
 		log.Warn("SETTINGS_SECRET is not set; the settings drawer cannot store an API key")
 	}
@@ -125,11 +125,9 @@ func serve() error {
 	var bot *telegram.Bot
 	if c.TelegramToken != "" {
 		bot = &telegram.Bot{API: telegram.New(c.TelegramToken, ""), Agent: runner, Entries: ents, Settings: sets, Docs: syncer, Log: log}
-		if c.CheckinOn {
-			bot.Checkin = &telegram.Checkin{Hour: c.CheckinHour, Minute: c.CheckinMinute, Chat: c.CheckinChat, State: &telegram.CheckinStore{Store: store}}
-		} else {
-			log.Info("CHECKIN_SCHEDULE is off; no morning check-in")
-		}
+		// The time and chat are read from settings every minute (Settings →
+		// Telegram, else CHECKIN_SCHEDULE / CHECKIN_CHAT).
+		bot.Checkin = &telegram.Checkin{State: &telegram.CheckinStore{Store: store}}
 		syncer.Notify = bot
 		go func() {
 			if err := bot.Run(ctx); err != nil && ctx.Err() == nil {

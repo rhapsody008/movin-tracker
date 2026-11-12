@@ -141,6 +141,9 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 label.row{display:flex;align-items:center;gap:8px;color:var(--ink)}
 label.row input{width:auto}
 #doneOnRow[hidden]{display:none}
+.ciform{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+.ciform label{min-width:0}
+.ciform .ciwhere{flex:1 1 200px}
 
 /* chat */
 .chat{background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;
@@ -360,7 +363,6 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
   </div>
   <div class="panel" id="panel-telegram" role="tabpanel" aria-labelledby="tab-telegram" hidden>
     <p class="stline" id="tgStatus">Loading…</p>
-    <p class="hint" id="tgCheckin" hidden></p>
     <p class="sub" id="tgSource"></p>
     <h3>People</h3>
     <p class="sub">Telegram user ID and the name entries will show as "by". Allowed people can use the bot in a private chat, and in any allowed group.</p>
@@ -378,6 +380,19 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
     <div class="acts">
       <button class="link" type="button" id="tgUseEnv">Go back to the server's defaults</button>
       <div><button class="btn ghost" type="button" id="tgCancel">Cancel</button><button class="btn" type="button" id="tgSave" disabled>Save</button></div>
+    </div>
+    <h3>Morning check-in</h3>
+    <p class="sub" id="tgCheckin"></p>
+    <div class="ciform">
+      <label>Time<input type="time" id="ciTime" step="60"></label>
+      <label class="row"><input type="checkbox" id="ciOff"> Off</label>
+      <label class="ciwhere">Send to<select id="ciChat"></select></label>
+    </div>
+    <p class="sub" id="ciSource"></p>
+    <p class="result" id="ciResult" aria-live="polite"></p>
+    <div class="acts">
+      <button class="link" type="button" id="ciUseEnv">Go back to the server's defaults</button>
+      <div><button class="btn" type="button" id="ciSave">Save check-in</button></div>
     </div>
   </div>
   <form id="setForm" role="tabpanel" aria-labelledby="tab-llm" autocomplete="off" hidden>
@@ -1138,23 +1153,52 @@ function renderTGStatus(){
   el.className = cls; el.textContent = t;
   renderTGCheckin();
 }
-/* Morning check-in: read-only (CHECKIN_SCHEDULE / CHECKIN_CHAT on the server). */
+/* Morning check-in: its state (status line) and its setting (form). */
+function chatName(id){
+  const al = tgState.allowlist || {}, u = (al.users||[]).find(u=>u.id===id);
+  return (al.groups||[]).includes(id) ? "the group " + id : u ? u.name + " (private chat)" : "chat " + id;
+}
 function renderTGCheckin(){
   const c = tgState.checkin, el = $("tgCheckin");
-  if(!c){ el.hidden = true; return; }
-  el.hidden = false;
-  if(!c.on){ el.textContent = "Morning check-in: off (CHECKIN_SCHEDULE=off on the server)."; return; }
-  const al = tgState.allowlist || {}, users = al.users || [];
-  const where = !c.chat ? "" : (al.groups||[]).includes(c.chat) ? "the group " + c.chat
-    : (users.find(u=>u.id===c.chat) ? users.find(u=>u.id===c.chat).name + " (private chat)" : "chat " + c.chat);
-  let t = `Morning check-in at ${c.at} (sent late until ${c.until} if the app was off), to ${where || "nowhere: " + c.error}.`;
+  if(!c){ el.textContent = ""; return; }
+  let t;
+  if(c.noBot) t = "No bot is running (TELEGRAM_BOT_TOKEN is not set), so nothing is sent. You can still set it up below.";
+  else if(!c.on) t = "Off: no morning check-in is sent.";
+  else t = `Sent at ${c.at} (or as soon as the app starts, until ${c.until}) to ${c.chat ? chatName(c.chat) : "nowhere: " + c.error}.`;
   const l = c.last;
-  if(l){
-    const day = fmtDate(l.day);
-    t += l.status==="sent" ? ` Last sent ${day}.` : l.status==="quiet" ? ` ${day}: nothing to report, so nothing sent.` : ` ${day}: being sent.`;
-  } else t += " Not sent yet.";
+  if(!c.noBot){
+    if(l){
+      const day = fmtDate(l.day);
+      t += l.status==="sent" ? ` Last sent ${day}.` : l.status==="quiet" ? ` ${day}: nothing to report, so nothing sent.` : ` ${day}: being sent.`;
+    } else if(c.on) t += " Not sent yet.";
+  }
   el.textContent = t;
 }
+function renderCheckinForm(){
+  const c = tgState.checkin; if(!c) return;
+  const st = c.setting || {}, off = st.schedule === "off", al = tgState.allowlist || {};
+  $("ciOff").checked = off; $("ciTime").value = off ? "09:30" : (st.schedule || "09:30"); $("ciTime").disabled = off;
+  const opts = [["", "Default: the first allowed group"]]
+    .concat((al.groups||[]).map(g=>[g, "Group " + g]))
+    .concat((al.users||[]).map(u=>[u.id, u.name + " (private chat; needs /start once)"]));
+  if(st.chat && !opts.some(o=>o[0]===st.chat)) opts.push([st.chat, "Chat " + st.chat + " (not on the list above)"]);
+  $("ciChat").innerHTML = opts.map(([v,n])=>`<option value="${esc(v)}">${esc(n)}</option>`).join("");
+  $("ciChat").value = st.chat || "";
+  $("ciSource").textContent = st.fromEnv ? "Using the server's defaults (CHECKIN_SCHEDULE and CHECKIN_CHAT). Saving here replaces them; it applies within a minute."
+    : `Saved ${new Date(st.updated).toLocaleString("en-SG",{dateStyle:"medium", timeStyle:"short"})} by ${st.by}. This replaces the server's defaults.`;
+  $("ciUseEnv").hidden = !!st.fromEnv;
+}
+$("ciOff").onchange = ()=>{ $("ciTime").disabled = $("ciOff").checked; };
+async function saveCheckin(body, okMsg){
+  const r = $("ciResult");
+  try{
+    const d = await api("PUT", "/api/settings/checkin", body);
+    tgState = {...tgState, checkin:d.checkin}; renderTGCheckin(); renderCheckinForm();
+    r.className = "result ok"; r.textContent = okMsg;
+  }catch(e){ r.className = "result bad"; r.textContent = e.message; }
+}
+$("ciSave").onclick = ()=>saveCheckin({schedule: $("ciOff").checked ? "off" : $("ciTime").value, chat: $("ciChat").value}, "Saved. It applies within a minute.");
+$("ciUseEnv").onclick = ()=>{ if(confirm("Drop the check-in setting saved here and use the server's defaults again?")) saveCheckin({useEnv:true}, "Back on the server's defaults."); };
 function renderTGRejected(){
   const list = (tgState.status.rejected||[]);
   if(!list.length){ $("tgRejected").innerHTML = `<li class="why">Nobody yet.</li>`; return; }
@@ -1169,6 +1213,7 @@ function renderTGRejected(){
   }).join("");
 }
 function renderTelegram(){
+  $("ciResult").textContent = ""; $("ciResult").className = "result";
   renderTGStatus();
   const a = tgState.allowlist;
   $("tgSource").textContent = a.fromEnv ? "Using the server's defaults (TELEGRAM_ALLOWED_IDS and TELEGRAM_ALLOWED_CHATS). Saving here replaces them."
@@ -1179,6 +1224,7 @@ function renderTelegram(){
   $("tgGroups").innerHTML = tgDraft.groups.map((g,i)=>`<div class="rowi g"><input inputmode="numeric" placeholder="-100…" aria-label="Group chat ID" value="${esc(g)}" data-tgg="${i}"><button class="rm" type="button" aria-label="Remove" data-tgrmg="${i}">×</button></div>`).join("")
     || `<p class="sub">No groups yet.</p>`;
   renderTGRejected();
+  renderCheckinForm();
   tgDirty();
 }
 function tgDirty(){

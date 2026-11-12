@@ -9,6 +9,7 @@ import (
 
 	"github.com/rhapsody008/movin-tracker/internal/entries"
 	"github.com/rhapsody008/movin-tracker/internal/objstore"
+	"github.com/rhapsody008/movin-tracker/internal/settings"
 	"github.com/rhapsody008/movin-tracker/internal/telegram"
 )
 
@@ -224,7 +225,7 @@ func scheduled(t *testing.T, now *time.Time) (*botRig, objstore.Store) {
 	r := startBot(t, func(b *telegram.Bot) {
 		b.Now = func() time.Time { return *now }
 		b.Agent.Now, b.Agent.Loc = b.Now, sg
-		b.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state}}
+		b.Checkin = &telegram.Checkin{State: &telegram.CheckinStore{Store: state}} // 09:30 by default
 	})
 	return r, state
 }
@@ -266,7 +267,7 @@ func TestCheckinScheduleCatchUpOncePerDay(t *testing.T) {
 	now = sgt("2026-11-12T14:05:00")
 	// Another copy of the app (production) on the same bucket.
 	other := &telegram.Bot{API: r.bot.API, Entries: r.ents, Settings: r.sets, Agent: r.bot.Agent, Log: r.bot.Log, Now: r.bot.Now,
-		Checkin: &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state}}}
+		Checkin: &telegram.Checkin{State: &telegram.CheckinStore{Store: state}}}
 	other.CheckinTick(ctx)
 	time.Sleep(100 * time.Millisecond)
 	if n := len(r.tg.sentCopy()); n != 2 {
@@ -460,8 +461,8 @@ func TestCheckinChatMustBeAllowed(t *testing.T) {
 	now := sgt("2026-11-12T09:30:00")
 	r, state := scheduled(t, &now)
 	seed(t, r, task("Book movers", "2026-11-11"))
-	r.bot.Checkin.Chat = -999
-	if v := r.bot.CheckinStatus(ctx); !strings.Contains(v.Error, "CHECKIN_CHAT -999 is not an allowed group or person") {
+	setCheckin(t, r, "09:30", "-999")
+	if v := r.bot.CheckinStatus(ctx); !strings.Contains(v.Error, "the check-in chat -999 is not an allowed group or person") {
 		t.Fatalf("status: %+v", v)
 	}
 	r.bot.CheckinTick(ctx)
@@ -469,7 +470,7 @@ func TestCheckinChatMustBeAllowed(t *testing.T) {
 	if n := len(r.tg.sentCopy()); n != 0 || record(t, state).Day != "" {
 		t.Fatalf("sent to a chat that isn't allowed: %d", n)
 	}
-	r.bot.Checkin.Chat = zyID // a person on the list: fine (private chat)
+	setCheckin(t, r, "09:30", fmt.Sprint(zyID)) // a person on the list: fine (private chat)
 	if v := r.bot.CheckinStatus(ctx); v.Error != "" || v.Chat != fmt.Sprint(zyID) {
 		t.Fatalf("allowed person: %+v", v)
 	}
@@ -478,5 +479,42 @@ func TestCheckinChatMustBeAllowed(t *testing.T) {
 	r.bot.CheckinTick(ctx)
 	if s := r.tg.waitSent(t, 2); s[0].ChatID != zyID || record(t, state).Status != telegram.CheckinSent {
 		t.Fatalf("after the fix: %+v", s)
+	}
+}
+
+func setCheckin(t *testing.T, r *botRig, schedule, chat string) {
+	t.Helper()
+	if _, err := r.sets.SaveCheckin(context.Background(), "test", settings.CheckinInput{Schedule: schedule, Chat: chat}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The time set on the web page applies at the next tick, without a
+// restart; "off" stops it.
+func TestCheckinTimeFromSettings(t *testing.T) {
+	ctx := context.Background()
+	now := sgt("2026-11-12T09:45:00")
+	r, state := scheduled(t, &now)
+	seed(t, r, task("Book movers", "2026-11-11"))
+	setCheckin(t, r, "10:00", "")
+	r.bot.CheckinTick(ctx) // 09:45: not yet with 10:00
+	time.Sleep(100 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 0 {
+		t.Fatalf("sent before the new time: %d", n)
+	}
+	setCheckin(t, r, "off", "")
+	now = sgt("2026-11-12T10:30:00")
+	r.bot.CheckinTick(ctx)
+	time.Sleep(100 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 0 || record(t, state).Day != "" {
+		t.Fatalf("sent while off: %d", n)
+	}
+	if v := r.bot.CheckinStatus(ctx); v.On || v.At != "" {
+		t.Fatalf("status while off: %+v", v)
+	}
+	setCheckin(t, r, "10:00", "")
+	r.bot.CheckinTick(ctx)
+	if s := r.tg.waitSent(t, 2); s[0].ChatID != groupID {
+		t.Fatalf("after turning it back on: %+v", s)
 	}
 }

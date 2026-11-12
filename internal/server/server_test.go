@@ -653,8 +653,8 @@ func TestTelegramAdmin(t *testing.T) {
 	if code != 200 || st["tokenSet"] != false || st["running"] != false || al["fromEnv"] != true || len(al["users"].([]any)) != 0 {
 		t.Fatalf("no bot: %d %s", code, body)
 	}
-	if _, ok := m["checkin"]; ok {
-		t.Fatalf("no bot, but a check-in status: %s", body)
+	if c, _ := m["checkin"].(map[string]any); c == nil || c["noBot"] != true || c["setting"] == nil {
+		t.Fatalf("no bot: the setting is still shown and editable: %s", body)
 	}
 	// The allowlist is editable even without a token.
 	code, m, body = e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"111","name":"ZY"},{"id":"222","name":"Partner"}],"groups":["-1001"]}`)
@@ -682,13 +682,13 @@ func TestTelegramAdminCheckinStatus(t *testing.T) {
 		bot = &telegram.Bot{API: telegram.New("1:x", "http://127.0.0.1:1"), Settings: s.Settings, Log: s.Log}
 		s.Bot = bot
 	})
-	// Bot without a check-in: off.
+	// Bot without a check-in: off, but the setting is shown (the default).
 	_, m, body := e.do(t, "GET", "/api/admin/telegram", "")
-	if c, _ := m["checkin"].(map[string]any); c == nil || c["on"] != false {
+	if c, _ := m["checkin"].(map[string]any); c == nil || c["on"] != false || c["setting"].(map[string]any)["schedule"] != "09:30" || c["setting"].(map[string]any)["fromEnv"] != true {
 		t.Fatalf("off: %s", body)
 	}
 	// On, nowhere to send yet, nothing sent.
-	bot.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: store}}
+	bot.Checkin = &telegram.Checkin{State: &telegram.CheckinStore{Store: store}}
 	_, m, body = e.do(t, "GET", "/api/admin/telegram", "")
 	c, _ := m["checkin"].(map[string]any)
 	if c["on"] != true || c["at"] != "09:30" || c["until"] != "20:00" || !strings.Contains(fmt.Sprint(c["error"]), "no group or person") || c["last"] != nil {
@@ -709,6 +709,32 @@ func TestTelegramAdminCheckinStatus(t *testing.T) {
 	last, _ := c["last"].(map[string]any)
 	if c["chat"] != "-1001" || c["error"] != nil || last["day"] != "2026-11-12" || last["status"] != "sent" {
 		t.Fatalf("with group and record: %s", body)
+	}
+}
+
+func TestCheckinSettingThroughTheAPI(t *testing.T) {
+	e := setup(t, objstore.NewMemory(), nil)
+	code, m, body := e.do(t, "PUT", "/api/settings/checkin", `{"schedule":"8:05","chat":""}`)
+	set, _ := m["checkin"].(map[string]any)["setting"].(map[string]any)
+	if code != 200 || set["schedule"] != "08:05" || set["fromEnv"] != false || set["by"] != "zy@example.com" {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	for _, bad := range []string{`{"schedule":"21:00"}`, `{"schedule":"9am"}`, `{"schedule":"09:30","chat":"group"}`} {
+		if code, _, body := e.do(t, "PUT", "/api/settings/checkin", bad); code != 400 {
+			t.Fatalf("%s: %d %s", bad, code, body)
+		}
+	}
+	code, m, body = e.do(t, "PUT", "/api/settings/checkin", `{"useEnv":true}`)
+	set, _ = m["checkin"].(map[string]any)["setting"].(map[string]any)
+	if code != 200 || set["schedule"] != "09:30" || set["fromEnv"] != true {
+		t.Fatalf("useEnv: %d %s", code, body)
+	}
+	// Saving the check-in keeps the Telegram allowlist and vice versa.
+	e.do(t, "PUT", "/api/settings/telegram", `{"users":[{"id":"1","name":"A"}]}`)
+	e.do(t, "PUT", "/api/settings/checkin", `{"schedule":"off"}`)
+	_, m, _ = e.do(t, "GET", "/api/admin/telegram", "")
+	if len(m["allowlist"].(map[string]any)["users"].([]any)) != 1 || m["checkin"].(map[string]any)["setting"].(map[string]any)["schedule"] != "off" {
+		t.Fatalf("sections clobbered each other: %v", m)
 	}
 }
 

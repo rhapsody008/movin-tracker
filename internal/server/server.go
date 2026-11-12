@@ -89,6 +89,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/admin/storage", s.getStorage)
 	api.HandleFunc("POST /api/admin/storage/test", s.testStorage)
 	api.HandleFunc("GET /api/admin/telegram", s.getTelegram)
+	api.HandleFunc("PUT /api/settings/checkin", s.putCheckin)
 	api.HandleFunc("GET /api/docs", s.getDocs)
 	api.HandleFunc("POST /api/docs/sync", s.syncDocs)
 	api.HandleFunc("PUT /api/settings/telegram", s.putTelegram)

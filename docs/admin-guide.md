@@ -36,7 +36,7 @@ Do these once. They produce the values that go into the Secrets in the next sect
 
 ### 3. AWS bucket and access key
 
-1. Create the bucket in `ap-southeast-1` with **versioning on** and default encryption (SSE-S3). Versioning is your backup and undo-of-last-resort.
+1. Create the bucket in `ap-southeast-1` with **versioning on** and default encryption (SSE-S3). Versioning is your backup and undo-of-last-resort. Add a lifecycle rule that deletes noncurrent versions after 90 days, so old copies of the PDFs and `entries.json` don't pile up.
 2. Create an IAM user for the app with read, write, list and delete on the bucket (a home app: no fine-grained policy). The app itself only writes `entries.json`, `settings.json`, `checkin.json`, `docs/index.json`, `docs/text/` and the storage test's scratch files under `_probe/`; it never changes or deletes your PDFs in `docs/raw/`. The same bucket and key serve your Mac (`make dev`) and production: there is one copy of the data.
 3. Create an **access key** for that user. NKP clusters have no IRSA, so the pod uses this static key pair.
 
@@ -122,7 +122,7 @@ Managed on the web page: **Settings → Telegram**. The env vars `TELEGRAM_ALLOW
 
 Roll back: set the previous `newTag` and apply again, or `kubectl -n <namespace> rollout undo deploy/movin`.
 
-**Don't roll back past the milestones release** (or run an older image against the bucket): older builds don't know an entry's `milestone` and `completed` fields and drop them from every entry the next time they save `entries.json`. With bucket versioning off they can't be recovered. Rebuild from the current code instead.
+**Don't roll back past the milestones release** (or run an older image against the bucket): older builds don't know an entry's `milestone` and `completed` fields and drop them from every entry the next time they save `entries.json`. Rebuild from the current code instead; if it happened, restore `entries.json` from an earlier version ("Recover older data").
 
 ### Planned: OCI artifact + Flux in the NKP project
 
@@ -177,7 +177,7 @@ A key is only ever sent to the endpoint it belongs to. If you switch to a **diff
 - **Groups**: group chat IDs (they start with `-`).
 - **Recently refused**: everyone who messaged the bot but isn't allowed, with **Add** buttons. **Save** applies the list from the next message; no restart.
 - **Go back to the server's defaults** drops the saved list and uses the env vars again.
-- **Morning check-in** (read-only line): the time, where it goes and when it was last sent. Change it with `CHECKIN_SCHEDULE` / `CHECKIN_CHAT` on the server.
+- **Morning check-in**: a line with when it's sent, where to, and when it last went out; below it the **time** (or **Off**) and **Send to** (the first allowed group by default, another group, or a person's private chat). **Save check-in** applies within a minute, no restart. Until you save here, `CHECKIN_SCHEDULE` / `CHECKIN_CHAT` on the server apply; **Go back to the server's defaults** drops what you saved.
 
 ### Settings → Documents
 
@@ -225,7 +225,7 @@ The group gets one message listing what was added, changed or removed (never for
 
 ### Recover older data
 
-The bucket keeps every version of `entries.json`. In the AWS console, open the object → **Versions**, download the version you want, and upload it as the current version (or use `aws s3api copy-object` with `--copy-source <bucket>/entries.json?versionId=...`). The app notices within 5 seconds and the web page updates.
+The bucket keeps earlier versions of every object (for 90 days with the lifecycle rule): `entries.json`, `settings.json` and your PDFs under `docs/raw/`. A deleted PDF shows up again under **Show versions** (delete the "delete marker" to bring it back). In the AWS console, open the object → **Versions**, download the version you want, and upload it as the current version (or use `aws s3api copy-object` with `--copy-source <bucket>/entries.json?versionId=...`). The app notices within 5 seconds and the web page updates.
 
 ### Rotate a secret
 
@@ -251,7 +251,7 @@ Tell it what's happening, in plain words. It records ideas, decisions, quotes, p
 
 If something is unclear (which bathroom?), it asks instead of guessing. In the group it stays quiet for ordinary chat between the two of you.
 
-**Morning check-in.** Every day at 09:30 (`CHECKIN_SCHEDULE`) the bot posts to the group: today's dated items, then one message per task from yesterday that isn't done, with **Done**, **Done ★** (done and a milestone), **Tomorrow** and **+1 week**. Each press is one change with an Undo; whoever presses it is recorded. Or just reply in words ("booked the movers, tiles moved to Saturday"). If a task was moved meanwhile, its old buttons do nothing. Older open tasks are listed as overdue. On a day with nothing dated and nothing open it sends nothing. It goes out once a day, even with both your Mac and production running (`checkin.json` in the bucket records it). If the app wasn't running at 09:30, it goes out when the app starts, until 20:00; after that the day is skipped, and the next check-in also asks about the missed days (up to a week back). To send it to a private chat instead, set `CHECKIN_CHAT` to that person's ID (it must be on the allowlist; until it is, the check-in waits and the Telegram tab says why, and it goes out once you fix the list, until 20:00); they must have sent the bot `/start` once.
+**Morning check-in.** Every day at 09:30 (change it on **Settings → Telegram**) the bot posts to the group: today's dated items, then one message per task from yesterday that isn't done, with **Done**, **Done ★** (done and a milestone), **Tomorrow** and **+1 week**. Each press is one change with an Undo; whoever presses it is recorded. Or just reply in words ("booked the movers, tiles moved to Saturday"). If a task was moved meanwhile, its old buttons do nothing. Older open tasks are listed as overdue. On a day with nothing dated and nothing open it sends nothing. It goes out once a day, even with both your Mac and production running (`checkin.json` in the bucket records it). If the app wasn't running at 09:30, it goes out when the app starts, until 20:00; after that the day is skipped, and the next check-in also asks about the missed days (up to a week back). To send it to a private chat instead, pick the person under **Send to** on the Telegram tab; they must have sent the bot `/start` once. The chosen chat must be on the allowlist; until it is, the check-in waits and the tab says why, and it goes out once you fix the list (until 20:00).
 
 | Command | Does |
 | --- | --- |
@@ -294,7 +294,7 @@ make clean     # stop and delete the test MinIO's data (never the bucket)
 | Bot answers privately but not in the group | Group not on the list, or its ID changed (supergroup) | Add the group from Recently refused |
 | Telegram tab: "The bot is off: TELEGRAM_BOT_TOKEN is not set" | No token in `movin-secrets` | Add it, restart the pod |
 | Telegram tab: not running, error mentions 401 | Wrong or revoked token | Put the right token in `movin-secrets`, restart |
-| No morning check-in | The app wasn't running between 09:30 and 20:00, `CHECKIN_SCHEDULE=off`, or no group/person is allowed | Settings → Telegram shows the check-in line; send `/checkin` to get it now |
+| No morning check-in | The app wasn't running between 09:30 and 20:00, the check-in is Off, or no group/person is allowed | Settings → Telegram shows the check-in line; send `/checkin` to get it now |
 | Last error mentions 409 / "another poller" | A second copy uses the same token (second replica, or a laptop running it) | Stop the other copy; keep replicas at 1 |
 | Replies say "Sorry, that didn't go through" | The LLM endpoint is down or wrong | Settings → LLM → Test connection; fix and Save |
 | Chat uses a model you didn't expect | An endpoint saved on the page overrides env | Change it in Settings → LLM |
@@ -334,8 +334,8 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | `TZ` | `Asia/Singapore` | Time zone for dates |
 | `LOG_LEVEL` | `info` | `debug` logs every request |
 | `DOCS_SYNC_SCHEDULE` | `03:00` | Daily document sync time in `TZ` (HH:MM), or `off` |
-| `CHECKIN_SCHEDULE` | `09:30` | Morning check-in time in `TZ` (HH:MM, before 20:00), or `off` |
-| `CHECKIN_CHAT` | (first allowed group, else first person) | Telegram chat ID the check-in goes to |
+| `CHECKIN_SCHEDULE` | `09:30` | Default morning check-in time in `TZ` (HH:MM, before 20:00), or `off`; Settings → Telegram overrides it |
+| `CHECKIN_CHAT` | (first allowed group, else first person) | Default chat ID for the check-in; Settings → Telegram overrides it |
 | `GOMEMLIMIT` | `128MiB` in k8s | Go's heap target, below the 256 Mi pod limit (the PDF tools run beside it) |
 
 ### What's in the bucket
@@ -343,7 +343,7 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 | Key | Content |
 | --- | --- |
 | `entries.json` | Entries, key dates, last 200 changes |
-| `settings.json` | LLM connection (key encrypted), Telegram allowlist |
+| `settings.json` | LLM connection (key encrypted), Telegram allowlist, check-in time and chat |
 | `_probe/...` | Storage test scratch files, deleted right after |
 | `docs/raw/...` | Your documents: drawings, contracts, developer and management-office papers (upload here, subfolders welcome, e.g. `docs/raw/contracts/...`) |
 | `docs/index.json` | The documents list the app keeps (kind, pages, status, last sync); rebuilt by a sync if deleted |

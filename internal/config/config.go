@@ -13,9 +13,6 @@ import (
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
 
-// DefaultCheckin is CHECKIN_SCHEDULE's default.
-const DefaultCheckin = "09:30"
-
 type Config struct {
 	ListenAddr string
 
@@ -34,11 +31,10 @@ type Config struct {
 
 	DocsSync string // DOCS_SYNC_SCHEDULE: HH:MM in TZ, or off; default 03:00
 
-	// CHECKIN_SCHEDULE: HH:MM in TZ, or off; default 09:30. (DOCS_SYNC_SCHEDULE
+	// CHECKIN_SCHEDULE (HH:MM in TZ, or off; default 09:30) and CHECKIN_CHAT:
+	// the defaults that Settings → Telegram can override. (DOCS_SYNC_SCHEDULE
 	// stays a string: docs.Syncer.Background parses it.)
-	CheckinOn                  bool
-	CheckinHour, CheckinMinute int
-	CheckinChat                int64 // CHECKIN_CHAT: where the check-in goes; 0 = the first allowed group, else the first person
+	Checkin settings.Checkin
 
 	TelegramToken string            // empty: the bot does not start
 	Telegram      settings.Telegram // env-level allowlist; settings.json overrides
@@ -112,16 +108,8 @@ func Load() (Config, error) {
 	if _, _, _, err := sched.Parse("DOCS_SYNC_SCHEDULE", c.DocsSync, docs.DefaultSyncSchedule); err != nil {
 		return c, err
 	}
-	if c.CheckinHour, c.CheckinMinute, c.CheckinOn, err = sched.Parse("CHECKIN_SCHEDULE", env("CHECKIN_SCHEDULE", DefaultCheckin), DefaultCheckin); err != nil {
-		return c, err
-	}
-	if c.CheckinOn && c.CheckinHour >= sched.CheckinCutoff {
-		return c, fmt.Errorf("CHECKIN_SCHEDULE must be before %d:00 (later check-ins are skipped)", sched.CheckinCutoff)
-	}
-	if v := env("CHECKIN_CHAT", ""); v != "" {
-		if c.CheckinChat, err = strconv.ParseInt(v, 10, 64); err != nil || c.CheckinChat == 0 {
-			return c, fmt.Errorf("CHECKIN_CHAT must be a Telegram chat ID (a number), not %q", v)
-		}
+	if c.Checkin, err = settings.ParseCheckin(env("CHECKIN_SCHEDULE", settings.DefaultCheckin), env("CHECKIN_CHAT", "")); err != nil {
+		return c, fmt.Errorf("CHECKIN_SCHEDULE / CHECKIN_CHAT: %w", err)
 	}
 	c.TelegramToken = env("TELEGRAM_BOT_TOKEN", "")
 	if c.Telegram, err = settings.ParseTelegramEnv(env("TELEGRAM_ALLOWED_IDS", ""), env("TELEGRAM_ALLOWED_CHATS", "")); err != nil {

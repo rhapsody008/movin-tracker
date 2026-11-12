@@ -169,12 +169,22 @@ type telegramView struct {
 	// one is set.
 	Status    telegram.Status       `json:"status"`
 	Allowlist settings.TelegramView `json:"allowlist"`
-	// Checkin is the morning check-in (absent when the bot is off).
-	Checkin *telegram.CheckinView `json:"checkin,omitempty"`
+	// Checkin is the morning check-in: its setting, and its state when the
+	// bot runs.
+	Checkin *telegram.CheckinView `json:"checkin"`
+}
+
+func (s *Server) checkinView(ctx context.Context) *telegram.CheckinView {
+	v := s.Bot.CheckinStatus(ctx)
+	if v == nil {
+		v = &telegram.CheckinView{NoBot: true}
+	}
+	v.Setting = s.Settings.ViewCheckin(ctx)
+	return v
 }
 
 func (s *Server) getTelegram(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: s.Settings.ViewTelegram(r.Context()), Checkin: s.Bot.CheckinStatus(r.Context())})
+	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: s.Settings.ViewTelegram(r.Context()), Checkin: s.checkinView(r.Context())})
 }
 
 func (s *Server) putTelegram(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +197,19 @@ func (s *Server) putTelegram(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: v, Checkin: s.Bot.CheckinStatus(r.Context())})
+	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: v, Checkin: s.checkinView(r.Context())})
+}
+
+func (s *Server) putCheckin(w http.ResponseWriter, r *http.Request) {
+	var in settings.CheckinInput
+	if !decode(w, r, &in) {
+		return
+	}
+	if _, err := s.Settings.SaveCheckin(r.Context(), userOf(r), in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, telegramView{Status: s.Bot.Status(), Allowlist: s.Settings.ViewTelegram(r.Context()), Checkin: s.checkinView(r.Context())})
 }
 
 // ---------- admin: guide ----------

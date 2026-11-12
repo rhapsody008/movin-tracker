@@ -65,6 +65,7 @@ type stored struct {
 	Schema   int             `json:"schema"`
 	LLM      storedLLM       `json:"llm"`
 	Telegram *storedTelegram `json:"telegram,omitempty"`
+	Checkin  *storedCheckin  `json:"checkin,omitempty"`
 	Updated  string          `json:"updated,omitempty"`
 	By       string          `json:"by,omitempty"`
 }
@@ -125,6 +126,7 @@ type Service struct {
 	store     objstore.Store
 	env       LLM      // values from LLM_* env vars, layered over Defaults
 	tgEnv     Telegram // from TELEGRAM_ALLOWED_IDS / TELEGRAM_ALLOWED_CHATS
+	ciEnv     Checkin  // from CHECKIN_SCHEDULE / CHECKIN_CHAT
 	fkey      *fernet.Key
 	log       *slog.Logger
 	now       func() time.Time
