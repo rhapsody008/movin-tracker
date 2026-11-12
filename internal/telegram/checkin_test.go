@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/entries"
+	"github.com/rhapsody008/movin-tracker/internal/objstore"
 	"github.com/rhapsody008/movin-tracker/internal/telegram"
 )
 
@@ -212,4 +213,130 @@ func TestCheckinQuietDayAndTypedReply(t *testing.T) {
 	if !sawCheckin {
 		t.Fatalf("check-in not in the agent's history: %+v", reqs[0])
 	}
+}
+
+// scheduled sets up the 09:30 check-in on a clock the test moves (SGT).
+func scheduled(t *testing.T, now *time.Time) (*botRig, objstore.Store) {
+	t.Helper()
+	state := objstore.NewMemory()
+	sg, _ := time.LoadLocation("Asia/Singapore")
+	r := startBot(t, func(b *telegram.Bot) {
+		b.Now = func() time.Time { return *now }
+		b.Agent.Now, b.Agent.Loc = b.Now, sg
+		b.Checkin = &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state, Now: b.Now}}
+	})
+	return r, state
+}
+
+func sgt(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s+"+08:00")
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+func record(t *testing.T, store objstore.Store) telegram.CheckinRecord {
+	t.Helper()
+	r, _, err := (&telegram.CheckinStore{Store: store, Now: time.Now}).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func TestCheckinScheduleCatchUpOncePerDay(t *testing.T) {
+	ctx := context.Background()
+	now := sgt("2026-11-12T08:00:00")
+	r, state := scheduled(t, &now)
+	seed(t, r, task("Book movers", "2026-11-11"), task("Electrician", "2026-11-12"))
+
+	r.bot.CheckinTick(ctx) // 08:00: not yet
+	now = sgt("2026-11-12T14:00:00")
+	r.bot.CheckinTick(ctx) // the Mac woke at 14:00: catch up
+	sent := r.tg.waitSent(t, 2)
+	if sent[0].ChatID != groupID || !strings.Contains(sent[0].Text, "Good morning! Thu 12 Nov") || !strings.HasPrefix(sent[1].Text, "Yesterday: Book movers") {
+		t.Fatalf("check-in: %+v", sent)
+	}
+	if rec := record(t, state); rec.Day != "2026-11-12" || rec.Status != telegram.CheckinSent || rec.Chat != fmt.Sprint(groupID) {
+		t.Fatalf("record: %+v", rec)
+	}
+	r.bot.CheckinTick(ctx) // same process, later tick
+	now = sgt("2026-11-12T14:05:00")
+	// Another copy of the app (production) on the same bucket.
+	other := &telegram.Bot{API: r.bot.API, Entries: r.ents, Settings: r.sets, Agent: r.bot.Agent, Log: r.bot.Log, Now: r.bot.Now,
+		Checkin: &telegram.Checkin{Hour: 9, Minute: 30, State: &telegram.CheckinStore{Store: state, Now: r.bot.Now}}}
+	other.CheckinTick(ctx)
+	time.Sleep(100 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 2 {
+		t.Fatalf("sent twice: %d messages", n)
+	}
+
+	// The 13th and 14th are missed (Mac off); on the 15th both days' tasks
+	// are asked about, and the 12th's (it was "today" then) is overdue.
+	seed(t, r, task("Paint touch-up", "2026-11-13"), task("Sweep", "2026-11-14"))
+	now = sgt("2026-11-15T09:31:00")
+	r.bot.CheckinTick(ctx)
+	sent = r.tg.waitSent(t, 5)
+	if !strings.HasPrefix(sent[3].Text, "Fri 13 Nov: Paint touch-up") || !strings.HasPrefix(sent[4].Text, "Yesterday: Sweep") {
+		t.Fatalf("missed days not asked: %+v", sent[2:])
+	}
+	if !strings.Contains(sent[2].Text, "Not marked done yet (2)") || !strings.Contains(sent[2].Text, "Still overdue (2)") || !strings.Contains(sent[2].Text, "Book movers") || !strings.Contains(sent[2].Text, "Electrician") {
+		t.Fatalf("summary on the 15th:\n%s", sent[2].Text)
+	}
+}
+
+func TestCheckinTooLateQuietAndFailure(t *testing.T) {
+	ctx := context.Background()
+	now := sgt("2026-11-12T21:00:00")
+	r, state := scheduled(t, &now)
+	seed(t, r, task("Book movers", "2026-11-11"))
+	r.bot.CheckinTick(ctx) // started at 21:00: skip the day
+	time.Sleep(100 * time.Millisecond)
+	if n := len(r.tg.sentCopy()); n != 0 || record(t, state).Day != "" {
+		t.Fatalf("sent after the cutoff: %d, %+v", n, record(t, state))
+	}
+
+	// Telegram down at 09:30: the day is given back and retried.
+	now = sgt("2026-11-13T09:30:00")
+	r.tg.mu.Lock()
+	r.tg.failSend = true
+	r.tg.mu.Unlock()
+	r.bot.CheckinTick(ctx)
+	if rec := record(t, state); rec.Status == telegram.CheckinSent || rec.Day == "2026-11-13" {
+		t.Fatalf("a failed send kept the day: %+v", rec)
+	}
+	r.tg.mu.Lock()
+	r.tg.failSend = false
+	r.tg.mu.Unlock()
+	now = sgt("2026-11-13T09:31:00")
+	r.bot.CheckinTick(ctx)
+	sent := r.tg.waitSent(t, 1)
+	if !strings.Contains(sent[0].Text, "Good morning! Fri 13 Nov") || record(t, state).Status != telegram.CheckinSent {
+		t.Fatalf("retry: %+v %+v", sent, record(t, state))
+	}
+
+	// A quiet day: nothing sent, recorded as quiet.
+	if _, err := r.ents.Update(ctx, entries.Actor{By: "ZY", Channel: "web"}, r.doc(t).Entries[0].ID, mustPatchMap(t, map[string]any{"status": "done"})); err != nil {
+		t.Fatal(err)
+	}
+	n := len(r.tg.sentCopy())
+	now = sgt("2026-11-14T10:00:00")
+	r.bot.CheckinTick(ctx)
+	time.Sleep(100 * time.Millisecond)
+	if got := len(r.tg.sentCopy()); got != n {
+		t.Fatalf("quiet day sent %d messages", got-n)
+	}
+	if rec := record(t, state); rec.Day != "2026-11-14" || rec.Status != telegram.CheckinQuiet {
+		t.Fatalf("quiet record: %+v", rec)
+	}
+}
+
+func mustPatchMap(t *testing.T, m map[string]any) entries.Patch {
+	t.Helper()
+	p, err := entries.PatchFromMap(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

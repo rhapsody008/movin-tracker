@@ -297,3 +297,89 @@ func (b *Bot) closeAsk(ctx context.Context, cb *CallbackQuery, text string) {
 		_ = b.API.EditMessageReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID, nil)
 	}
 }
+
+// CheckinLoop sends the morning check-in at most once a day. It checks
+// once at start and then every `every` (a minute in the app): a wall-clock
+// check rather than one long timer, because timers drift while a laptop
+// sleeps. So if the app wasn't running at the scheduled time, the check-in
+// goes out when it starts, until CheckinCutoff. Returns when ctx ends.
+func (b *Bot) CheckinLoop(ctx context.Context, every time.Duration) {
+	if b.Checkin == nil || b.Checkin.State == nil {
+		return
+	}
+	b.Log.Info("morning check-in on", "at", fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), "until", fmt.Sprintf("%02d:00", CheckinCutoff))
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		b.CheckinTick(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// CheckinTick sends today's check-in if it is due and nobody has yet.
+func (b *Bot) CheckinTick(ctx context.Context) {
+	now := b.now()
+	ci := b.Checkin
+	if !CheckinDue(now, ci.Hour, ci.Minute, b.loc()) {
+		return
+	}
+	day := sched.Day(now, b.loc())
+	b.mu.Lock()
+	handled := b.checkinDay == day
+	b.mu.Unlock()
+	if handled {
+		return
+	}
+	markHandled := func() {
+		b.mu.Lock()
+		b.checkinDay = day
+		b.mu.Unlock()
+	}
+	chat, err := b.checkinChat(ctx)
+	if err != nil {
+		b.Log.Warn("morning check-in skipped today", "err", err)
+		markHandled()
+		return
+	}
+	prev, tag, ok, err := ci.State.Claim(ctx, day, strconv.FormatInt(chat, 10))
+	if err != nil {
+		b.Log.Warn("morning check-in: couldn't read or claim the day; will retry", "err", err)
+		return
+	}
+	if !ok { // already sent, quiet, or another copy of the app is sending it
+		markHandled()
+		return
+	}
+	claim := CheckinRecord{Day: day, Chat: strconv.FormatInt(chat, 10)}
+	snap, err := b.Entries.Current(ctx)
+	if err != nil {
+		b.Log.Warn("morning check-in: couldn't read the entries; will retry", "err", err)
+		_ = ci.State.Release(ctx, tag, prev)
+		return
+	}
+	ag := snap.Doc.Agenda(day, prev.Since())
+	if ag.Quiet() {
+		if err := ci.State.Finish(ctx, tag, claim, CheckinQuiet); err != nil {
+			b.Log.Warn("morning check-in: couldn't record a quiet day", "err", err)
+		}
+		b.Log.Info("morning check-in: nothing to report today", "day", day)
+		markHandled()
+		return
+	}
+	if err := b.sendCheckin(ctx, chat, day, ag); err != nil {
+		b.Log.Warn("morning check-in couldn't be sent; will retry", "chatId", chat, "err", err)
+		if err := ci.State.Release(ctx, tag, prev); err != nil {
+			b.Log.Warn("morning check-in: couldn't give the day back; it can be retaken in 10 minutes", "err", err)
+		}
+		return
+	}
+	if err := ci.State.Finish(ctx, tag, claim, CheckinSent); err != nil {
+		b.Log.Warn("morning check-in sent but not recorded", "err", err)
+	}
+	b.Log.Info("morning check-in sent", "day", day, "chatId", chat, "today", len(ag.Today), "asked", len(ag.Ask), "overdue", len(ag.Overdue))
+	markHandled()
+}

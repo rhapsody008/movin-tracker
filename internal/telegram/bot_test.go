@@ -35,7 +35,8 @@ type fakeTG struct {
 	t        *testing.T
 	mu       sync.Mutex
 	pending  []telegram.Update
-	conflict int // answer this many getUpdates with 409 first
+	conflict int  // answer this many getUpdates with 409 first
+	failSend bool // answer sendMessage with an error
 	sent     []sentMsg
 	answers  []string
 	edits    []map[string]any
@@ -98,6 +99,14 @@ func (f *fakeTG) handle(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	case "sendMessage":
+		f.mu.Lock()
+		fail := f.failSend
+		f.mu.Unlock()
+		if fail {
+			w.WriteHeader(502)
+			io.WriteString(w, `{"ok":false,"error_code":502,"description":"Bad Gateway"}`)
+			return
+		}
 		var m struct {
 			ChatID      int64                          `json:"chat_id"`
 			Text        string                         `json:"text"`

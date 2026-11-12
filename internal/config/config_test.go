@@ -9,6 +9,9 @@ import (
 
 func TestCheckinSettings(t *testing.T) {
 	t.Setenv("S3_BUCKET", "b")
+	// Start from the defaults whatever the environment (.env may set these).
+	t.Setenv("CHECKIN_SCHEDULE", "")
+	t.Setenv("CHECKIN_CHAT", "")
 	c, err := config.Load()
 	if err != nil || c.Checkin != "09:30" || c.CheckinChat != 0 {
 		t.Fatalf("defaults: %q %d %v", c.Checkin, c.CheckinChat, err)

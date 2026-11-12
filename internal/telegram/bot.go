@@ -46,6 +46,8 @@ type Bot struct {
 	history map[int64]*chatHistory
 	st      Status
 	wg      sync.WaitGroup // running workers
+
+	checkinDay string // the day this process last saw handled (saves a read a minute)
 }
 
 type chatHistory struct {
@@ -126,7 +128,10 @@ func (b *Bot) Run(ctx context.Context) error {
 		b.ConflictWait = 15 * time.Second
 	}
 	b.mu.Lock()
-	b.workers, b.history = map[int64]chan Update{}, map[int64]*chatHistory{}
+	b.workers = map[int64]chan Update{}
+	if b.history == nil { // the check-in may have started a chat's history already
+		b.history = map[int64]*chatHistory{}
+	}
 	b.st.Rejected = []Rejected{}
 	b.mu.Unlock()
 
