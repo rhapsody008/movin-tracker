@@ -224,4 +224,7 @@ func (p *Poppler) Render(ctx context.Context, pdf []byte, page int, region *Regi
 		"-x", strconv.Itoa(x), "-y", strconv.Itoa(y), "-W", strconv.Itoa(cw), "-H", strconv.Itoa(ch), "-", "-")
 }
 
-var _ Converter = (*Poppler)(nil)
+var (
+	_ docs.Converter = (*Poppler)(nil)
+	_ docs.Renderer  = (*Poppler)(nil)
+)

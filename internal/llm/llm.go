@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
@@ -128,13 +129,9 @@ func New(cfg settings.LLM) Provider {
 // joinSystem renders the sections as one string, as providers without
 // prompt caching send it.
 func joinSystem(secs []Section) string {
-	n := 0
+	var b strings.Builder
 	for _, s := range secs {
-		n += len(s.Text)
+		b.WriteString(s.Text)
 	}
-	b := make([]byte, 0, n)
-	for _, s := range secs {
-		b = append(b, s.Text...)
-	}
-	return string(b)
+	return b.String()
 }

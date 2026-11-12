@@ -55,16 +55,6 @@ func orNotSet(p *string) string {
 	return *p
 }
 
-// SystemPrompt is the system prompt as one string, as providers without
-// prompt caching see it.
-func (r *Runner) SystemPrompt(d *entries.Doc, req Request) string {
-	var b strings.Builder
-	for _, s := range r.SystemSections(d, req) {
-		b.WriteString(s.Text)
-	}
-	return b.String()
-}
-
 // SystemSections carries the rules, the room list and the most recently
 // updated entries as compact JSON (non-archived only, notes left out),
 // most stable part first.

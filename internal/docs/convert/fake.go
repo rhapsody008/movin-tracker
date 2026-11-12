@@ -56,4 +56,7 @@ func (f *Fake) CallCount() int {
 	return f.Calls
 }
 
-var _ Converter = (*Fake)(nil)
+var (
+	_ docs.Converter = (*Fake)(nil)
+	_ docs.Renderer  = (*Fake)(nil)
+)

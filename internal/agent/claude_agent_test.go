@@ -208,9 +208,4 @@ func TestSystemSectionsStability(t *testing.T) {
 	if d[0] != c[0] || d[1] == c[1] || d[2] != c[2] {
 		t.Fatalf("an entry write should change only the entries part")
 	}
-	// Joined, the sections are what the OpenAI path sends as one string.
-	snap, _ := r.svc.Current(ctx)
-	if r.runner.SystemPrompt(snap.Doc, agent.Request{}) != strings.Join(d, "") {
-		t.Fatalf("SystemPrompt is not the joined sections")
-	}
 }

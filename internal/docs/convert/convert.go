@@ -1,27 +1,16 @@
 // Package convert turns PDFs into what the agent can use: page sizes, the
 // text of each page (with word boxes for drawings) and PNG renders of a
-// page or a region of it. The poppler implementation runs the poppler
-// command-line tools; Fake is for tests.
+// page or a region of it. Poppler runs the poppler command-line tools; Fake
+// is for tests. Both satisfy the interfaces their users declare
+// (docs.Converter for syncing, docs.Renderer for page views).
 package convert
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
 	"github.com/rhapsody008/movin-tracker/internal/docs"
 )
-
-// Converter reads PDFs. Implementations must be safe for concurrent use.
-type Converter interface {
-	// Text returns every page with its as-displayed size and text; pages
-	// of A3 size or larger also carry their word boxes.
-	Text(ctx context.Context, pdf []byte) ([]docs.Page, error)
-	// Render draws one page (1-based) as a PNG whose long edge is
-	// longEdge pixels. With region set, only that part of the page is
-	// drawn, scaled so the region's long edge is longEdge.
-	Render(ctx context.Context, pdf []byte, page int, region *Region, longEdge int) ([]byte, error)
-}
 
 // Region is part of a page (defined in docs so both packages share it).
 type Region = docs.Region

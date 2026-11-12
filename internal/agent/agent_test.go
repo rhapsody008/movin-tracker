@@ -312,7 +312,7 @@ func TestGroupSilence(t *testing.T) {
 	}
 }
 
-func TestSystemPromptListsRecentEntriesOnly(t *testing.T) {
+func TestSystemSectionsListRecentEntriesOnly(t *testing.T) {
 	r := newRig(t)
 	ctx := context.Background()
 	clock := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
@@ -328,7 +328,11 @@ func TestSystemPromptListsRecentEntriesOnly(t *testing.T) {
 	// An archived entry never appears, however recent.
 	r.svc.Update(ctx, a, ids[1], mustPatch(t, `{"archived":true}`))
 	snap, _ := r.svc.Current(ctx)
-	p := r.runner.SystemPrompt(snap.Doc, agent.Request{})
+	var sb strings.Builder
+	for _, s := range r.runner.SystemSections(snap.Doc, agent.Request{}) {
+		sb.WriteString(s.Text)
+	}
+	p := sb.String()
 	if !strings.Contains(p, "use search_entries for the rest") || !strings.Contains(p, "master bathroom") || strings.Contains(p, "group chat") {
 		t.Fatal("prompt missing the overflow hint, the room list, or has the group rule outside a group")
 	}
