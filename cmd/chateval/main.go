@@ -290,6 +290,7 @@ func run() error {
 	ctx := context.Background()
 	logs := &testutil.SyncBuffer{}
 	svc := entries.NewService(objstore.NewMemory(), testutil.Logger(logs))
+	svc.SetLocation(c.Location)
 	if err := svc.Load(ctx); err != nil {
 		return err
 	}

@@ -30,8 +30,8 @@ type Meta struct {
 	KeyDate  *string `json:"keyDate"`
 }
 
-// Entry is one record. Its pointer and slice fields (Room, Date, Time, Cost,
-// Tags) are only ever replaced, never changed in place (Patch.Apply builds
+// Entry is one record. Its pointer and slice fields (Room, Date, Time,
+// Completed, Cost, Tags) are only ever replaced, never changed in place (Patch.Apply builds
 // new values), so a plain value copy of an Entry is safe to keep while the
 // original moves on. Clone is only needed to hand copies outside the package.
 type Entry struct {
@@ -49,10 +49,15 @@ type Entry struct {
 	Notes    string   `json:"notes"`
 	Tags     []string `json:"tags"`
 	Archived bool     `json:"archived"`
-	By       string   `json:"by"`
-	Channel  string   `json:"channel"`
-	Created  string   `json:"created"`
-	Updated  string   `json:"updated"`
+	// Milestone marks a notable entry; it counts as a milestone once done.
+	Milestone bool `json:"milestone,omitempty"`
+	// Completed is the day (YYYY-MM-DD, in the app's time zone) the entry
+	// moved to done; set and cleared by the Service, nil when not done.
+	Completed *string `json:"completed,omitempty"`
+	By        string  `json:"by"`
+	Channel   string  `json:"channel"`
+	Created   string  `json:"created"`
+	Updated   string  `json:"updated"`
 }
 
 // Cost is in SGD. Estimate is the quote or expected price; Actual is what
@@ -184,7 +189,7 @@ var textLimits = map[string]int{"vendor": 200, "source": 500, "notes": 4000, "ca
 var patchable = map[string]bool{
 	"kind": true, "title": true, "room": true, "category": true, "status": true,
 	"cost": true, "vendor": true, "date": true, "time": true, "source": true,
-	"notes": true, "tags": true, "archived": true,
+	"notes": true, "tags": true, "archived": true, "milestone": true, "completed": true,
 }
 
 // PatchFromMap builds a Patch from already-decoded values (used by agent tools).
@@ -376,12 +381,28 @@ func (p Patch) Apply(e *Entry) error {
 				return err
 			}
 			e.Tags = out
-		case "archived":
+		case "archived", "milestone":
 			var b bool
 			if null || json.Unmarshal(raw, &b) != nil {
-				return invalid("archived must be true or false")
+				return invalid("%s must be true or false", k)
 			}
-			e.Archived = b
+			if k == "archived" {
+				e.Archived = b
+			} else {
+				e.Milestone = b
+			}
+		case "completed":
+			s, err := str(k, raw)
+			if err != nil {
+				return err
+			}
+			if s != "" && !ValidDate(s) {
+				return invalid("completed must be YYYY-MM-DD")
+			}
+			e.Completed = nil
+			if s != "" {
+				e.Completed = &s
+			}
 		}
 	}
 	if e.Time != nil && e.Date == nil {
@@ -389,6 +410,32 @@ func (p Patch) Apply(e *Entry) error {
 	}
 	return nil
 }
+
+// StatusDone is the last status of every kind.
+const StatusDone = "done"
+
+// settleCompleted keeps Completed in step with the status after p was
+// applied to e (before is the entry as it was; nil for a new one): moving to
+// done stamps today unless p sets a day itself; leaving done clears it; a day
+// on an entry that isn't done is refused.
+func settleCompleted(before *Entry, e *Entry, p Patch, today string) error {
+	_, explicit := p["completed"]
+	if e.Status != StatusDone {
+		if explicit && e.Completed != nil {
+			return invalid("completed needs status done")
+		}
+		e.Completed = nil
+		return nil
+	}
+	wasDone := before != nil && before.Status == StatusDone
+	if !wasDone && !explicit {
+		e.Completed = &today
+	}
+	return nil
+}
+
+// IsMilestone reports whether the entry is flagged and done.
+func (e Entry) IsMilestone() bool { return e.Milestone && e.Status == StatusDone }
 
 func kindOrNote(k string) string {
 	if k == "" {
@@ -460,7 +507,7 @@ func (mp MetaPatch) Apply(m *Meta) error {
 
 // Clone deep-copies an entry.
 func (e Entry) Clone() Entry {
-	e.Room, e.Date, e.Time = clonePtr(e.Room), clonePtr(e.Date), clonePtr(e.Time)
+	e.Room, e.Date, e.Time, e.Completed = clonePtr(e.Room), clonePtr(e.Date), clonePtr(e.Time), clonePtr(e.Completed)
 	e.Cost = Cost{Estimate: clonePtr(e.Cost.Estimate), Actual: clonePtr(e.Cost.Actual)}
 	e.Tags = slices.Clone(e.Tags)
 	if e.Tags == nil {
@@ -557,6 +604,9 @@ func normalise(e *Entry) {
 	}
 	if e.Time != nil && (e.Date == nil || !ValidTime(*e.Time)) {
 		e.Time = nil
+	}
+	if e.Completed != nil && (e.Status != StatusDone || !ValidDate(*e.Completed)) {
+		e.Completed = nil
 	}
 	if tags, err := normTags(e.Tags); err == nil {
 		e.Tags = tags

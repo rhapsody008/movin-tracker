@@ -21,7 +21,10 @@ type Filter struct {
 	DateFrom        string   `json:"date_from,omitempty"`
 	DateTo          string   `json:"date_to,omitempty"`
 	IncludeArchived bool     `json:"include_archived,omitempty"`
-	Limit           int      `json:"limit,omitempty"`
+	// Milestone true keeps only milestones (flagged and done); false leaves
+	// them out.
+	Milestone *bool `json:"milestone,omitempty"`
+	Limit     int   `json:"limit,omitempty"`
 }
 
 const (
@@ -71,6 +74,9 @@ func (d *Doc) Search(f Filter) SearchResult {
 			continue
 		}
 		if len(statuses) > 0 && !slices.Contains(statuses, e.Status) {
+			continue
+		}
+		if f.Milestone != nil && e.IsMilestone() != *f.Milestone {
 			continue
 		}
 		if category != "" && e.Category != category {

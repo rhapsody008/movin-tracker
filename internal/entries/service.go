@@ -77,6 +77,7 @@ type Service struct {
 	store objstore.Store
 	log   *slog.Logger
 	now   func() time.Time
+	loc   *time.Location // for the done day (Completed); UTC until set
 
 	writeMu sync.Mutex // one write at a time from this process
 
@@ -88,8 +89,18 @@ type Service struct {
 }
 
 func NewService(store objstore.Store, log *slog.Logger) *Service {
-	return &Service{store: store, log: log, now: time.Now, subs: map[chan Snapshot]struct{}{}}
+	return &Service{store: store, log: log, now: time.Now, loc: time.UTC, subs: map[chan Snapshot]struct{}{}}
 }
+
+// SetLocation sets the time zone whose calendar day is recorded when an
+// entry moves to done (the app's TZ).
+func (s *Service) SetLocation(loc *time.Location) {
+	if loc != nil {
+		s.loc = loc
+	}
+}
+
+func (s *Service) today() string { return s.now().In(s.loc).Format("2006-01-02") }
 
 // SetClock replaces the time source (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
@@ -285,6 +296,9 @@ func (s *Service) Create(ctx context.Context, a Actor, patches []Patch) (Result,
 			if err := p.Apply(&e); err != nil {
 				return err
 			}
+			if err := settleCompleted(nil, &e, p, s.today()); err != nil {
+				return err
+			}
 			d.Entries = append(d.Entries, e)
 			res.Entries = append(res.Entries, e)
 			res.Changes = append(res.Changes, s.record(d, a, "create", e.ID, nil, &e))
@@ -306,6 +320,9 @@ func (s *Service) Update(ctx context.Context, a Actor, id string, p Patch) (Resu
 		}
 		before, e := d.Entries[i], d.Entries[i] // value copies; see Entry
 		if err := p.Apply(&e); err != nil {
+			return err
+		}
+		if err := settleCompleted(&before, &e, p, s.today()); err != nil {
 			return err
 		}
 		e.Updated, e.By, e.Channel = s.stamp(), a.By, a.Channel

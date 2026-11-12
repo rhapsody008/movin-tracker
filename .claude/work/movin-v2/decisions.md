@@ -122,3 +122,19 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 
 ## No fine-grained IAM (2026-11-12)
 - ZY: home-use app, no fine-grained IAM. `deploy/iam-policy.json` deleted; docs now just say the app's AWS key needs read/write/list/delete on the bucket. `docs/raw/` is protected only by the app's code (sync never writes or deletes there).
+
+## Milestones + morning check-in (2026-11-12)
+ZY accepted the planner's recommendations (plan.md 'Milestones + morning check-in'):
+1. Milestones are a flag + done-date on entries (no new kind, no separate list).
+2. Every entry gets a done-date when it moves to done; milestones are the flagged subset.
+3. Done never makes a milestone by itself; the check-in has a separate Done ★ button.
+4. Web page: Milestones timeline under the calendar; Milestone checkbox and 'Done on' in the dialog.
+5. The check-in goes to the shared group by default (`CHECKIN_CHAT` can point it elsewhere).
+6. One summary + one message per task to answer (max 8); buttons and typed replies both work.
+7. Listed: today's undone dated items; undone tasks since the last check-in (asked about); older overdue as text; undated items not listed.
+9. Reschedule buttons Tomorrow and +1 week from the day pressed; other dates by typing.
+10. Mac-only for now: catch up when the app starts, until 20:00, else skip the day.
+11. `CHECKIN_SCHEDULE` env (default 09:30, or off); status read-only on the Telegram tab.
+12. Run the two milestone eval cases on Claude (a few cents).
+- 8 (quiet days: no message, the day recorded as quiet) — recommendation explained to ZY; open until C.3, default as recommended.
+- M.1–M.4 may proceed; the C.5 live send in the real chat needs ZY's go-ahead.

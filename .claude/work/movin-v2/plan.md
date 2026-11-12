@@ -174,7 +174,33 @@ Status: decided in principle (see decisions.md, "Deployment / GitOps"). Needs a 
 - D.3 New `deploy/flux/`: kustomization.yaml + OCIRepository (semver >=1.0.0, secretRef ghcr-pull) + Flux Kustomization (./overlays/prod, prune, same service account as the NKP project).
 - D.4 README: release, rollback, pause; ZY creates ghcr-pull and app secrets in the project namespace.
 
-## Backlog: ideas for the planner after current work (ZY, 2026-11-11; not planned yet)
+## Milestones + morning check-in (planner, 2026-11-12; ZY's answers in decisions.md)
+Order: M.1 → M.2 → M.3 → M.4 → C.1 → C.2 → C.3 → C.4 → C.5; then one strict review. C.3 depends on M.1.
+
+### Design
+- **Milestones:** two fields on Entry, `milestone` (bool) and `completed` (YYYY-MM-DD). A milestone = `milestone` + status done + not archived; its day = `completed`, else `date`, else the day of `updated`. `completed` is stamped (today in TZ) whenever an entry moves to done and cleared when it leaves done; an explicit value in the same patch wins; `completed` without done is rejected. No new kind (older builds would turn it into a note), no separate list (would need its own journal). Rides the journal/Undo, ETag writes, SSE, REST PATCH and the agent tools.
+- **Check-in selection:** pure `entries.Agenda(doc, today, since)`: today = undone, non-archived dated entries of any kind dated today (time order); ask = undone tasks dated in [since, yesterday] (since = day after the last check-in, ≤ 7 days back); overdue = older undone dated tasks (text only); undated items not listed.
+- **Messages:** one summary (date, today's list, overdue count + up to 5 titles, hint to type other changes), then one message per ask task (cap 8) with buttons Done · Done ★ · Tomorrow · +1 week (callback `ci:d|m|r:<id>[:days]`, stateless). A press = one `Entries.Update` as `Actor{name, telegram}` with the usual change line + Undo; Done ★ sets done + milestone in one patch; reschedule counts from the press day, time kept; stale presses write nothing. The summary is appended to the chat's history so typed replies go through the agent. No LLM call in the check-in itself.
+- **Schedule:** a once-a-minute wall-clock check: due when local time ≥ `CHECKIN_SCHEDULE` (HH:MM in TZ, default 09:30, or off) and < 20:00 and today isn't recorded → catches up after the Mac was off. Shared HH:MM parsing with DOCS_SYNC_SCHEDULE. `/checkin` sends on demand without touching the day's record.
+- **Durable record:** `checkin.json` at the bucket root `{schema, day, status sending|sent|quiet, at, chat}`, claimed with a conditional Put before sending (dev and prod can never both send); claim → send → sent; total failure rolls back; a `sending` older than 10 min may be retaken. Quiet days are recorded as `quiet` and send nothing.
+- **Target:** the first allowed group by default; `CHECKIN_CHAT` overrides (a private chat needs one /start).
+
+### Steps
+**M.1 Entry fields and rules** — model.go, service.go, search.go + tests, main/chateval wiring. Milestone/Completed in patchable, Apply, Clone, normalise; Service.SetLocation; Create/Update stamp/clear `completed`; Filter.Milestone. Verify: stamp on done (Update and Create-as-done), SGT vs UTC day boundary, explicit value kept, cleared on leaving done, rejected without done, Undo restores both, current entries.json decodes unchanged, filter.
+**M.2 Agent** — tools.go, prompt.go, tests, golden. Tool fields milestone/completed, search filter, change-line text, one rule line; compact entry lines unchanged for entries without the new fields. Verify on both stubs; golden diff only schema + rule.
+**M.3 Web page** — static/index.html: dialog Milestone checkbox + Done on (when done), ★ on cards, Milestones timeline under the calendar (newest first, by month). Verify on the :8090 throwaway app; screenshots.
+**M.4 Guide + eval cases** — admin guide; chateval: "we collected the keys today, that's a milestone", "what milestones so far?" (ZY: yes, a few cents).
+**C.1 Agenda selection** — entries/agenda.go + table tests.
+**C.2 Schedule + durable record** — shared HH:MM schedule package (docs keeps its behaviour), telegram/checkin_state.go, config (CHECKIN_SCHEDULE, CHECKIN_CHAT), .env.example. Verify: due window, one winner of two claimers, rollback, stale claim retaken, off, bad value fails config.
+**C.3 Bot: send + buttons** — telegram/checkin.go, bot.go (`ci:` callbacks), commands.go (/checkin). Verify with the fake API: messages + callback data, each button one journaled change + working Undo, stranger refused, stale press no write, cap 8, quiet day sends nothing, typed reply carries the check-in turn.
+**C.4 Wiring + catch-up** — main.go starts the loop after the listener, only with a bot. Verify: start 14:00 → one send; restart same day → none; start 21:00 → skip; second bot on the same store → none; send failure → retried next tick.
+**C.5 Admin + guide** — check-in status in GET /api/admin/telegram + one line on the Telegram tab; guide. **Live check in the real chat needs ZY's go-ahead.**
+
+### Risks
+- After M.1 an older build that writes entries.json drops `milestone`/`completed` from every entry (unknown JSON fields are discarded) and versioning is off: rebuild before running any image against the bucket; don't revert M.1 casually.
+- A crash mid-send may repeat part of a check-in after 10 minutes (accepted). A proactive daily post extends 'the bot stays silent in the group' (ZY asked for it; quiet days stay silent).
+
+## Backlog: ideas for the planner after current work (ZY, 2026-11-11; planned 2026-11-12, see above)
 - **Milestones:** a "Checked milestones" record — milestone events with their date — to keep track of what has been done (ZY: "in history"; shape to be decided: likely a new entry kind or a flag on done entries, shown on the web page).
 - **Morning check-in:** every day at 09:30 SGT the bot messages ZY on Telegram with today's tasks and yesterday's tasks, asks whether yesterday's are done, and offers per task: mark done (and add to milestones) or reschedule. Questions for the planner: private chat vs the group, one message vs one per task, buttons vs free text, what counts as "a task for today" (dated tasks, overdue ones), quiet days, and the single-replica scheduler (same constraint as the bot poller; also the document sync's daily schedule).
 

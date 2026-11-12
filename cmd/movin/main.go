@@ -87,6 +87,7 @@ func serve() error {
 		return err
 	}
 	ents := entries.NewService(store, log)
+	ents.SetLocation(c.Location)
 	if err := ents.Load(ctx); err != nil {
 		// Keep serving: /readyz reports the problem and reads retry lazily.
 		log.Error("initial entries load failed", "err", err)
