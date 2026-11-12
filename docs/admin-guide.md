@@ -37,7 +37,7 @@ Do these once. They produce the values that go into the Secrets in the next sect
 ### 3. AWS bucket and access key
 
 1. Create the bucket in `ap-southeast-1` with **versioning on** and default encryption (SSE-S3). Versioning is your backup and undo-of-last-resort.
-2. Create an IAM user for the app and attach [deploy/iam-policy.json](../deploy/iam-policy.json), changing the bucket name to yours. It allows read/write on the bucket's objects, delete only under `_probe/` (the storage test's scratch files), and listing the bucket. The same bucket and key serve your Mac (`make dev`) and production: there is one copy of the data.
+2. Create an IAM user for the app and attach [deploy/iam-policy.json](../deploy/iam-policy.json), changing the bucket name to yours. It allows read/write on the bucket's objects, delete only under `_probe/` (the storage test's scratch files), and listing the bucket. It also **denies** the app any write or delete under `docs/raw/`: your PDFs are the source of truth, and with versioning off nothing else could bring them back. Upload them as yourself in the S3 console (your own login, not this user's key). The same bucket and key serve your Mac (`make dev`) and production: there is one copy of the data.
 3. Create an **access key** for that user. NKP clusters have no IRSA, so the pod uses this static key pair.
 
 ### 4. Two random secrets
@@ -202,7 +202,7 @@ When Telegram upgrades a group to a "supergroup", its ID changes. The new ID sho
 
 ### Add or replace documents
 
-1. In the S3 console open the bucket, then `docs/raw/` (make folders freely, e.g. `docs/raw/9.0 Contracts/`).
+1. In the S3 console (signed in as yourself; the app's own IAM user is not allowed to write here) open the bucket, then `docs/raw/` (make folders freely, e.g. `docs/raw/9.0 Contracts/`).
 2. Upload the PDFs. Replacing a file with the same name counts as a new version.
 3. Wait for the nightly sync (03:00), or send `/sync` to the bot, or press **Settings → Documents → Sync now**.
 
