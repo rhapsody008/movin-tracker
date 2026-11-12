@@ -2,39 +2,20 @@ package docs
 
 import (
 	"context"
-	"fmt"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/rhapsody008/movin-tracker/internal/sched"
 )
 
 // ParseSchedule reads DOCS_SYNC_SCHEDULE: "HH:MM" (24 h, in the app's time
 // zone) or "off". Empty means the default, 03:00.
 func ParseSchedule(s string) (hour, minute int, on bool, err error) {
-	s = strings.TrimSpace(strings.ToLower(s))
-	switch s {
-	case "off", "none", "false":
-		return 0, 0, false, nil
-	case "":
-		s = "03:00"
-	}
-	h, m, ok := strings.Cut(s, ":")
-	hh, err1 := strconv.Atoi(h)
-	mm, err2 := strconv.Atoi(m)
-	if !ok || err1 != nil || err2 != nil || hh < 0 || hh > 23 || mm < 0 || mm > 59 {
-		return 0, 0, false, fmt.Errorf("DOCS_SYNC_SCHEDULE must be HH:MM (24 h) or off, not %q", s)
-	}
-	return hh, mm, true, nil
+	return sched.Parse("DOCS_SYNC_SCHEDULE", s, "03:00")
 }
 
 // NextRun is the next time after now that the clock in loc shows hh:mm.
 func NextRun(now time.Time, hh, mm int, loc *time.Location) time.Time {
-	n := now.In(loc)
-	next := time.Date(n.Year(), n.Month(), n.Day(), hh, mm, 0, 0, loc)
-	if !next.After(n) {
-		next = time.Date(n.Year(), n.Month(), n.Day()+1, hh, mm, 0, 0, loc)
-	}
-	return next
+	return sched.NextRun(now, hh, mm, loc)
 }
 
 // Background runs the startup sync, the daily sync and a once-a-minute

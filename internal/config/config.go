@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/rhapsody008/movin-tracker/internal/docs"
+	"github.com/rhapsody008/movin-tracker/internal/sched"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
+	"github.com/rhapsody008/movin-tracker/internal/telegram"
 )
 
 type Config struct {
@@ -29,6 +31,9 @@ type Config struct {
 	ClaudeBaseURL  string       // LLM_CLAUDE_BASE_URL: tests and stubs only
 
 	DocsSync string // DOCS_SYNC_SCHEDULE: HH:MM in TZ, or off; default 03:00
+
+	Checkin     string // CHECKIN_SCHEDULE: HH:MM in TZ, or off; default 09:30
+	CheckinChat int64  // CHECKIN_CHAT: where the check-in goes; 0 = the first allowed group, else the first person
 
 	TelegramToken string            // empty: the bot does not start
 	Telegram      settings.Telegram // env-level allowlist; settings.json overrides
@@ -101,6 +106,17 @@ func Load() (Config, error) {
 	c.DocsSync = env("DOCS_SYNC_SCHEDULE", "03:00")
 	if _, _, _, err := docs.ParseSchedule(c.DocsSync); err != nil {
 		return c, err
+	}
+	c.Checkin = env("CHECKIN_SCHEDULE", "09:30")
+	if hh, _, on, err := sched.Parse("CHECKIN_SCHEDULE", c.Checkin, "09:30"); err != nil {
+		return c, err
+	} else if on && hh >= telegram.CheckinCutoff {
+		return c, fmt.Errorf("CHECKIN_SCHEDULE must be before %d:00 (later check-ins are skipped)", telegram.CheckinCutoff)
+	}
+	if v := env("CHECKIN_CHAT", ""); v != "" {
+		if c.CheckinChat, err = strconv.ParseInt(v, 10, 64); err != nil || c.CheckinChat == 0 {
+			return c, fmt.Errorf("CHECKIN_CHAT must be a Telegram chat ID (a number), not %q", v)
+		}
 	}
 	c.TelegramToken = env("TELEGRAM_BOT_TOKEN", "")
 	if c.Telegram, err = settings.ParseTelegramEnv(env("TELEGRAM_ALLOWED_IDS", ""), env("TELEGRAM_ALLOWED_CHATS", "")); err != nil {

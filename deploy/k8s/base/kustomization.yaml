@@ -26,3 +26,5 @@ configMapGenerator:
       - TELEGRAM_ALLOWED_CHATS=
       # Daily re-read of the PDFs under docs/raw/ (HH:MM in TZ), or off.
       - DOCS_SYNC_SCHEDULE=03:00
+      # Morning check-in on Telegram (HH:MM in TZ, before 20:00), or off.
+      - CHECKIN_SCHEDULE=09:30
