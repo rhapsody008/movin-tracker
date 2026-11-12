@@ -103,37 +103,18 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 	if emit == nil {
 		emit = func(Event) {}
 	}
-	turns := CleanTurns(req.Turns)
-	if len(turns) == 0 || turns[len(turns)-1].Role != "user" {
-		return Result{}, &InputError{"the last turn must be a user message"}
-	}
-	if cfg.BaseURL == "" || cfg.Model == "" {
-		return Result{}, &InputError{"no LLM endpoint or model is configured; set one in Settings → LLM"}
-	}
-	snap, err := r.Entries.Current(ctx)
+	system, msgs, err := r.prepare(ctx, req, cfg)
 	if err != nil {
 		return Result{}, err
 	}
-	system := r.SystemSections(snap.Doc, req)
-	if ds := r.docsSection(ctx, cfg); ds != "" {
-		// Between the rules and the entries: it changes only with a sync.
-		system = append([]llm.Section{system[0], {Text: ds, CacheBreak: true}}, system[1:]...)
-	}
 	tools := r.tools(cfg)
-	images := 0
-	msgs := make([]llm.Message, 0, len(turns))
-	for _, t := range turns {
-		msgs = append(msgs, llm.Message{Role: t.Role, Content: t.Content})
-	}
-
-	actor := entries.Actor{By: req.By, Channel: req.Channel}
+	t := &turn{r: r, actor: entries.Actor{By: req.By, Channel: req.Channel}, emit: emit,
+		res: Result{Changes: []ChangeLine{}, Model: cfg.Model}}
 	client := llm.New(cfg)
-	res := Result{Changes: []ChangeLine{}, Model: cfg.Model}
 	// MaxToolRounds counts rounds that may call tools. If the model is still
 	// calling tools after that, one more round is forced to answer in words,
 	// so even a setting of 1 can make changes.
 	rounds := max(cfg.MaxToolRounds, 1) + 1
-	lookedInDocs := false
 	for round := 1; round <= rounds; round++ {
 		force := round == rounds
 		out, err := client.Complete(ctx, llm.Request{
@@ -141,31 +122,15 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 			OnText: func(s string) { emit(Event{Type: "delta", Text: s}) },
 		})
 		if err != nil {
-			return res, err
+			return t.res, err
 		}
-		u := out.Usage
-		res.Usage.In += u.In
-		res.Usage.Out += u.Out
-		res.Usage.CacheRead += u.CacheRead
-		res.Usage.CacheWrite += u.CacheWrite
-		r.Log.Info("llm call", "kind", cfg.Kind, "model", cfg.Model, "round", round, "stop", string(out.Stop),
-			"in", u.In, "out", u.Out, "cacheRead", u.CacheRead, "cacheWrite", u.CacheWrite)
+		t.usage(cfg, round, out)
 		m := out.Message
-		switch out.Stop {
-		case llm.StopRefusal:
-			emit(Event{Type: "reset"}) // drop any partial streamed text
-			res.Reply = RefusalReply
-			return res, nil
-		case llm.StopMaxTokens:
-			// Tool calls cut off mid-way can't be trusted; keep only text.
-			if strings.TrimSpace(m.Content) == "" {
-				return res, ErrCutOff
-			}
-			res.Reply = strings.TrimSpace(m.Content) + CutOffNote
-			return res, nil
+		if done, err := t.stopped(out); done {
+			return t.res, err
 		}
 		if len(m.ToolCalls) == 0 || force {
-			res.Reply = strings.TrimSpace(m.Content)
+			t.res.Reply = strings.TrimSpace(m.Content)
 			break
 		}
 		if m.Content != "" {
@@ -173,37 +138,117 @@ func (r *Runner) Run(ctx context.Context, req Request, cfg settings.LLM, emit fu
 			emit(Event{Type: "reset"})
 		}
 		msgs = append(msgs, llm.Message{Role: "assistant", Content: m.Content, ToolCalls: m.ToolCalls, Native: m.Native})
-		for _, tc := range m.ToolCalls {
-			if tc.Function.Name == "search_documents" || tc.Function.Name == "read_document_page" {
-				lookedInDocs = true
-			}
-			out, imgs, lines := r.exec(ctx, actor, tc)
-			for _, l := range lines {
-				res.Changes = append(res.Changes, l)
-				emit(Event{Type: "change", Text: l.Text, ID: l.ID})
-			}
-			if images+len(imgs) > MaxImagesPerTurn {
-				out, imgs = `{"error":"image limit for this message reached; answer from what you have seen"}`, nil
-			}
-			images += len(imgs)
-			msgs = append(msgs, llm.Message{Role: "tool", ToolCallID: tc.ID, Content: out, Images: imgs})
-		}
+		msgs = append(msgs, t.runTools(ctx, m.ToolCalls)...)
 	}
+	return t.finish(req), nil
+}
+
+// prepare checks the request and builds the system sections and messages.
+func (r *Runner) prepare(ctx context.Context, req Request, cfg settings.LLM) ([]llm.Section, []llm.Message, error) {
+	turns := CleanTurns(req.Turns)
+	if len(turns) == 0 || turns[len(turns)-1].Role != "user" {
+		return nil, nil, &InputError{"the last turn must be a user message"}
+	}
+	if cfg.BaseURL == "" || cfg.Model == "" {
+		return nil, nil, &InputError{"no LLM endpoint or model is configured; set one in Settings → LLM"}
+	}
+	snap, err := r.Entries.Current(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	system := r.SystemSections(snap.Doc, req)
+	if ds := r.docsSection(ctx, cfg); ds != "" {
+		// Between the rules and the entries: it changes only with a sync.
+		system = append([]llm.Section{system[0], {Text: ds, CacheBreak: true}}, system[1:]...)
+	}
+	msgs := make([]llm.Message, 0, len(turns))
+	for _, t := range turns {
+		msgs = append(msgs, llm.Message{Role: t.Role, Content: t.Content})
+	}
+	return system, msgs, nil
+}
+
+// turn is one Run's running state.
+type turn struct {
+	r            *Runner
+	actor        entries.Actor
+	emit         func(Event)
+	res          Result
+	images       int
+	lookedInDocs bool
+}
+
+func (t *turn) usage(cfg settings.LLM, round int, out llm.Response) {
+	u := out.Usage
+	t.res.Usage.In += u.In
+	t.res.Usage.Out += u.Out
+	t.res.Usage.CacheRead += u.CacheRead
+	t.res.Usage.CacheWrite += u.CacheWrite
+	t.r.Log.Info("llm call", "kind", cfg.Kind, "model", cfg.Model, "round", round, "stop", string(out.Stop),
+		"in", u.In, "out", u.Out, "cacheRead", u.CacheRead, "cacheWrite", u.CacheWrite)
+}
+
+// stopped handles the stops that end the turn early: a refusal (the
+// changes made so far stay) and a reply cut off at the token limit.
+func (t *turn) stopped(out llm.Response) (bool, error) {
+	switch out.Stop {
+	case llm.StopRefusal:
+		t.emit(Event{Type: "reset"}) // drop any partial streamed text
+		t.res.Reply = RefusalReply
+		return true, nil
+	case llm.StopMaxTokens:
+		// Tool calls cut off mid-way can't be trusted; keep only text.
+		text := strings.TrimSpace(out.Message.Content)
+		if text == "" {
+			return true, ErrCutOff
+		}
+		t.res.Reply = text + CutOffNote
+		return true, nil
+	}
+	return false, nil
+}
+
+// runTools runs one round's tool calls and returns their results.
+func (t *turn) runTools(ctx context.Context, calls []llm.ToolCall) []llm.Message {
+	var msgs []llm.Message
+	for _, tc := range calls {
+		if tc.Function.Name == "search_documents" || tc.Function.Name == "read_document_page" {
+			t.lookedInDocs = true
+		}
+		out, imgs, lines := t.r.exec(ctx, t.actor, tc)
+		for _, l := range lines {
+			t.res.Changes = append(t.res.Changes, l)
+			t.emit(Event{Type: "change", Text: l.Text, ID: l.ID})
+		}
+		if t.images+len(imgs) > MaxImagesPerTurn {
+			out, imgs = `{"error":"image limit for this message reached; answer from what you have seen"}`, nil
+		}
+		t.images += len(imgs)
+		msgs = append(msgs, llm.Message{Role: "tool", ToolCallID: tc.ID, Content: out, Images: imgs})
+	}
+	return msgs
+}
+
+// finish settles the reply: group silence, and a line when the model
+// said nothing.
+func (t *turn) finish(req Request) Result {
+	res := t.res
 	if strings.Contains(res.Reply, SilentReply) {
 		if req.Group && len(res.Changes) == 0 {
 			res.Reply, res.Silent = "", true
-			return res, nil
+			return res
 		}
 		res.Reply = strings.TrimSpace(strings.ReplaceAll(res.Reply, SilentReply, ""))
 	}
 	if res.Reply == "" {
-		if len(res.Changes) > 0 {
+		switch {
+		case len(res.Changes) > 0:
 			res.Reply = "Done."
-		} else if lookedInDocs {
+		case t.lookedInDocs:
 			res.Reply = NotFoundInDocsReply
-		} else {
+		default:
 			res.Reply = "No answer came back. Try rephrasing."
 		}
 	}
-	return res, nil
+	return res
 }

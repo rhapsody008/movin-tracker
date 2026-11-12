@@ -1,0 +1,20 @@
+# golangci-lint (run locally: `golangci-lint run`; `make lint` stays gofmt + vet
+# in Docker). Production code is held to all of these; tests are exempt from
+# errcheck and the complexity limit (their table setups and ignored helper
+# errors are deliberate).
+version: "2"
+linters:
+  enable:
+    - gocognit
+    - unparam
+    - ineffassign
+    - staticcheck
+  settings:
+    gocognit:
+      min-complexity: 30
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocognit

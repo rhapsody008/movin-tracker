@@ -275,42 +275,89 @@ func StripSpecialTokens(s string) string {
 	return strings.TrimSpace(specialTokenRe.ReplaceAllString(s, ""))
 }
 
-func readStream(r io.Reader, onText func(string)) (Message, string, error) {
-	type delta struct {
-		Content   string `json:"content"`
-		ToolCalls []struct {
-			Index    int    `json:"index"`
-			ID       string `json:"id"`
-			Type     string `json:"type"`
-			Function struct {
-				Name      string `json:"name"`
-				Arguments string `json:"arguments"`
-			} `json:"function"`
-		} `json:"tool_calls"`
+// streamDelta is one streamed chunk's delta (OpenAI wire format).
+type streamDelta struct {
+	Content   string `json:"content"`
+	ToolCalls []struct {
+		Index    int    `json:"index"`
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	} `json:"tool_calls"`
+}
+
+type streamChunk struct {
+	Choices []struct {
+		Delta        streamDelta `json:"delta"`
+		FinishReason string      `json:"finish_reason"`
+	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// streamAcc assembles the reply from deltas: text in order, tool calls by
+// index (their names and arguments arrive in pieces).
+type streamAcc struct {
+	text  strings.Builder
+	calls map[int]*ToolCall
+}
+
+func (a *streamAcc) add(d streamDelta, onText func(string)) {
+	if d.Content = StripSpecialTokens(d.Content); d.Content != "" {
+		a.text.WriteString(d.Content)
+		if onText != nil {
+			onText(d.Content)
+		}
 	}
-	var text strings.Builder
+	for _, tc := range d.ToolCalls {
+		c, ok := a.calls[tc.Index]
+		if !ok {
+			c = &ToolCall{Type: "function"}
+			a.calls[tc.Index] = c
+		}
+		if tc.ID != "" {
+			c.ID = tc.ID
+		}
+		c.Function.Name += tc.Function.Name
+		c.Function.Arguments += tc.Function.Arguments
+	}
+}
+
+func (a *streamAcc) message() Message {
+	m := Message{Role: "assistant", Content: StripSpecialTokens(a.text.String())}
+	idx := make([]int, 0, len(a.calls))
+	for i := range a.calls {
+		idx = append(idx, i)
+	}
+	sort.Ints(idx)
+	for _, i := range idx {
+		c := a.calls[i]
+		if c.ID == "" {
+			c.ID = fmt.Sprintf("call_%d", i)
+		}
+		m.ToolCalls = append(m.ToolCalls, *c)
+	}
+	return m
+}
+
+func readStream(r io.Reader, onText func(string)) (Message, string, error) {
+	acc := &streamAcc{calls: map[int]*ToolCall{}}
 	var finish string
-	calls := map[int]*ToolCall{}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data:") {
+		data, ok := strings.CutPrefix(sc.Text(), "data:")
+		if !ok {
 			continue
 		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "[DONE]" {
+		if data = strings.TrimSpace(data); data == "[DONE]" {
 			break
 		}
-		var chunk struct {
-			Choices []struct {
-				Delta        delta  `json:"delta"`
-				FinishReason string `json:"finish_reason"`
-			} `json:"choices"`
-			Error *struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
+		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			continue
 		}
@@ -323,44 +370,10 @@ func readStream(r io.Reader, onText func(string)) (Message, string, error) {
 		if f := chunk.Choices[0].FinishReason; f != "" {
 			finish = f
 		}
-		d := chunk.Choices[0].Delta
-		d.Content = StripSpecialTokens(d.Content)
-		if d.Content != "" {
-			text.WriteString(d.Content)
-			if onText != nil {
-				onText(d.Content)
-			}
-		}
-		for _, tc := range d.ToolCalls {
-			c, ok := calls[tc.Index]
-			if !ok {
-				c = &ToolCall{Type: "function"}
-				calls[tc.Index] = c
-			}
-			if tc.ID != "" {
-				c.ID = tc.ID
-			}
-			if tc.Function.Name != "" {
-				c.Function.Name += tc.Function.Name
-			}
-			c.Function.Arguments += tc.Function.Arguments
-		}
+		acc.add(chunk.Choices[0].Delta, onText)
 	}
 	if err := sc.Err(); err != nil {
 		return Message{}, "", fmt.Errorf("read stream: %w", err)
 	}
-	m := Message{Role: "assistant", Content: StripSpecialTokens(text.String())}
-	idx := make([]int, 0, len(calls))
-	for i := range calls {
-		idx = append(idx, i)
-	}
-	sort.Ints(idx)
-	for _, i := range idx {
-		c := calls[i]
-		if c.ID == "" {
-			c.ID = fmt.Sprintf("call_%d", i)
-		}
-		m.ToolCalls = append(m.ToolCalls, *c)
-	}
-	return m, finish, nil
+	return acc.message(), finish, nil
 }

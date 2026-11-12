@@ -237,176 +237,219 @@ func (p Patch) Apply(e *Entry) error {
 		}
 	}
 	if raw, ok := p["kind"]; ok {
-		s, err := str("kind", raw)
-		if err != nil {
+		if err := p.applyKind(e, raw); err != nil {
 			return err
-		}
-		s = strings.ToLower(strings.TrimSpace(s))
-		if !slices.Contains(Kinds, s) {
-			return invalid("kind must be one of %s", strings.Join(Kinds, ", "))
-		}
-		if e.Kind != s {
-			e.Kind = s
-			if _, ok := p["status"]; !ok {
-				e.Status = remapStatus(e.Status, s)
-			}
 		}
 	}
 	for k, raw := range p {
-		null := isNull(raw)
-		switch k {
-		case "kind":
-			// done above
-		case "title":
-			s, err := str(k, raw)
-			if err != nil {
-				return err
-			}
-			s = strings.TrimSpace(s)
-			if n := utf8.RuneCountInString(s); n < 1 || n > 200 {
-				return invalid("title must be 1–200 characters")
-			}
-			e.Title = s
-		case "vendor", "source", "notes", "category":
-			s, err := str(k, raw)
-			if err != nil {
-				return err
-			}
-			s = strings.TrimSpace(s)
-			if err := maxLen(k, s, textLimits[k]); err != nil {
-				return err
-			}
-			switch k {
-			case "vendor":
-				e.Vendor = s
-			case "source":
-				e.Source = s
-			case "notes":
-				e.Notes = s
-			case "category":
-				e.Category = strings.ToLower(s)
-			}
-		case "room":
-			s, err := str(k, raw)
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(s) == "" {
-				e.Room = nil
-				continue
-			}
-			r, ok := NormRoom(s)
-			if !ok {
-				return invalid("room must be one of %s, or empty", strings.Join(Rooms, ", "))
-			}
-			e.Room = &r
-		case "status":
-			s, err := str(k, raw)
-			if err != nil {
-				return err
-			}
-			s = strings.ToLower(strings.TrimSpace(s))
-			if !slices.Contains(StatusesFor(e.Kind), s) {
-				return invalid("status for a %s must be one of %s", kindOrNote(e.Kind), strings.Join(StatusesFor(e.Kind), ", "))
-			}
-			e.Status = s
-		case "date", "time":
-			s, err := str(k, raw)
-			if err != nil {
-				return err
-			}
-			// An empty string clears the field, same as null; date and time
-			// inputs in the browser send "" when blank.
-			var v *string
-			if s != "" {
-				if k == "date" && !ValidDate(s) {
-					return invalid("date must be YYYY-MM-DD")
-				}
-				if k == "time" && !ValidTime(s) {
-					return invalid("time must be HH:MM (24h)")
-				}
-				v = &s
-			}
-			if k == "date" {
-				e.Date = v
-				// Clearing the date clears its time too, unless the same
-				// patch sets a time (rejected below).
-				if v == nil {
-					if _, ok := p["time"]; !ok {
-						e.Time = nil
-					}
-				}
-			} else {
-				e.Time = v
-			}
-		case "cost":
-			if null {
-				e.Cost = Cost{}
-				continue
-			}
-			var c map[string]json.RawMessage
-			if err := json.Unmarshal(raw, &c); err != nil {
-				return invalid("cost must be an object with estimate and/or actual")
-			}
-			for ck, cv := range c {
-				if ck != "estimate" && ck != "actual" {
-					return invalid("unknown cost field %q", ck)
-				}
-				var v *float64
-				if !isNull(cv) {
-					var f float64
-					if err := json.Unmarshal(cv, &f); err != nil {
-						return invalid("cost.%s must be a number or null", ck)
-					}
-					if f < 0 {
-						return invalid("cost.%s must be 0 or more", ck)
-					}
-					v = &f
-				}
-				if ck == "estimate" {
-					e.Cost.Estimate = v
-				} else {
-					e.Cost.Actual = v
-				}
-			}
-		case "tags":
-			var tags []string
-			if !null {
-				if err := json.Unmarshal(raw, &tags); err != nil {
-					return invalid("tags must be a list of strings")
-				}
-			}
-			out, err := normTags(tags)
-			if err != nil {
-				return err
-			}
-			e.Tags = out
-		case "archived", "milestone":
-			var b bool
-			if null || json.Unmarshal(raw, &b) != nil {
-				return invalid("%s must be true or false", k)
-			}
-			if k == "archived" {
-				e.Archived = b
-			} else {
-				e.Milestone = b
-			}
-		case "completed":
-			s, err := str(k, raw)
-			if err != nil {
-				return err
-			}
-			if s != "" && !ValidDate(s) {
-				return invalid("completed must be YYYY-MM-DD")
-			}
-			e.Completed = nil
-			if s != "" {
-				e.Completed = &s
-			}
+		if k == "kind" {
+			continue // done above
+		}
+		if err := setters[k](p, e, k, raw); err != nil {
+			return err
 		}
 	}
 	if e.Time != nil && e.Date == nil {
 		return invalid("time needs a date")
+	}
+	return nil
+}
+
+func (p Patch) applyKind(e *Entry, raw json.RawMessage) error {
+	s, err := str("kind", raw)
+	if err != nil {
+		return err
+	}
+	s = strings.ToLower(strings.TrimSpace(s))
+	if !slices.Contains(Kinds, s) {
+		return invalid("kind must be one of %s", strings.Join(Kinds, ", "))
+	}
+	if e.Kind != s {
+		e.Kind = s
+		if _, ok := p["status"]; !ok {
+			e.Status = remapStatus(e.Status, s)
+		}
+	}
+	return nil
+}
+
+// setter writes one validated field (p is the whole patch, for fields that
+// depend on each other).
+type setter func(p Patch, e *Entry, k string, raw json.RawMessage) error
+
+var setters = map[string]setter{
+	"title": setTitle, "vendor": setText, "source": setText, "notes": setText, "category": setText,
+	"room": setRoom, "status": setStatus, "date": setDateTime, "time": setDateTime,
+	"cost": setCost, "tags": setTags, "archived": setBool, "milestone": setBool, "completed": setCompleted,
+}
+
+func setTitle(_ Patch, e *Entry, k string, raw json.RawMessage) error {
+	s, err := str(k, raw)
+	if err != nil {
+		return err
+	}
+	s = strings.TrimSpace(s)
+	if n := utf8.RuneCountInString(s); n < 1 || n > 200 {
+		return invalid("title must be 1–200 characters")
+	}
+	e.Title = s
+	return nil
+}
+
+func setText(_ Patch, e *Entry, k string, raw json.RawMessage) error {
+	s, err := str(k, raw)
+	if err != nil {
+		return err
+	}
+	s = strings.TrimSpace(s)
+	if err := maxLen(k, s, textLimits[k]); err != nil {
+		return err
+	}
+	switch k {
+	case "vendor":
+		e.Vendor = s
+	case "source":
+		e.Source = s
+	case "notes":
+		e.Notes = s
+	case "category":
+		e.Category = strings.ToLower(s)
+	}
+	return nil
+}
+
+func setRoom(_ Patch, e *Entry, k string, raw json.RawMessage) error {
+	s, err := str(k, raw)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(s) == "" {
+		e.Room = nil
+		return nil
+	}
+	r, ok := NormRoom(s)
+	if !ok {
+		return invalid("room must be one of %s, or empty", strings.Join(Rooms, ", "))
+	}
+	e.Room = &r
+	return nil
+}
+
+func setStatus(_ Patch, e *Entry, k string, raw json.RawMessage) error {
+	s, err := str(k, raw)
+	if err != nil {
+		return err
+	}
+	s = strings.ToLower(strings.TrimSpace(s))
+	if !slices.Contains(StatusesFor(e.Kind), s) {
+		return invalid("status for a %s must be one of %s", kindOrNote(e.Kind), strings.Join(StatusesFor(e.Kind), ", "))
+	}
+	e.Status = s
+	return nil
+}
+
+// setDateTime sets date or time. An empty string clears the field, same as
+// null; date and time inputs in the browser send "" when blank.
+func setDateTime(p Patch, e *Entry, k string, raw json.RawMessage) error {
+	s, err := str(k, raw)
+	if err != nil {
+		return err
+	}
+	var v *string
+	if s != "" {
+		if k == "date" && !ValidDate(s) {
+			return invalid("date must be YYYY-MM-DD")
+		}
+		if k == "time" && !ValidTime(s) {
+			return invalid("time must be HH:MM (24h)")
+		}
+		v = &s
+	}
+	if k == "time" {
+		e.Time = v
+		return nil
+	}
+	e.Date = v
+	// Clearing the date clears its time too, unless the same patch sets a
+	// time (then Apply refuses the time without a date).
+	if _, ok := p["time"]; v == nil && !ok {
+		e.Time = nil
+	}
+	return nil
+}
+
+func setCost(_ Patch, e *Entry, _ string, raw json.RawMessage) error {
+	if isNull(raw) {
+		e.Cost = Cost{}
+		return nil
+	}
+	var c map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return invalid("cost must be an object with estimate and/or actual")
+	}
+	for ck, cv := range c {
+		if ck != "estimate" && ck != "actual" {
+			return invalid("unknown cost field %q", ck)
+		}
+		var v *float64
+		if !isNull(cv) {
+			var f float64
+			if err := json.Unmarshal(cv, &f); err != nil {
+				return invalid("cost.%s must be a number or null", ck)
+			}
+			if f < 0 {
+				return invalid("cost.%s must be 0 or more", ck)
+			}
+			v = &f
+		}
+		if ck == "estimate" {
+			e.Cost.Estimate = v
+		} else {
+			e.Cost.Actual = v
+		}
+	}
+	return nil
+}
+
+func setTags(_ Patch, e *Entry, _ string, raw json.RawMessage) error {
+	var tags []string
+	if !isNull(raw) {
+		if err := json.Unmarshal(raw, &tags); err != nil {
+			return invalid("tags must be a list of strings")
+		}
+	}
+	out, err := normTags(tags)
+	if err != nil {
+		return err
+	}
+	e.Tags = out
+	return nil
+}
+
+func setBool(_ Patch, e *Entry, k string, raw json.RawMessage) error {
+	var b bool
+	if isNull(raw) || json.Unmarshal(raw, &b) != nil {
+		return invalid("%s must be true or false", k)
+	}
+	if k == "archived" {
+		e.Archived = b
+	} else {
+		e.Milestone = b
+	}
+	return nil
+}
+
+func setCompleted(_ Patch, e *Entry, k string, raw json.RawMessage) error {
+	s, err := str(k, raw)
+	if err != nil {
+		return err
+	}
+	if s != "" && !ValidDate(s) {
+		return invalid("completed must be YYYY-MM-DD")
+	}
+	e.Completed = nil
+	if s != "" {
+		e.Completed = &s
 	}
 	return nil
 }

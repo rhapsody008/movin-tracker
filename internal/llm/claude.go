@@ -283,70 +283,82 @@ func claudeTools(tools []Tool) ([]anthropic.BetaToolUnionParam, error) {
 // sent back exactly as received (its Native blocks, thinking included).
 func claudeMessages(msgs []Message) ([]anthropic.BetaMessageParam, error) {
 	var out []anthropic.BetaMessageParam
-	push := func(role string, blocks []anthropic.BetaContentBlockParamUnion) {
-		if len(blocks) == 0 {
-			return
-		}
-		if n := len(out); n > 0 {
-			last := &out[n-1]
-			if role == "user" && last.OfUser != nil {
-				last.OfUser.Content = append(last.OfUser.Content, blocks...)
-				return
-			}
-			if role == "assistant" && last.OfAssistant != nil {
-				last.OfAssistant.Content = append(last.OfAssistant.Content, blocks...)
-				return
-			}
-		}
-		if role == "user" {
-			out = append(out, anthropic.BetaMessageParam{OfUser: &anthropic.BetaUserMessageParam{Content: blocks}})
-		} else {
-			out = append(out, anthropic.BetaMessageParam{OfAssistant: &anthropic.BetaAssistantMessageParam{Content: blocks}})
-		}
-	}
-	text := func(s string) []anthropic.BetaContentBlockParamUnion {
-		if strings.TrimSpace(s) == "" {
-			return nil // the API rejects empty text blocks
-		}
-		return []anthropic.BetaContentBlockParamUnion{{OfText: &anthropic.BetaTextBlockParam{Text: s}}}
-	}
 	for _, m := range msgs {
-		switch m.Role {
-		case "user":
-			blocks := text(m.Content)
-			for _, im := range m.Images {
-				blocks = append(blocks, anthropic.BetaContentBlockParamUnion{OfImage: claudeImage(im)})
-			}
-			push("user", blocks)
-		case "tool":
-			content := []anthropic.BetaToolResultBlockParamContentUnion{{OfText: &anthropic.BetaTextBlockParam{Text: nonEmpty(m.Content)}}}
-			for _, im := range m.Images {
-				content = append(content, anthropic.BetaToolResultBlockParamContentUnion{OfImage: claudeImage(im)})
-			}
-			push("user", []anthropic.BetaContentBlockParamUnion{{OfToolResult: &anthropic.BetaToolResultBlockParam{
-				ToolUseID: m.ToolCallID, Content: content,
-			}}})
-		case "assistant":
-			if native, ok := m.Native.([]anthropic.BetaContentBlockParamUnion); ok {
-				push("assistant", native)
-				continue
-			}
-			blocks := text(m.Content)
-			for _, tc := range m.ToolCalls {
-				args := json.RawMessage(tc.Function.Arguments)
-				if !json.Valid(args) || len(strings.TrimSpace(tc.Function.Arguments)) == 0 {
-					args = json.RawMessage(`{}`)
-				}
-				blocks = append(blocks, anthropic.BetaContentBlockParamUnion{OfToolUse: &anthropic.BetaToolUseBlockParam{
-					ID: tc.ID, Name: tc.Function.Name, Input: args,
-				}})
-			}
-			push("assistant", blocks)
-		default:
-			return nil, fmt.Errorf("claude: unsupported message role %q", m.Role)
+		role, blocks, err := claudeBlocks(m)
+		if err != nil {
+			return nil, err
 		}
+		out = pushMerged(out, role, blocks)
 	}
 	return out, nil
+}
+
+// pushMerged appends blocks as a role's turn, merged into the last message
+// when it has the same role (the API wants roles to alternate; tool results
+// travel as user turns). Empty blocks add nothing.
+func pushMerged(out []anthropic.BetaMessageParam, role string, blocks []anthropic.BetaContentBlockParamUnion) []anthropic.BetaMessageParam {
+	if len(blocks) == 0 {
+		return out
+	}
+	if n := len(out); n > 0 {
+		last := &out[n-1]
+		if role == "user" && last.OfUser != nil {
+			last.OfUser.Content = append(last.OfUser.Content, blocks...)
+			return out
+		}
+		if role == "assistant" && last.OfAssistant != nil {
+			last.OfAssistant.Content = append(last.OfAssistant.Content, blocks...)
+			return out
+		}
+	}
+	if role == "user" {
+		return append(out, anthropic.BetaMessageParam{OfUser: &anthropic.BetaUserMessageParam{Content: blocks}})
+	}
+	return append(out, anthropic.BetaMessageParam{OfAssistant: &anthropic.BetaAssistantMessageParam{Content: blocks}})
+}
+
+func claudeText(s string) []anthropic.BetaContentBlockParamUnion {
+	if strings.TrimSpace(s) == "" {
+		return nil // the API rejects empty text blocks
+	}
+	return []anthropic.BetaContentBlockParamUnion{{OfText: &anthropic.BetaTextBlockParam{Text: s}}}
+}
+
+// claudeBlocks turns one neutral message into its API role and blocks.
+func claudeBlocks(m Message) (string, []anthropic.BetaContentBlockParamUnion, error) {
+	switch m.Role {
+	case "user":
+		blocks := claudeText(m.Content)
+		for _, im := range m.Images {
+			blocks = append(blocks, anthropic.BetaContentBlockParamUnion{OfImage: claudeImage(im)})
+		}
+		return "user", blocks, nil
+	case "tool":
+		content := []anthropic.BetaToolResultBlockParamContentUnion{{OfText: &anthropic.BetaTextBlockParam{Text: nonEmpty(m.Content)}}}
+		for _, im := range m.Images {
+			content = append(content, anthropic.BetaToolResultBlockParamContentUnion{OfImage: claudeImage(im)})
+		}
+		return "user", []anthropic.BetaContentBlockParamUnion{{OfToolResult: &anthropic.BetaToolResultBlockParam{
+			ToolUseID: m.ToolCallID, Content: content,
+		}}}, nil
+	case "assistant":
+		if native, ok := m.Native.([]anthropic.BetaContentBlockParamUnion); ok {
+			return "assistant", native, nil
+		}
+		blocks := claudeText(m.Content)
+		for _, tc := range m.ToolCalls {
+			args := json.RawMessage(tc.Function.Arguments)
+			if !json.Valid(args) || len(strings.TrimSpace(tc.Function.Arguments)) == 0 {
+				args = json.RawMessage(`{}`)
+			}
+			blocks = append(blocks, anthropic.BetaContentBlockParamUnion{OfToolUse: &anthropic.BetaToolUseBlockParam{
+				ID: tc.ID, Name: tc.Function.Name, Input: args,
+			}})
+		}
+		return "assistant", blocks, nil
+	default:
+		return "", nil, fmt.Errorf("claude: unsupported message role %q", m.Role)
+	}
 }
 
 func claudeImage(im Image) *anthropic.BetaImageBlockParam {

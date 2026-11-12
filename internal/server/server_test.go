@@ -581,7 +581,7 @@ func TestStorageAdmin(t *testing.T) {
 			e.do(t, "POST", "/api/entries", `{"title":"after"}`)
 			_, m, _ = e.do(t, "GET", "/api/admin/storage", "")
 			second := m["lastWrite"].(map[string]any)
-			if !(second["at"].(string) > first["at"].(string)) {
+			if second["at"].(string) <= first["at"].(string) {
 				t.Fatalf("lastWrite did not advance: %v → %v", first["at"], second["at"])
 			}
 

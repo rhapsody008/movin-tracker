@@ -49,65 +49,74 @@ func lowerAll(in []string) []string {
 	return out
 }
 
+// query is a Filter normalised once for matching.
+type query struct {
+	f                            Filter
+	kinds, rooms, statuses, tags []string
+	category, vendor             string
+	words                        []string
+}
+
+func newQuery(f Filter) query {
+	return query{
+		f:     f,
+		kinds: lowerAll(f.Kinds), rooms: lowerAll(f.Rooms), statuses: lowerAll(f.Statuses), tags: lowerAll(f.Tags),
+		category: strings.ToLower(strings.TrimSpace(f.Category)),
+		vendor:   strings.ToLower(strings.TrimSpace(f.Vendor)),
+		words:    strings.Fields(strings.ToLower(f.Text)),
+	}
+}
+
+func (q query) matches(e Entry) bool {
+	f := q.f
+	switch {
+	case e.Archived && !f.IncludeArchived,
+		len(q.kinds) > 0 && !slices.Contains(q.kinds, e.Kind),
+		len(q.rooms) > 0 && (e.Room == nil || !slices.Contains(q.rooms, *e.Room)),
+		len(q.statuses) > 0 && !slices.Contains(q.statuses, e.Status),
+		f.Milestone != nil && e.IsMilestone() != *f.Milestone,
+		q.category != "" && e.Category != q.category,
+		!hasAll(e.Tags, q.tags),
+		q.vendor != "" && !strings.Contains(strings.ToLower(e.Vendor), q.vendor),
+		!q.inDates(e):
+		return false
+	}
+	if len(q.words) == 0 {
+		return true
+	}
+	hay := haystack(e)
+	for _, w := range q.words {
+		if !strings.Contains(hay, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// inDates checks the date range; dates are YYYY-MM-DD, so string order is
+// date order. With no range, undated entries match too.
+func (q query) inDates(e Entry) bool {
+	from, to := q.f.DateFrom, q.f.DateTo
+	if from == "" && to == "" {
+		return true
+	}
+	return e.Date != nil && (from == "" || *e.Date >= from) && (to == "" || *e.Date <= to)
+}
+
 // Search runs f over the document. It never errors: bad values simply
 // match nothing.
 func (d *Doc) Search(f Filter) SearchResult {
-	kinds, rooms, statuses, tags := lowerAll(f.Kinds), lowerAll(f.Rooms), lowerAll(f.Statuses), lowerAll(f.Tags)
-	category := strings.ToLower(strings.TrimSpace(f.Category))
-	vendor := strings.ToLower(strings.TrimSpace(f.Vendor))
-	words := strings.Fields(strings.ToLower(f.Text))
+	q := newQuery(f)
 	limit := f.Limit
 	if limit <= 0 {
 		limit = DefaultLimit
 	}
 	limit = min(limit, MaxLimit)
-
 	var hits []Entry
 	for _, e := range d.Entries {
-		if e.Archived && !f.IncludeArchived {
-			continue
+		if q.matches(e) {
+			hits = append(hits, e)
 		}
-		if len(kinds) > 0 && !slices.Contains(kinds, e.Kind) {
-			continue
-		}
-		if len(rooms) > 0 && (e.Room == nil || !slices.Contains(rooms, *e.Room)) {
-			continue
-		}
-		if len(statuses) > 0 && !slices.Contains(statuses, e.Status) {
-			continue
-		}
-		if f.Milestone != nil && e.IsMilestone() != *f.Milestone {
-			continue
-		}
-		if category != "" && e.Category != category {
-			continue
-		}
-		if !hasAll(e.Tags, tags) {
-			continue
-		}
-		if vendor != "" && !strings.Contains(strings.ToLower(e.Vendor), vendor) {
-			continue
-		}
-		if f.DateFrom != "" || f.DateTo != "" {
-			// Dates are YYYY-MM-DD, so string order is date order.
-			if e.Date == nil || (f.DateFrom != "" && *e.Date < f.DateFrom) || (f.DateTo != "" && *e.Date > f.DateTo) {
-				continue
-			}
-		}
-		if len(words) > 0 {
-			hay := haystack(e)
-			matched := true
-			for _, w := range words {
-				if !strings.Contains(hay, w) {
-					matched = false
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-		hits = append(hits, e)
 	}
 	sort.SliceStable(hits, func(i, j int) bool { return hits[i].Updated > hits[j].Updated })
 	out := SearchResult{Total: len(hits), Entries: []Entry{}}

@@ -133,27 +133,8 @@ func (b *Bot) Run(ctx context.Context) error {
 	b.st.Rejected = []Rejected{}
 	b.mu.Unlock()
 
-	backoff := time.Second
-	for {
-		me, err := b.API.GetMe(ctx)
-		if err == nil {
-			b.mu.Lock()
-			b.st.BotUsername, b.st.Running = me.Username, true
-			b.mu.Unlock()
-			b.Log.Info("telegram bot started", "username", me.Username)
-			break
-		}
-		b.setErr(err)
-		var ae *APIError
-		if errors.As(err, &ae) && ae.Code == 401 {
-			b.Log.Error("telegram bot token rejected; the bot is off", "err", err)
-			return err
-		}
-		b.Log.Warn("telegram getMe failed, retrying", "err", err, "in", backoff)
-		if !sleep(ctx, backoff) {
-			return ctx.Err()
-		}
-		backoff = min(backoff*2, time.Minute)
+	if err := b.start(ctx); err != nil {
+		return err
 	}
 	defer func() {
 		b.mu.Lock()
@@ -165,7 +146,7 @@ func (b *Bot) Run(ctx context.Context) error {
 	}
 
 	var offset int64
-	backoff = time.Second
+	backoff := time.Second
 	for {
 		ups, err := b.API.GetUpdates(ctx, offset, b.PollSeconds)
 		if ctx.Err() != nil {
@@ -173,19 +154,7 @@ func (b *Bot) Run(ctx context.Context) error {
 		}
 		if err != nil {
 			b.setErr(err)
-			wait := backoff
-			var ae *APIError
-			switch {
-			case IsConflict(err):
-				wait = b.ConflictWait
-				b.Log.Warn("another poller is using this bot token (409); is a second replica or a local copy running?", "retryIn", wait)
-			case errors.As(err, &ae) && ae.RetryAfter > 0:
-				wait = time.Duration(ae.RetryAfter) * time.Second
-			default:
-				backoff = min(backoff*2, time.Minute)
-				b.Log.Warn("telegram getUpdates failed", "err", err, "retryIn", wait)
-			}
-			if !sleep(ctx, wait) {
+			if !sleep(ctx, b.pollRetry(err, &backoff)) {
 				return ctx.Err()
 			}
 			continue
@@ -205,6 +174,52 @@ func (b *Bot) Run(ctx context.Context) error {
 			}
 			b.dispatch(ctx, u)
 		}
+	}
+}
+
+// start calls getMe until it works (backing off), and gives up only on a
+// rejected token or ctx's end.
+func (b *Bot) start(ctx context.Context) error {
+	backoff := time.Second
+	for {
+		me, err := b.API.GetMe(ctx)
+		if err == nil {
+			b.mu.Lock()
+			b.st.BotUsername, b.st.Running = me.Username, true
+			b.mu.Unlock()
+			b.Log.Info("telegram bot started", "username", me.Username)
+			return nil
+		}
+		b.setErr(err)
+		var ae *APIError
+		if errors.As(err, &ae) && ae.Code == 401 {
+			b.Log.Error("telegram bot token rejected; the bot is off", "err", err)
+			return err
+		}
+		b.Log.Warn("telegram getMe failed, retrying", "err", err, "in", backoff)
+		if !sleep(ctx, backoff) {
+			return ctx.Err()
+		}
+		backoff = min(backoff*2, time.Minute)
+	}
+}
+
+// pollRetry is how long to wait after a failed getUpdates: the conflict
+// pause for a second poller (409), Telegram's retry_after, else the
+// doubling backoff.
+func (b *Bot) pollRetry(err error, backoff *time.Duration) time.Duration {
+	var ae *APIError
+	switch {
+	case IsConflict(err):
+		b.Log.Warn("another poller is using this bot token (409); is a second replica or a local copy running?", "retryIn", b.ConflictWait)
+		return b.ConflictWait
+	case errors.As(err, &ae) && ae.RetryAfter > 0:
+		return time.Duration(ae.RetryAfter) * time.Second
+	default:
+		wait := *backoff
+		*backoff = min(*backoff*2, time.Minute)
+		b.Log.Warn("telegram getUpdates failed", "err", err, "retryIn", wait)
+		return wait
 	}
 }
 
