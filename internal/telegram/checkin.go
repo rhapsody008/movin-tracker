@@ -346,7 +346,7 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 		// Never fall back to the defaults here: a check-in saved as Off
 		// (or to a private chat) must not go to the group after one failed
 		// read. The next minute tries again.
-		b.warnCheckin("read "+day, "morning check-in: couldn't read the settings; skipping this minute", err)
+		b.warnCheckin("read", day, "morning check-in: couldn't read the settings; skipping this minute", err)
 		return
 	}
 	if !cfg.On || !CheckinDue(now, cfg.Hour, cfg.Minute, b.loc()) {
@@ -369,7 +369,7 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	if err != nil {
 		// Not remembered as finished: fixing the allowlist on the web page
 		// lets it go out the same day.
-		b.warnCheckin("chat "+day, "morning check-in can't go out until this is fixed", err)
+		b.warnCheckin("chat", day, "morning check-in can't go out until this is fixed", err)
 		return
 	}
 	claim, cur, err := ci.State.Claim(ctx, day, strconv.FormatInt(chat, 10), now)
@@ -414,12 +414,13 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	markFinished()
 }
 
-// warnCheckin logs a warning once per key (a problem that persists is
-// checked every minute; one line a day is enough). Keys hold the day.
-func (b *Bot) warnCheckin(key, msg string, err error) {
+// warnCheckin logs a warning once per kind and day (a problem that
+// persists is checked every minute; one line a day is enough).
+func (b *Bot) warnCheckin(kind, day, msg string, err error) {
+	key := kind + " " + day
 	b.mu.Lock()
-	if b.checkinWarned == nil || len(b.checkinWarned) > 50 { // keys are per day: keep it small
-		b.checkinWarned = map[string]bool{}
+	if b.checkinWarnDay != day { // a new day: start over
+		b.checkinWarned, b.checkinWarnDay = map[string]bool{}, day
 	}
 	warn := !b.checkinWarned[key]
 	b.checkinWarned[key] = true

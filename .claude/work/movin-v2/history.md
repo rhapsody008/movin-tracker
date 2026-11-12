@@ -6,7 +6,7 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - ZY accepted milestones + check-in; check-in live in the dev app (first sent 12:23); page order milestones → calendar → board; 'Jump to calendar' removed; ZY pushed (…f13a50c).
 - Backlog: scanned documents, Phase 2 media, NKP deployment. Pending on ZY: admin guide review; turning bucket versioning on in the console (+ 90-day noncurrent lifecycle rule).
 - Done: group line out of the cached rules (group messages now hit the cache); check-in time/chat editable on the Telegram tab (settings.json `checkin`, env as default); PDF size cap 32 MiB; atomic check-in presses (`UpdateIf`); lint/tidy-ups incl. all production functions under gocognit 30 and `.golangci.yml` (0 issues). Eval 12/12 twice.
-- Next: optional strict review of today's later changes (refactors of Patch.Apply, Runner.Run, the LLM stream readers); push.
+- Strict review of the later changes → fixes → re-review → fixes → third review APPROVE WITH NITS → nits fixed. Next: ZY pushes; ZY turns on bucket versioning; admin guide review.
 
 ## 2026-11-12 — milestones + morning check-in
 - Planner on the backlog (NKP not ready): plan merged into plan.md; ZY accepted all recommendations (decisions.md), quiet days explained (default: no message).

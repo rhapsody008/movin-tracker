@@ -144,7 +144,7 @@ type Service struct {
 // NewService takes the env-level defaults and the SETTINGS_SECRET Fernet key
 // (may be empty: then keys can only come from LLM_API_KEY).
 func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) (*Service, error) {
-	s := &Service{store: store, env: env, log: log, now: time.Now, ttl: CacheTTL, claudeURL: ClaudeOrigin}
+	s := &Service{store: store, env: env, log: log, now: time.Now, ttl: CacheTTL, claudeURL: ClaudeOrigin, lastWarn: map[string]string{}}
 	if s.env.Kind == "" {
 		s.env.Kind = KindOpenAI
 	}
@@ -164,9 +164,6 @@ func NewService(store objstore.Store, env LLM, secret string, log *slog.Logger) 
 func (s *Service) warnOnce(msg string, args ...any) {
 	details := fmt.Sprint(args...)
 	s.warnMu.Lock()
-	if s.lastWarn == nil {
-		s.lastWarn = map[string]string{}
-	}
 	prev, seen := s.lastWarn[msg]
 	s.lastWarn[msg] = details
 	s.warnMu.Unlock()

@@ -19,3 +19,7 @@ Empty time saves 09:30 silently; the default-chat label omits the person fallbac
 
 ## Checked fine
 All refactors behaviour-preserving (line by line); prompt layout; settings sections interplay; UpdateIf; warnOnce; PDF cap; check-in polling cost.
+
+## Status
+- Fixed all (ZY): 3a9448c. Re-review: CHANGES REQUIRED (N1: the unreadable-settings bot test couldn't fail; N2–N5 minors) → fixed in 05cabad. Third review: **APPROVE WITH NITS** (server-side test for N5, a test comment, warnCheckin's magic limit, lazy map) → fixed next.
+

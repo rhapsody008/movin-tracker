@@ -537,6 +537,12 @@ func TestCheckinSkipsWhenSettingsUnreadable(t *testing.T) {
 	r, state := scheduled(t, &now)
 	seed(t, r, task("Book movers", "2026-11-11"))
 	setCheckin(t, r, "off", "")
+	// Yesterday's check-in went out (the status should keep showing it).
+	if c, _, err := (&telegram.CheckinStore{Store: state}).Claim(ctx, "2026-11-11", fmt.Sprint(groupID), now.Add(-24*time.Hour)); err != nil || c == nil {
+		t.Fatalf("seed record: %v", err)
+	} else if err := (&telegram.CheckinStore{Store: state}).Finish(ctx, c, telegram.CheckinSent, now.Add(-24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
 	// The same allowlist (the group) but a settings.json that can't be read:
 	// were the defaults used, the check-in would go to the group now.
 	tg, _ := settings.ParseTelegramEnv(fmt.Sprintf("%d=ZY,%d=Partner", zyID, partnerID), fmt.Sprint(groupID))
@@ -545,14 +551,17 @@ func TestCheckinSkipsWhenSettingsUnreadable(t *testing.T) {
 	r.bot.Settings = broken
 	r.bot.CheckinTick(ctx)
 	time.Sleep(100 * time.Millisecond)
-	if n := len(r.tg.sentCopy()); n != 0 || record(t, state).Day != "" {
+	if n := len(r.tg.sentCopy()); n != 0 || record(t, state).Day != "2026-11-11" {
 		t.Fatalf("sent on a failed settings read: %d", n)
 	}
-	if v := r.bot.CheckinStatus(ctx); !strings.Contains(v.Error, "read settings.json") || v.On {
+	if v := r.bot.CheckinStatus(ctx); !strings.Contains(v.Error, "read settings.json") || v.On || v.Last == nil || v.Last.Day != "2026-11-11" {
 		t.Fatalf("status: %+v", v)
 	}
-	// Control: the same broken service, read as the defaults, does send —
-	// so the test above would catch a fallback.
+	if s := broken.ViewCheckin(ctx); !s.Unreadable {
+		t.Fatalf("setting view should say unreadable: %+v", s)
+	}
+	// Control: a readable service with the same allowlist and the default
+	// schedule does send, so the test above would catch a fallback.
 	ok, _ := settings.NewService(objstore.NewMemory(), settings.Defaults, "", r.bot.Log)
 	ok.WithTelegramEnv(tg)
 	r.bot.Settings = ok
