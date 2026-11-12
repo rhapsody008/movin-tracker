@@ -13,13 +13,13 @@ func TestCheckinSettings(t *testing.T) {
 	t.Setenv("CHECKIN_SCHEDULE", "")
 	t.Setenv("CHECKIN_CHAT", "")
 	c, err := config.Load()
-	if err != nil || c.Checkin != "09:30" || c.CheckinChat != 0 {
-		t.Fatalf("defaults: %q %d %v", c.Checkin, c.CheckinChat, err)
+	if err != nil || !c.CheckinOn || c.CheckinHour != 9 || c.CheckinMinute != 30 || c.CheckinChat != 0 {
+		t.Fatalf("defaults: %+v %v", c, err)
 	}
 	t.Setenv("CHECKIN_SCHEDULE", "off")
 	t.Setenv("CHECKIN_CHAT", "-100123")
-	if c, err = config.Load(); err != nil || c.Checkin != "off" || c.CheckinChat != -100123 {
-		t.Fatalf("off + chat: %q %d %v", c.Checkin, c.CheckinChat, err)
+	if c, err = config.Load(); err != nil || c.CheckinOn || c.CheckinChat != -100123 {
+		t.Fatalf("off + chat: %+v %v", c, err)
 	}
 	for env, val := range map[string]string{"CHECKIN_SCHEDULE": "9am", "CHECKIN_CHAT": "the group"} {
 		t.Run(env, func(t *testing.T) {

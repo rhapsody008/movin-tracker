@@ -85,6 +85,28 @@ func TestCheckinClaim(t *testing.T) {
 	}
 }
 
+// A claim that crashed and was never taken over that day: the next day's
+// check-in still asks from the crashed claim's window.
+func TestCheckinAfterAnUnfinishedDay(t *testing.T) {
+	ctx := context.Background()
+	st := &telegram.CheckinStore{Store: objstore.NewMemory()}
+	d12 := time.Date(2026, 11, 12, 1, 30, 0, 0, time.UTC)
+	c, _, err := st.Claim(ctx, "2026-11-12", "1", d12)
+	if err != nil || c == nil {
+		t.Fatal(err)
+	}
+	if err := st.Finish(ctx, c, telegram.CheckinSent, d12); err != nil {
+		t.Fatal(err)
+	}
+	if c, _, err = st.Claim(ctx, "2026-11-13", "1", d12.Add(24*time.Hour)); err != nil || c == nil || c.Record.Since != "2026-11-12" {
+		t.Fatalf("13th: %+v %v", c, err)
+	}
+	// Crashed on the 13th; nobody took over. On the 14th: from the 12th.
+	if c, _, err = st.Claim(ctx, "2026-11-14", "1", d12.Add(48*time.Hour)); err != nil || c == nil || c.Record.Since != "2026-11-12" {
+		t.Fatalf("14th after an unfinished 13th: %+v %v", c, err)
+	}
+}
+
 func TestCheckinReleaseOfFirstEver(t *testing.T) {
 	ctx := context.Background()
 	st := &telegram.CheckinStore{Store: objstore.NewMemory()}

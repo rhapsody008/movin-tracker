@@ -229,6 +229,10 @@ func (b *Bot) checkinCallback(ctx context.Context, cb *CallbackQuery, name strin
 	}
 	op, id := parts[0], parts[1]
 	asked := parts[2][:4] + "-" + parts[2][4:6] + "-" + parts[2][6:]
+	if !entries.ValidDate(asked) {
+		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "")
+		return
+	}
 	snap, err := b.Entries.Current(ctx)
 	if err != nil {
 		_ = b.API.AnswerCallbackQuery(ctx, cb.ID, "Couldn't read the entries right now.")
@@ -307,12 +311,12 @@ func (b *Bot) closeAsk(ctx context.Context, cb *CallbackQuery, text string) {
 // once at start and then every `every` (a minute in the app): a wall-clock
 // check rather than one long timer, because timers drift while a laptop
 // sleeps. So if the app wasn't running at the scheduled time, the check-in
-// goes out when it starts, until CheckinCutoff. Returns when ctx ends.
+// goes out when it starts, until sched.CheckinCutoff. Returns when ctx ends.
 func (b *Bot) CheckinLoop(ctx context.Context, every time.Duration) {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return
 	}
-	b.Log.Info("morning check-in on", "at", fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), "until", fmt.Sprintf("%02d:00", CheckinCutoff))
+	b.Log.Info("morning check-in on", "at", fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), "until", fmt.Sprintf("%02d:00", sched.CheckinCutoff))
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -351,8 +355,15 @@ func (b *Bot) CheckinTick(ctx context.Context) {
 	}
 	chat, err := b.checkinChat(ctx)
 	if err != nil {
-		b.Log.Warn("morning check-in skipped today", "err", err)
-		markFinished()
+		// Not remembered as finished: fixing the allowlist on the web page
+		// lets it go out the same day. Warned once a day.
+		b.mu.Lock()
+		warn := b.checkinWarned != day
+		b.checkinWarned = day
+		b.mu.Unlock()
+		if warn {
+			b.Log.Warn("morning check-in can't go out until this is fixed", "err", err)
+		}
 		return
 	}
 	claim, cur, err := ci.State.Claim(ctx, day, strconv.FormatInt(chat, 10), now)
@@ -415,7 +426,7 @@ func (b *Bot) CheckinStatus(ctx context.Context) *CheckinView {
 	if b.Checkin == nil || b.Checkin.State == nil {
 		return &CheckinView{}
 	}
-	v := &CheckinView{On: true, At: fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), Until: fmt.Sprintf("%02d:00", CheckinCutoff)}
+	v := &CheckinView{On: true, At: fmt.Sprintf("%02d:%02d", b.Checkin.Hour, b.Checkin.Minute), Until: fmt.Sprintf("%02d:00", sched.CheckinCutoff)}
 	if chat, err := b.checkinChat(ctx); err != nil {
 		v.Error = err.Error()
 	} else {

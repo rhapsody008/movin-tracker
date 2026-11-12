@@ -28,3 +28,10 @@ Verdict: **REJECT** (report only; ZY decides). `make lint` / `make test` passed 
 
 ## Checked fine
 settleCompleted (create/update, TZ boundary, explicit day, leaving done, kind change, undo); web dialog diffing; prompt-cache layout; callback size; claim protocol (one winner on memory + MinIO).
+
+## Status (2026-11-12)
+- ZY: fix all, including Q1. Fixed in 32d0741 (B1, M1–M4, minors, nits; Q1: buttons carry the asked date). Q2 (press racing a web edit) left open: tiny window, two users.
+
+## Re-review: APPROVE WITH NITS
+All earlier findings confirmed resolved against code and tests. New nits N1–N7 (config dead field / two schedule styles, alias constant, untested NextSince branch, mid-turn test could pass vacuously, config errors remembered for the day, ignored test errors, bad-date answer) — all fixed next (see progress.md).
+

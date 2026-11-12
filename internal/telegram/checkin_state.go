@@ -23,11 +23,6 @@ const (
 	CheckinQuiet   = "quiet" // nothing to report that day; nothing sent
 )
 
-// CheckinCutoff is the local hour after which a missed check-in is skipped
-// for the day rather than sent late; config refuses a schedule at or after
-// it.
-const CheckinCutoff = sched.CheckinCutoff
-
 // StaleClaim is how long a "sending" claim holds; after that (a crash
 // mid-send) another run may take the day over.
 const StaleClaim = 10 * time.Minute
@@ -162,10 +157,10 @@ func (s *CheckinStore) put(ctx context.Context, r CheckinRecord, ifMatch string)
 func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 // CheckinDue reports whether a check-in scheduled at hh:mm should go out
-// at now: from that time until CheckinCutoff, local time in loc.
+// at now: from that time until sched.CheckinCutoff, local time in loc.
 func CheckinDue(now time.Time, hh, mm int, loc *time.Location) bool {
 	n := now.In(loc)
 	at := time.Date(n.Year(), n.Month(), n.Day(), hh, mm, 0, 0, loc)
-	cutoff := time.Date(n.Year(), n.Month(), n.Day(), CheckinCutoff, 0, 0, 0, loc)
+	cutoff := time.Date(n.Year(), n.Month(), n.Day(), sched.CheckinCutoff, 0, 0, 0, loc)
 	return !n.Before(at) && n.Before(cutoff)
 }

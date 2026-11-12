@@ -34,8 +34,8 @@ type Config struct {
 
 	DocsSync string // DOCS_SYNC_SCHEDULE: HH:MM in TZ, or off; default 03:00
 
-	// CHECKIN_SCHEDULE: HH:MM in TZ, or off; default 09:30.
-	Checkin                    string
+	// CHECKIN_SCHEDULE: HH:MM in TZ, or off; default 09:30. (DOCS_SYNC_SCHEDULE
+	// stays a string: docs.Syncer.Background parses it.)
 	CheckinOn                  bool
 	CheckinHour, CheckinMinute int
 	CheckinChat                int64 // CHECKIN_CHAT: where the check-in goes; 0 = the first allowed group, else the first person
@@ -112,8 +112,7 @@ func Load() (Config, error) {
 	if _, _, _, err := sched.Parse("DOCS_SYNC_SCHEDULE", c.DocsSync, docs.DefaultSyncSchedule); err != nil {
 		return c, err
 	}
-	c.Checkin = env("CHECKIN_SCHEDULE", DefaultCheckin)
-	if c.CheckinHour, c.CheckinMinute, c.CheckinOn, err = sched.Parse("CHECKIN_SCHEDULE", c.Checkin, DefaultCheckin); err != nil {
+	if c.CheckinHour, c.CheckinMinute, c.CheckinOn, err = sched.Parse("CHECKIN_SCHEDULE", env("CHECKIN_SCHEDULE", DefaultCheckin), DefaultCheckin); err != nil {
 		return c, err
 	}
 	if c.CheckinOn && c.CheckinHour >= sched.CheckinCutoff {

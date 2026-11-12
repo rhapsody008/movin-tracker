@@ -305,10 +305,15 @@ func TestCheckinTakesOverACrashedClaim(t *testing.T) {
 	seed(t, r, task("Electrician", "2026-11-12"))
 	st := &telegram.CheckinStore{Store: state}
 	// The 12th went out (from another copy), then the 13th was claimed and lost.
-	c, _, _ := st.Claim(ctx, "2026-11-12", fmt.Sprint(groupID), now.Add(-24*time.Hour))
-	st.Finish(ctx, c, telegram.CheckinSent, now.Add(-24*time.Hour))
-	if c, _, _ = st.Claim(ctx, "2026-11-13", fmt.Sprint(groupID), now); c == nil {
-		t.Fatal("no crash claim")
+	c, _, err := st.Claim(ctx, "2026-11-12", fmt.Sprint(groupID), now.Add(-24*time.Hour))
+	if err != nil || c == nil {
+		t.Fatalf("claim the 12th: %v", err)
+	}
+	if err := st.Finish(ctx, c, telegram.CheckinSent, now.Add(-24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if c, _, err = st.Claim(ctx, "2026-11-13", fmt.Sprint(groupID), now); err != nil || c == nil {
+		t.Fatalf("no crash claim: %v", err)
 	}
 	r.bot.CheckinTick(ctx)
 	now = now.Add(5 * time.Minute)
@@ -428,6 +433,9 @@ func TestCheckinDuringAnAgentTurnKeepsBoth(t *testing.T) {
 	for i := 0; i < 100 && r.llm.inFlight.Load() == 0; i++ {
 		time.Sleep(5 * time.Millisecond)
 	}
+	if r.llm.inFlight.Load() == 0 {
+		t.Fatal("the agent turn never started; the test would prove nothing")
+	}
 	r.bot.CheckinTick(ctx) // lands mid-turn
 	r.tg.waitSent(t, 3)    // summary, ask, and the "ok" reply
 	r.tg.push(inGroup(groupID, zyID, "Zhou", "booked them", 81))
@@ -464,5 +472,11 @@ func TestCheckinChatMustBeAllowed(t *testing.T) {
 	r.bot.Checkin.Chat = zyID // a person on the list: fine (private chat)
 	if v := r.bot.CheckinStatus(ctx); v.Error != "" || v.Chat != fmt.Sprint(zyID) {
 		t.Fatalf("allowed person: %+v", v)
+	}
+	// Fixed the same day: it goes out at the next tick.
+	now = now.Add(30 * time.Minute)
+	r.bot.CheckinTick(ctx)
+	if s := r.tg.waitSent(t, 2); s[0].ChatID != zyID || record(t, state).Status != telegram.CheckinSent {
+		t.Fatalf("after the fix: %+v", s)
 	}
 }
