@@ -38,7 +38,9 @@ var (
 		`"time":{"type":"string","description":"HH:MM 24h; needs a date"},` +
 		`"source":{"type":"string"},` +
 		`"notes":{"type":"string"},` +
-		`"tags":{"type":"array","items":{"type":"string"}}`
+		`"tags":{"type":"array","items":{"type":"string"}},` +
+		`"milestone":{"type":"boolean","description":"a notable step for the milestones history"},` +
+		`"completed":{"type":"string","description":"YYYY-MM-DD it was done; set automatically when status becomes done"}`
 )
 
 // Tools are the entry tools; DocTools join them when documents are on.
@@ -55,6 +57,7 @@ var Tools = []llm.Tool{
 			`"category":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}},"vendor":{"type":"string"},`+
 			`"text":{"type":"string","description":"words that must all appear in the entry"},`+
 			`"date_from":{"type":"string","description":"YYYY-MM-DD"},"date_to":{"type":"string","description":"YYYY-MM-DD"},`+
+			`"milestone":{"type":"boolean","description":"true: only milestones (flagged and done); false: leave them out"},`+
 			`"include_archived":{"type":"boolean"},"limit":{"type":"integer"}}}`),
 	tool("set_dates", "Set the move-in date and/or the key collection date (YYYY-MM-DD). Pass only the ones that change.",
 		`{"type":"object","properties":{"move_in":{"type":"string"},"key_collection":{"type":"string"}}}`),
@@ -122,7 +125,7 @@ func orEmptyObj(s string) string {
 	return s
 }
 
-var entryFields = []string{"kind", "title", "room", "category", "status", "vendor", "date", "time", "source", "notes", "tags"}
+var entryFields = []string{"kind", "title", "room", "category", "status", "vendor", "date", "time", "source", "notes", "tags", "milestone", "completed"}
 
 // entryPatch keeps only the fields the tools allow, so stray keys from the
 // model are ignored rather than rejected. estimate/actual become cost.
@@ -325,6 +328,12 @@ func Summary(e entries.Entry) string {
 	if e.Vendor != "" {
 		parts = append(parts, e.Vendor)
 	}
+	if e.Completed != nil {
+		parts = append(parts, "done "+fmtDate(*e.Completed))
+	}
+	if e.Milestone {
+		parts = append(parts, "★ milestone")
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -385,6 +394,10 @@ func ChangeText(c entries.Change) string {
 	add(a.Source != b.Source, "source")
 	add(a.Notes != b.Notes, "notes")
 	add(strings.Join(a.Tags, ",") != strings.Join(b.Tags, ","), "tags")
+	add(a.Milestone && !b.Milestone, "★ milestone")
+	add(!a.Milestone && b.Milestone, "no longer a milestone")
+	// The done day moves with the status; only a day changed by itself is news.
+	add(a.Status == b.Status && ptrStr(a.Completed) != ptrStr(b.Completed), "done on "+ptrStr(a.Completed))
 	if len(diff) == 0 {
 		return "Updated: " + a.Title
 	}

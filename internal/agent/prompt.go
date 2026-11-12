@@ -38,6 +38,9 @@ type compactEntry struct {
 	Actual   *float64 `json:"actual,omitempty"`
 	Notes    string   `json:"notes,omitempty"`
 	Archived bool     `json:"archived,omitempty"`
+	// Last, so entries without them keep their exact line (prompt cache).
+	Milestone bool    `json:"milestone,omitempty"`
+	Completed *string `json:"completed,omitempty"`
 }
 
 func compact(e entries.Entry, notesLen int) compactEntry {
@@ -45,7 +48,7 @@ func compact(e entries.Entry, notesLen int) compactEntry {
 	if r := []rune(notes); len(r) > notesLen {
 		notes = string(r[:notesLen])
 	}
-	return compactEntry{e.ID, e.Kind, e.Title, e.Room, e.Category, e.Status, e.Date, e.Time, e.Vendor, e.Cost.Estimate, e.Cost.Actual, notes, e.Archived}
+	return compactEntry{e.ID, e.Kind, e.Title, e.Room, e.Category, e.Status, e.Date, e.Time, e.Vendor, e.Cost.Estimate, e.Cost.Actual, notes, e.Archived, e.Milestone, e.Completed}
 }
 
 func orNotSet(p *string) string {
@@ -93,6 +96,7 @@ Entry fields:
 - estimate / actual: SGD numbers. estimate is the quote or expected price, actual is what has been paid so far. "18k" is 18000.
 - date YYYY-MM-DD and time HH:MM (24h); a time needs a date.
 - vendor, source (where it came from: a link, a shop, a site visit), notes, tags.
+- milestone: marks a notable step (keys collected, kitchen installed); a done milestone is listed in their milestones history. completed: the day it was done, set automatically when status becomes done; pass it only when the user names another day.
 
 Rules:
 - When a message states something worth keeping (an idea, a decision, a quote, a payment, a date, progress), record it with the tools. Put several new entries in one add_entry call.
@@ -100,6 +104,7 @@ Rules:
 - Never invent dates, amounts, vendors or rooms the user didn't give. Resolve relative dates like "Friday" from today.
 - If you can't tell what to record (for example which room, or whether something was decided), ask one short question and record nothing yet.
 - Questions about past decisions, costs or plans: answer from the entries; call search_entries when the list above is not enough.
+- Set milestone only when the user calls something a milestone or asks for one. To list milestones, call search_entries with milestone=true.
 - "Drop", "remove" or "forget" means archive (update_entry with archived=true). "Undo that" means undo_change.
 - Reply in one to three short plain-text sentences. Don't repeat the saved fields; the app shows them.`,
 		strings.Join(entries.Rooms, ", "), strings.Join(Categories, ", "))
