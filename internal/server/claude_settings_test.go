@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -100,5 +101,52 @@ func TestClaudeKindThroughTheAPI(t *testing.T) {
 	}
 	if strings.Contains(e.logs.String(), "sk-ant-saved-3333") || strings.Contains(e.logs.String(), "sk-ant-typed-2222") {
 		t.Fatalf("key in logs")
+	}
+}
+
+// The page keeps "/think …" in its history: the server strips it from every
+// user turn, and only the newest turn decides whether to think.
+func TestThinkStrippedFromEveryWebTurn(t *testing.T) {
+	var mu sync.Mutex
+	var seen []string
+	var kwargs []string
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			fmt.Fprint(w, `{"data":[{"id":"m"}]}`)
+			return
+		}
+		var body struct {
+			Messages []struct{ Role, Content string } `json:"messages"`
+			Kwargs   json.RawMessage                  `json:"chat_template_kwargs"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		for _, m := range body.Messages {
+			if m.Role == "user" {
+				seen = append(seen, m.Content)
+			}
+		}
+		kwargs = append(kwargs, string(body.Kwargs))
+		mu.Unlock()
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+	}))
+	defer llmSrv.Close()
+	e := setup(t, objstore.NewMemory(), nil)
+	if code, _, raw := e.do(t, "PUT", "/api/settings/llm", fmt.Sprintf(`{"baseUrl":%q,"model":"m","streaming":false,"thinkOnDemand":true}`, llmSrv.URL+"/v1")); code != 200 {
+		t.Fatalf("save: %d %s", code, raw)
+	}
+	turns := `{"turns":[{"role":"user","content":"/think compare the quotes"},{"role":"assistant","content":"A is cheaper."},{"role":"user","content":"and the warranty?"}]}`
+	if code, _, raw := e.do(t, "POST", "/api/chat", turns); code != 200 {
+		t.Fatalf("chat: %d %s", code, raw)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, c := range seen {
+		if strings.Contains(c, "/think") {
+			t.Fatalf("model saw %q", c)
+		}
+	}
+	if len(kwargs) == 0 || !strings.Contains(kwargs[0], `"enable_thinking":false`) {
+		t.Fatalf("the newest turn has no /think, so thinking should be off: %v", kwargs)
 	}
 }

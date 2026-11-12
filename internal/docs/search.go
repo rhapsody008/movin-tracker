@@ -220,19 +220,21 @@ func uniq(ts []string) []string {
 // snippet returns about 240 characters around the first query word on the
 // page, whitespace collapsed.
 func snippet(text string, q []string) string {
-	flat := strings.Join(strings.Fields(text), " ")
-	low := strings.ToLower(flat)
+	r := []rune(strings.Join(strings.Fields(text), " "))
+	// Lowercase rune by rune so positions match r exactly (lowercasing a
+	// string can change its byte length, e.g. Ⱥ → ⱥ).
+	low := make([]rune, len(r))
+	for i, c := range r {
+		low[i] = unicode.ToLower(c)
+	}
 	at := -1
 	for _, t := range q {
-		if i := strings.Index(low, t); i >= 0 && (at < 0 || i < at) {
+		if i := runeIndex(low, []rune(t)); i >= 0 && (at < 0 || i < at) {
 			at = i
 		}
 	}
-	r := []rune(flat)
 	if at < 0 {
 		at = 0
-	} else {
-		at = len([]rune(flat[:at]))
 	}
 	start := max(0, at-80)
 	end := min(len(r), start+240)
@@ -244,4 +246,21 @@ func snippet(text string, q []string) string {
 		out += "…"
 	}
 	return out
+}
+
+// runeIndex is strings.Index on rune slices.
+func runeIndex(s, sub []rune) int {
+	if len(sub) == 0 {
+		return 0
+	}
+outer:
+	for i := 0; i+len(sub) <= len(s); i++ {
+		for j := range sub {
+			if s[i+j] != sub[j] {
+				continue outer
+			}
+		}
+		return i
+	}
+	return -1
 }

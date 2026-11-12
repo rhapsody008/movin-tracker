@@ -88,3 +88,16 @@ func TestSearchSeesNewDocumentsAfterSync(t *testing.T) {
 		t.Fatalf("after sync: %+v", hits)
 	}
 }
+
+// Lowercasing can change a string's byte length (Ⱥ → ⱥ); the snippet must
+// still be cut at the right place, not panic.
+func TestSnippetWithLengthChangingCase(t *testing.T) {
+	r := newRig(t)
+	r.conv.Pages["pdf-odd"] = []docs.Page{{N: 1, W: 595, H: 842, Text: strings.Repeat("Ⱥ", 120) + " valve"}}
+	r.put(t, "docs/raw/odd.pdf", "pdf-odd")
+	r.run(t)
+	hits, err := (&docs.Library{Sync: r.sync}).Search(context.Background(), "valve", docs.SearchOptions{})
+	if err != nil || len(hits) != 1 || !strings.HasSuffix(hits[0].Snippet, "valve") {
+		t.Fatalf("%+v %v", hits, err)
+	}
+}

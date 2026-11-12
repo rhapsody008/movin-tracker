@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go/v2"
+
 	"github.com/rhapsody008/movin-tracker/internal/llm"
 	"github.com/rhapsody008/movin-tracker/internal/settings"
 )
@@ -312,8 +314,12 @@ func TestClaudeStopReasons(t *testing.T) {
 	// pause_turn is sent back once and the continuation answers.
 	f := newFakeClaude(t, jsonReply(message("pause_turn", text("..."))), jsonReply(message("end_turn", text("done"))))
 	res, err := llm.New(f.cfg()).Complete(context.Background(), llm.Request{Messages: []llm.Message{{Role: "user", Content: "q"}}})
-	if err != nil || res.Message.Content != "done" || len(f.reqs) != 2 {
-		t.Fatalf("pause_turn: %v %+v reqs=%d", err, res, len(f.reqs))
+	// Both parts come back as one turn: text, blocks and usage merged.
+	if err != nil || res.Message.Content != "...done" || len(f.reqs) != 2 || res.Usage.In != 2400 || res.Usage.Out != 80 {
+		t.Fatalf("pause_turn: %v content %q usage %+v reqs=%d", err, res.Message.Content, res.Usage, len(f.reqs))
+	}
+	if blocks, ok := res.Message.Native.([]anthropic.BetaContentBlockParamUnion); !ok || len(blocks) != 2 {
+		t.Fatalf("pause_turn: native blocks %v", res.Message.Native)
 	}
 }
 
@@ -466,5 +472,42 @@ func TestClaudeRefusalFallbacks(t *testing.T) {
 	}
 	if res.Stop != llm.StopRefusal {
 		t.Errorf("whole-chain refusal: stop %q", res.Stop)
+	}
+}
+
+// More cache marks than the API allows: the earliest system marks go.
+func TestClaudeCacheMarkLimit(t *testing.T) {
+	f := newFakeClaude(t, jsonReply(message("end_turn", text("ok"))))
+	var secs []llm.Section
+	for i := 0; i < 5; i++ {
+		secs = append(secs, llm.Section{Text: fmt.Sprintf("part %d", i), CacheBreak: true})
+	}
+	if _, err := llm.New(f.cfg()).Complete(context.Background(), llm.Request{System: secs, Messages: []llm.Message{{Role: "user", Content: "q"}}}); err != nil {
+		t.Fatal(err)
+	}
+	marks := strings.Count(f.req(0).raw, `"cache_control"`)
+	if marks != llm.MaxCacheMarks {
+		t.Fatalf("%d cache marks sent, want %d", marks, llm.MaxCacheMarks)
+	}
+	sys := f.req(0).body["system"].([]any)
+	if sys[0].(map[string]any)["cache_control"] != nil || sys[4].(map[string]any)["cache_control"] == nil {
+		t.Fatalf("the earliest marks should go: %v", sys)
+	}
+}
+
+// A model lookup cut short by the caller isn't remembered as "no fallbacks".
+func TestClaudeFallbackLookupNotCachedOnCancel(t *testing.T) {
+	f := newFakeClaude(t, jsonReply(message("end_turn", text("ok"))))
+	f.fallbacks = []string{"claude-opus-5"}
+	cfg := f.cfg()
+	cfg.Model = "claude-cancel-test"
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	llm.New(cfg).Complete(ctx, llm.Request{Messages: []llm.Message{{Role: "user", Content: "q"}}})
+	if _, err := llm.New(cfg).Complete(context.Background(), llm.Request{Messages: []llm.Message{{Role: "user", Content: "q"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if f.req(len(f.reqs) - 1).body["fallbacks"] != "default" {
+		t.Fatal("a cancelled lookup disabled fallbacks for the next caller")
 	}
 }

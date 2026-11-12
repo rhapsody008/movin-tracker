@@ -441,8 +441,18 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Settings.Resolve(r.Context())
 	user := userOf(r)
 	req := agent.Request{By: user, Channel: "web", Turns: body.Turns}
-	if n := len(req.Turns); n > 0 && req.Turns[n-1].Role == "user" {
-		req.Turns[n-1].Content, req.Think = agent.ParseThink(req.Turns[n-1].Content)
+	// The page keeps "/think …" in its history: strip it from every user
+	// turn (so earlier turns read the same each time, which keeps the
+	// prompt cache warm); only the newest turn decides whether to think.
+	for i, t := range req.Turns {
+		if t.Role != "user" {
+			continue
+		}
+		var think bool
+		req.Turns[i].Content, think = agent.ParseThink(t.Content)
+		if i == len(req.Turns)-1 {
+			req.Think = think
+		}
 	}
 	wantStream := cfg.Streaming && strings.Contains(r.Header.Get("Accept"), "text/event-stream")
 	if !wantStream {

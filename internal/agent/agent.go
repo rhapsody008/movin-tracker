@@ -69,7 +69,7 @@ type Result struct {
 
 // RefusalReply is what the user sees when the model declines a message.
 // Changes made earlier in the turn stay (each has its own Undo).
-const RefusalReply = "Claude declined this message. Try rephrasing it."
+const RefusalReply = "The model declined to answer this message. Try rephrasing it."
 
 // NotFoundInDocsReply is the reply when the model searched the documents
 // and then said nothing.

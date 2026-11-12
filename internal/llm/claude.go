@@ -85,6 +85,9 @@ func (c *claude) fallbacksAllowed(ctx context.Context) bool {
 	info, err := c.client.Beta.Models.Get(lctx, c.cfg.Model, anthropic.BetaModelGetParams{
 		Betas: []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01},
 	})
+	if err != nil && ctx.Err() != nil {
+		return false // the caller gave up; that says nothing about the model
+	}
 	e = fallbackEntry{until: time.Now().Add(time.Hour)}
 	if err != nil {
 		e.until = time.Now().Add(5 * time.Minute)
@@ -136,11 +139,19 @@ func (c *claude) Complete(ctx context.Context, in Request) (Response, error) {
 		return Response{}, err
 	}
 	if msg.StopReason == anthropic.BetaStopReasonPauseTurn {
-		// The server paused a long turn; send it back once to continue.
+		// The server paused a long turn; send it back once to continue, and
+		// return both parts as one assistant turn (content and usage).
 		params.Messages = append(params.Messages, msg.ToParam())
-		if msg, err = c.call(ctx, params, in); err != nil {
+		next, err := c.call(ctx, params, in)
+		if err != nil {
 			return Response{}, err
 		}
+		next.Content = append(append([]anthropic.BetaContentBlockUnion{}, msg.Content...), next.Content...)
+		next.Usage.InputTokens += msg.Usage.InputTokens
+		next.Usage.OutputTokens += msg.Usage.OutputTokens
+		next.Usage.CacheReadInputTokens += msg.Usage.CacheReadInputTokens
+		next.Usage.CacheCreationInputTokens += msg.Usage.CacheCreationInputTokens
+		msg = next
 	}
 	return claudeResponse(msg), nil
 }
@@ -190,6 +201,7 @@ func (c *claude) params(in Request) (anthropic.BetaMessageNewParams, error) {
 		}
 		p.System = append(p.System, b)
 	}
+	limitCacheMarks(p.System)
 	tools, err := claudeTools(in.Tools)
 	if err != nil {
 		return p, err
@@ -206,6 +218,25 @@ func (c *claude) params(in Request) (anthropic.BetaMessageNewParams, error) {
 	}
 	p.Messages, err = claudeMessages(in.Messages)
 	return p, err
+}
+
+// MaxCacheMarks is the API's limit on cache breakpoints per request; one
+// goes on the conversation (top level), the rest on system sections.
+const MaxCacheMarks = 4
+
+// limitCacheMarks keeps at most MaxCacheMarks-1 marks on the system blocks,
+// dropping the earliest: a later mark caches everything before it anyway,
+// and a fifth mark would make the API refuse the request.
+func limitCacheMarks(sys []anthropic.BetaTextBlockParam) {
+	marks := 0
+	for i := len(sys) - 1; i >= 0; i-- {
+		if sys[i].CacheControl.TTL == "" {
+			continue
+		}
+		if marks++; marks > MaxCacheMarks-1 {
+			sys[i].CacheControl = anthropic.BetaCacheControlEphemeralParam{}
+		}
+	}
 }
 
 // claudeTools converts the OpenAI-shaped JSON schemas. Keys other than
