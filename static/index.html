@@ -78,7 +78,7 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 
 /* layout */
 .main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:22px;align-items:start}
-.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.board{margin-top:22px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .col{background:var(--sunk);border-radius:12px;padding:10px;min-height:200px;border:2px solid transparent}
 .col.drop{border-color:var(--focus)}
 .colhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:8px}
@@ -106,7 +106,7 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 .empty{color:var(--muted);font-size:14px;margin:4px 2px 8px}
 
 /* calendar */
-.cal{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;scroll-margin-top:16px}
+.cal{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;scroll-margin-top:16px}
 .calhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .calhead h2{font-size:22px}
 .calnav{display:flex;gap:6px}
@@ -129,7 +129,7 @@ header.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:cent
 @media (max-width:700px){ .grid7{display:none} .agenda{display:block} }
 
 /* milestones */
-.miles{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;scroll-margin-top:16px}
+.miles{margin-top:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;scroll-margin-top:16px}
 .miles h2{font-size:22px;margin-bottom:8px}
 .miles h3{font-family:var(--body);font-size:14px;color:var(--muted);font-weight:700;margin:12px 0 4px}
 .mi{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;background:none;border:0;border-left:3px solid var(--brass);padding:5px 8px;margin-bottom:4px;cursor:pointer;font:inherit;color:inherit}
@@ -300,7 +300,10 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
   </div>
   <div class="main">
     <section>
-      <div class="board" id="board"></div>
+      <section class="miles" id="milestones" aria-label="Milestones">
+        <h2>Milestones</h2>
+        <div id="mileList"></div>
+      </section>
       <section class="cal" id="calendar" aria-label="Calendar">
         <div class="calhead"><h2 id="calTitle"></h2>
           <div class="calnav"><button type="button" id="calPrev" aria-label="Previous month">‹</button><button type="button" id="calToday">Today</button><button type="button" id="calNext" aria-label="Next month">›</button></div>
@@ -308,10 +311,7 @@ label input,label select,label textarea{border:1px solid var(--line);border-radi
         <div class="grid7" id="calGrid"></div>
         <div class="agenda" id="calAgenda"></div>
       </section>
-      <section class="miles" id="milestones" aria-label="Milestones">
-        <h2>Milestones</h2>
-        <div id="mileList"></div>
-      </section>
+      <div class="board" id="board"></div>
       <div class="foot">
         <button class="link" id="toggleArchived" type="button"></button>
       </div>
