@@ -138,3 +138,11 @@ ZY accepted the planner's recommendations (plan.md 'Milestones + morning check-i
 12. Run the two milestone eval cases on Claude (a few cents).
 - 8 (quiet days: no message, the day recorded as quiet) — recommendation explained to ZY; open until C.3, default as recommended.
 - M.1–M.4 may proceed; the C.5 live send in the real chat needs ZY's go-ahead.
+
+## After milestones + check-in (ZY, 2026-11-12)
+- Milestones and the morning check-in accepted after trying both. CI after the push (QEMU + poppler-test) passed: done until it fails.
+- Pending on ZY: review the admin guide (step 1.12).
+- Backlog (not now): scanned documents (vision/OCR), Phase 2 (photos and voice notes), NKP deployment (waits for the cluster).
+- Do now: move the group rule out of the cached rules section; check-in time and chat editable on the Telegram tab; the older review nits + lint extras; the two edge cases (no size cap on a viewed PDF; a check-in press racing a web edit).
+- **Bucket versioning: turn it on** (reverses 'versioning stays off'). ZY flips it in the console; docs updated.
+

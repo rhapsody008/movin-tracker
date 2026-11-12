@@ -208,4 +208,11 @@ func TestSystemSectionsStability(t *testing.T) {
 	if d[0] != c[0] || d[1] == c[1] || d[2] != c[2] {
 		t.Fatalf("an entry write should change only the entries part")
 	}
+	// A group chat shares the cached rules and entries with a private one;
+	// only the small uncached last part differs.
+	snap, _ := r.svc.Current(ctx)
+	g := r.runner.SystemSections(snap.Doc, agent.Request{Group: true})
+	if g[0].Text != d[0] || g[1].Text != d[1] || !strings.Contains(g[2].Text, "This is a group chat") || g[2].CacheBreak {
+		t.Fatalf("group layout: the group line belongs in the uncached part only")
+	}
 }

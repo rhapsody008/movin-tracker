@@ -108,16 +108,18 @@ Rules:
 - "Drop", "remove" or "forget" means archive (update_entry with archived=true). "Undo that" means undo_change.
 - Reply in one to three short plain-text sentences. Don't repeat the saved fields; the app shows them.`,
 		strings.Join(entries.Rooms, ", "), strings.Join(Categories, ", "))
-	if req.Group {
-		fmt.Fprintf(&b, `
-This is a group chat; each user message starts with the speaker's name. If a message needs nothing recorded and asks you nothing (chat between the two of them), reply with exactly %s.`, SilentReply)
-	}
 	// Most stable first, so a prompt cache keeps as much as possible: the
 	// rules change only with a new build, the entries with a write, the
-	// date every day (and is tiny, so it is never cached).
+	// date every day (and is tiny, so it is never cached). The group line
+	// sits in that last part too, so group and private chats share the
+	// cached rules and entries.
 	entriesPart := fmt.Sprintf("\n\nCurrent entries%s: %s", more, listJSON)
 	datePart := fmt.Sprintf("\nToday is %s (%s). Key collection: %s. Move-in: %s.",
 		now.Format("2006-01-02"), now.Format("Monday"), orNotSet(d.Meta.KeyDate), orNotSet(d.Meta.MoveDate))
+	if req.Group {
+		datePart += fmt.Sprintf(`
+This is a group chat; each user message starts with the speaker's name. If a message needs nothing recorded and asks you nothing (chat between the two of them), reply with exactly %s.`, SilentReply)
+	}
 	return []llm.Section{
 		{Text: b.String(), CacheBreak: true},
 		{Text: entriesPart, CacheBreak: true},

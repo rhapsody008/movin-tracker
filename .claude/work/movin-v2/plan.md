@@ -204,6 +204,11 @@ Order: M.1 → M.2 → M.3 → M.4 → C.1 → C.2 → C.3 → C.4 → C.5; then
 - **Milestones:** a "Checked milestones" record — milestone events with their date — to keep track of what has been done (ZY: "in history"; shape to be decided: likely a new entry kind or a flag on done entries, shown on the web page).
 - **Morning check-in:** every day at 09:30 SGT the bot messages ZY on Telegram with today's tasks and yesterday's tasks, asks whether yesterday's are done, and offers per task: mark done (and add to milestones) or reschedule. Questions for the planner: private chat vs the group, one message vs one per task, buttons vs free text, what counts as "a task for today" (dated tasks, overdue ones), quiet days, and the single-replica scheduler (same constraint as the bot poller; also the document sync's daily schedule).
 
+## Backlog (ZY, 2026-11-12)
+- Scanned documents (see 'Later phase: scanned documents').
+- Phase 2: photos and voice notes (below).
+- NKP deployment (D.*): when the cluster is ready.
+
 ## Phase 2 (room left, not built)
 attachments[]{key,mime} on entries + `<prefix>/media/`; agent.Request.Images; Telegram dispatch by message type; settings `stt` section; `docs/facts/<sheet>.json` + reviewed flag.
 
