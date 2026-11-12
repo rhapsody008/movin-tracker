@@ -1228,7 +1228,8 @@ function renderDocs(){
       if(d.status === "skipped") note = `Skipped: ${d.reason}`;
       if(d.status === "failed") note = `Couldn't be read: ${d.reason}`;
       if(d.status === "removed") note = `Removed from the bucket ${when(d.removedAt)}`;
-      return `<li><span>${esc(d.name)}</span>${meta?`<span class="meta">${esc(meta)}</span>`:""}${note?`<span class="meta ${d.status==="failed"?"bad":""}">${esc(note)}</span>`:""}${d.summary?`<span class="meta">${esc(d.summary)}</span>`:""}</li>`;
+      if(d.status === "ok" && d.error) note = `Last re-read failed ${when(d.errorAt)}: ${d.error}. The previous version is still used.`;
+      return `<li><span>${esc(d.name)}</span>${meta?`<span class="meta">${esc(meta)}</span>`:""}${note?`<span class="meta ${d.status==="failed"||d.error?"bad":""}">${esc(note)}</span>`:""}${d.summary?`<span class="meta">${esc(d.summary)}</span>`:""}</li>`;
     }).join("");
     return `<details><summary>${esc(f)} (${folders[f].length})</summary><ul>${items}</ul></details>`;
   }).join("") || `<p class="sub">No documents yet. Upload PDFs under docs/raw/ in the bucket, then press Sync now.</p>`;

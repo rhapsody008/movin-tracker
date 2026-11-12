@@ -78,3 +78,22 @@ func TestViewerDoesNotCacheHugePDFs(t *testing.T) {
 		t.Fatalf("cache %d PDFs (%d bytes), %d views", n, b, views)
 	}
 }
+
+// A PDF replaced in the bucket but not re-read yet isn't shown: its pages
+// wouldn't match the stored words. Nothing is cached for it either.
+func TestViewerRefusesAnUnreadNewVersion(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	r.put(t, "docs/raw/1.0 Plans/Sheet.pdf", "pdf-drawing-v1")
+	r.run(t)
+	id := r.doc(t, "docs/raw/1.0 Plans/Sheet.pdf").ID
+	r.put(t, "docs/raw/1.0 Plans/Sheet.pdf", "pdf-drawing-v2") // uploaded, no sync yet
+	v := &docs.Viewer{Sync: r.sync, Conv: r.conv}
+	_, err := v.View(ctx, id, 1, nil)
+	if !errors.Is(err, docs.ErrNotViewable) || !strings.Contains(err.Error(), "waiting to be re-read") {
+		t.Fatalf("err %v", err)
+	}
+	if n, _, views, _ := v.Size(); n != 0 || views != 0 {
+		t.Fatalf("cached %d PDFs, %d views for a mismatched version", n, views)
+	}
+}

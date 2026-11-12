@@ -27,7 +27,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # GPL, unmodified Alpine packages. DejaVu is the fallback for drawings whose
 # fonts aren't embedded.
 FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
-RUN apk add --no-cache poppler-utils font-dejavu fontconfig \
+# poppler-utils is pinned to its minor release (patch fixes still come in);
+# make test and CI run the converter tests on this same stage.
+RUN apk add --no-cache "poppler-utils~25.12" font-dejavu fontconfig \
  && fc-cache -f \
  && adduser -D -H -u 65532 nonroot
 
@@ -41,7 +43,7 @@ COPY --from=poppler-test-bin /out/convert.test /t/convert.test
 COPY internal/docs/convert/testdata /t/testdata
 WORKDIR /t
 USER 65532:65532
-RUN ./convert.test -test.count=1 -test.v | grep -E "^(--- |ok|FAIL|PASS)"; ./convert.test -test.count=1
+RUN set -o pipefail && ./convert.test -test.count=1 -test.v | grep -E "^(--- |ok|FAIL|PASS)"
 
 # ---- production: the binary on the runtime above, non-root, read-only root filesystem ----
 FROM runtime

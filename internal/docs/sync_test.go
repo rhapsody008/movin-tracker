@@ -329,6 +329,9 @@ func TestFailedRereadKeepsTheDocument(t *testing.T) {
 	if res.Failed != 1 || res.Changes() || d.Status != docs.StatusOK || d.Pages != 2 || r.notes.count() != 0 {
 		t.Fatalf("failed re-read: %+v doc %+v notes %d", res, d, r.notes.count())
 	}
+	if !strings.Contains(d.Error, "pdftotext: timeout") || d.ErrorAt != res.At {
+		t.Fatalf("the failure isn't on the record: %+v", d)
+	}
 	lib := &docs.Library{Sync: r.sync}
 	if hits, _ := lib.Search(ctx, "defrost freezer", docs.SearchOptions{}); len(hits) == 0 {
 		t.Fatal("document not searchable after a failed re-read")
@@ -337,6 +340,9 @@ func TestFailedRereadKeepsTheDocument(t *testing.T) {
 	delete(r.conv.Fail, "pdf-manual-v2")
 	if res := r.run(t); res.Changed != 1 || res.Added != 0 || r.notes.count() != 1 {
 		t.Fatalf("recovery: %+v notes %d", res, r.notes.count())
+	}
+	if d := r.doc(t, manual); d.Error != "" || d.ErrorAt != "" {
+		t.Fatalf("error not cleared after a good read: %+v", d)
 	}
 }
 
@@ -364,13 +370,13 @@ func TestRedoRemembersEverything(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Attempt 1 converts all three and summarises the two readable ones; the
-	// redo converts nothing, and the other writer's summary-less record gets
-	// its single summary try.
+	// redo converts nothing and buys no summary again, not even for the
+	// other writer's summary-less record (attempt 1 already summarised it).
 	if r.conv.CallCount() != 3 {
 		t.Fatalf("conversions %d, want 3 (no repeats)", r.conv.CallCount())
 	}
-	if sum.n() != 3 {
-		t.Fatalf("summary calls %d, want 3: %v", sum.n(), sum.calls)
+	if sum.n() != 2 {
+		t.Fatalf("summary calls %d, want 2: %v", sum.n(), sum.calls)
 	}
 	ix, _ := s.Index(ctx)
 	for _, d := range ix.Docs {

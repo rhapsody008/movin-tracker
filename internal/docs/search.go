@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Library answers questions about the documents' text: a BM25 index over
@@ -227,10 +228,13 @@ func snippet(text string, q []string) string {
 	for i, c := range r {
 		low[i] = unicode.ToLower(c)
 	}
+	lows := string(low)
 	at := -1
 	for _, t := range q {
-		if i := runeIndex(low, []rune(t)); i >= 0 && (at < 0 || i < at) {
-			at = i
+		if i := strings.Index(lows, t); i >= 0 {
+			if ri := utf8.RuneCountInString(lows[:i]); at < 0 || ri < at {
+				at = ri
+			}
 		}
 	}
 	if at < 0 {
@@ -246,21 +250,4 @@ func snippet(text string, q []string) string {
 		out += "…"
 	}
 	return out
-}
-
-// runeIndex is strings.Index on rune slices.
-func runeIndex(s, sub []rune) int {
-	if len(sub) == 0 {
-		return 0
-	}
-outer:
-	for i := 0; i+len(sub) <= len(s); i++ {
-		for j := range sub {
-			if s[i+j] != sub[j] {
-				continue outer
-			}
-		}
-		return i
-	}
-	return -1
 }

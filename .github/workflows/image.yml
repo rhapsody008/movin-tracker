@@ -63,7 +63,21 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The runtime stage runs apk (poppler) for each platform.
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
+
+      # The converter tests on the exact poppler the image ships, per platform.
+      - name: Poppler tests on the production runtime
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: poppler-test
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'

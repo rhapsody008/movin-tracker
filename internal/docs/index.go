@@ -75,6 +75,10 @@ type Doc struct {
 	SyncedAt  string `json:"syncedAt,omitempty"`
 	Version   int    `json:"v,omitempty"` // ConvertVersion it was read with
 	RemovedAt string `json:"removedAt,omitempty"`
+	// Error is the last failed read (cleared by the next good one); a
+	// readable document keeps its old record and status meanwhile.
+	Error   string `json:"error,omitempty"`
+	ErrorAt string `json:"errorAt,omitempty"`
 }
 
 // Sync is the outcome of one sync run, kept as lastSync.

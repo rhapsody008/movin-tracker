@@ -69,7 +69,7 @@ func (b *Bot) syncCommand(ctx context.Context, m *Message) {
 	if ix != nil {
 		var touched []docs.Doc
 		for _, d := range ix.Docs {
-			if d.SyncedAt == res.At || d.RemovedAt == res.At {
+			if d.SyncedAt == res.At || d.RemovedAt == res.At || d.ErrorAt == res.At {
 				touched = append(touched, d)
 			}
 		}
@@ -102,13 +102,15 @@ func docList(ds []docs.Doc, max int) string {
 			break
 		}
 		state := ""
-		switch d.Status {
-		case docs.StatusRemoved:
+		switch {
+		case d.Status == docs.StatusRemoved:
 			state = " (removed)"
-		case docs.StatusFailed:
+		case d.Status == docs.StatusFailed:
 			state = " (couldn't be read)"
+		case d.Error != "":
+			state = " (the new version couldn't be read; the previous one is still used)"
 		}
-		if d.Class == docs.ClassScanned && d.Status == docs.StatusOK {
+		if d.Class == docs.ClassScanned && d.Status == docs.StatusOK && d.Error == "" {
 			state = " (pictures only: not searchable yet)"
 		}
 		lines = append(lines, "• "+d.Name()+state)

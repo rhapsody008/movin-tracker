@@ -109,9 +109,14 @@ func (v *Viewer) pdf(ctx context.Context, d Doc) ([]byte, error) {
 	if ok {
 		return b, nil
 	}
-	b, _, err := v.Sync.Store.Get(ctx, d.Key)
+	b, etag, err := v.Sync.Store.Get(ctx, d.Key)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", d.Name(), err)
+	}
+	if etag != d.ETag {
+		// A newer upload the index hasn't read yet (or failed to read): its
+		// pages wouldn't match the stored text and word boxes.
+		return nil, fmt.Errorf("%w: %s was replaced and is waiting to be re-read; try again after the next sync (/sync)", ErrNotViewable, d.Name())
 	}
 	v.mu.Lock()
 	if len(b) <= maxPDFToCache {

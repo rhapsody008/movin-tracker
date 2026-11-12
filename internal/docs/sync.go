@@ -355,14 +355,19 @@ func (s *Syncer) update(ctx context.Context, d *Doc, o objstore.ObjectInfo, now 
 		res.Failed++
 		s.Log.Warn("document sync failed", "key", o.Key, "err", out.err, "keptPrevious", wasOK)
 		if wasOK {
-			return // keep the readable record; the next sync tries again
+			// Keep the readable record; the next sync tries again. Say why
+			// on the record so the admin sees which file it was.
+			d.Error, d.ErrorAt = "couldn't read the new version: "+out.err.Error(), now
+			return
 		}
 		d.Status, d.Reason, d.ETag, d.Size, d.SyncedAt = StatusFailed, out.err.Error(), o.ETag, o.Size, now
+		d.Error, d.ErrorAt = out.err.Error(), now
 		return
 	}
 	id := d.ID
 	*d = out.doc
 	d.ID, d.SyncedAt, d.RemovedAt, d.Version = id, now, "", ConvertVersion
+	d.Error, d.ErrorAt = "", ""
 	switch {
 	case refresh:
 		res.Refreshed++ // not announced
@@ -382,6 +387,10 @@ func (s *Syncer) retrySummary(ctx context.Context, d *Doc, memo *runMemo) {
 		return
 	}
 	k := memoKey(d.Key, d.ETag)
+	if out, ok := memo.converted[k]; ok && out.err == nil && out.doc.Summary != "" {
+		d.Summary = out.doc.Summary // bought while converting, earlier in this run
+		return
+	}
 	sum, tried := memo.summaries[k]
 	if !tried {
 		if pt, err := s.PageText(ctx, *d); err == nil {
