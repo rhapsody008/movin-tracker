@@ -182,8 +182,7 @@ func CredentialLabel(source string) string {
 	return source
 }
 
-// CreateBucket makes the bucket and turns versioning on. Local dev only; the
-// production IAM policy deliberately does not allow it.
+// CreateBucket makes the bucket and turns versioning on. Tests (MinIO) only.
 func (s *S3) CreateBucket(ctx context.Context) error {
 	_, err := s.Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &s.Bucket})
 	var owned *types.BucketAlreadyOwnedByYou

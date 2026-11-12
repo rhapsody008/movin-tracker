@@ -8,7 +8,8 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - ZY pushed main (e103d33..3b2d49f).
 - /doctor (Claude Code itself, not the repo): the 'auto-update failed' message was transient (already on the newest release); auto mode made the default permission mode in `~/.claude/settings.json` (backup `settings.json.bak-doctor`).
 - Tracking files brought up to date: this entry, superseded lines marked in decisions.md, package table in plan.md.
-- Open for ZY: apply `deploy/iam-policy.json` (docs/raw/ Deny); check the first CI run with QEMU + poppler-test.
+- ZY dropped fine-grained IAM (home app): `deploy/iam-policy.json` deleted, docs say read/write/list/delete on the bucket.
+- Open for ZY: check the first CI run with QEMU + poppler-test.
 - Next: ZY picks between the backlog (milestones, 09:30 check-in; planner) and deployment (waits for the NKP cluster).
 
 ## 2026-11-11 — kickoff

@@ -37,7 +37,7 @@ Do these once. They produce the values that go into the Secrets in the next sect
 ### 3. AWS bucket and access key
 
 1. Create the bucket in `ap-southeast-1` with **versioning on** and default encryption (SSE-S3). Versioning is your backup and undo-of-last-resort.
-2. Create an IAM user for the app and attach [deploy/iam-policy.json](../deploy/iam-policy.json), changing the bucket name to yours. It allows read/write on the bucket's objects, delete only under `_probe/` (the storage test's scratch files), and listing the bucket. It also **denies** the app any write or delete under `docs/raw/`: your PDFs are the source of truth, and with versioning off nothing else could bring them back. Upload them as yourself in the S3 console (your own login, not this user's key). The same bucket and key serve your Mac (`make dev`) and production: there is one copy of the data.
+2. Create an IAM user for the app with read, write, list and delete on the bucket (a home app: no fine-grained policy). The app itself only writes `entries.json`, `settings.json`, `docs/index.json`, `docs/text/` and the storage test's scratch files under `_probe/`; it never changes or deletes your PDFs in `docs/raw/`. The same bucket and key serve your Mac (`make dev`) and production: there is one copy of the data.
 3. Create an **access key** for that user. NKP clusters have no IRSA, so the pod uses this static key pair.
 
 ### 4. Two random secrets
@@ -202,7 +202,7 @@ When Telegram upgrades a group to a "supergroup", its ID changes. The new ID sho
 
 ### Add or replace documents
 
-1. In the S3 console (signed in as yourself; the app's own IAM user is not allowed to write here) open the bucket, then `docs/raw/` (make folders freely, e.g. `docs/raw/9.0 Contracts/`).
+1. In the S3 console open the bucket, then `docs/raw/` (make folders freely, e.g. `docs/raw/9.0 Contracts/`).
 2. Upload the PDFs. Replacing a file with the same name counts as a new version.
 3. Wait for the nightly sync (03:00), or send `/sync` to the bot, or press **Settings → Documents → Sync now**.
 
@@ -289,9 +289,9 @@ make clean     # stop and delete the test MinIO's data (never the bucket)
 | Last error mentions 409 / "another poller" | A second copy uses the same token (second replica, or a laptop running it) | Stop the other copy; keep replicas at 1 |
 | Replies say "Sorry, that didn't go through" | The LLM endpoint is down or wrong | Settings → LLM → Test connection; fix and Save |
 | Chat uses a model you didn't expect | An endpoint saved on the page overrides env | Change it in Settings → LLM |
-| Storage test fails at "create" | No write permission, wrong bucket or prefix | Check the IAM policy and `S3_BUCKET` / `S3_PREFIX` |
+| Storage test fails at "create" | No write permission, wrong bucket or prefix | Check the key's S3 permissions and `S3_BUCKET` / `S3_PREFIX` |
 | Storage test fails at "refuse stale write" | The storage ignores conditional writes | Use AWS S3 (or MinIO); concurrent edits are not safe otherwise |
-| Storage test fails only at "delete" | IAM policy lacks DeleteObject on `<bucket>/_probe/*` | Add that statement; the app still works without it |
+| Storage test fails only at "delete" | The key can't delete objects | Allow s3:DeleteObject on the bucket; the app still works without it |
 | Web page 403 "not on the list" | Email missing in one of the two lists | Add it to `authenticated-emails.txt` and `ALLOWED_EMAILS` |
 | Web page shows "Couldn't reach the server" | Pod not ready, usually S3 unreachable | `kubectl -n <namespace> get pods`; check the app logs and Secrets |
 | Saved LLM key "could not be decrypted" in the logs | `SETTINGS_SECRET` changed | Re-enter the key in Settings → LLM |

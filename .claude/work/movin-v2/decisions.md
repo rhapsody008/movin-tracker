@@ -37,7 +37,7 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 
 ## Deployment and safety
 - No egress restrictions assumed.
-- ~~IAM DeleteObject only on `<prefix>/docs/pages/*` and `<prefix>/docs/text/*` (F5).~~ Superseded: there is no prefix (one bucket), no `docs/pages/` (renders aren't stored), and sync never deletes, so no DeleteObject beyond `_probe/*` (1.5.13). `docs/raw/*` is explicitly denied to the app user (2026-11-12).
+- ~~IAM DeleteObject only on `<prefix>/docs/pages/*` and `<prefix>/docs/text/*` (F5).~~ Superseded: there is no prefix (one bucket), no `docs/pages/` (renders aren't stored), and sync never deletes, so no DeleteObject beyond `_probe/*` (1.5.13). The IAM policy file was dropped on 2026-11-12 (see 'No fine-grained IAM').
 - ZY creates secrets and runs any kubectl apply / IAM change.
 - Real unit drawings never go into git (`/unitmaterial/` is ignored).
 
@@ -78,7 +78,7 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 - So: `make dev` / `make run` read S3 from `.env`; MinIO is for `make test` only (fixed values in compose, never from `.env`). The dev port is published on 127.0.0.1 only (real data, no sign-in).
 - **Same SETTINGS_SECRET in dev and production** (replaces "separate from dev" above): settings.json is shared.
 - One bot poller per token: once production runs the bot, `.env` drops TELEGRAM_BOT_TOKEN.
-- IAM policy covers the bucket root (`<bucket>/*`, delete on `_probe/*`); kustomize `S3_PREFIX=` empty. Documents go to `docs/raw/` (and the 1.5 caches to `docs/pages/`, `docs/text/`, no prefix).
+- ~~IAM policy covers the bucket root (`<bucket>/*`, delete on `_probe/*`)~~ (dropped 2026-11-12); kustomize `S3_PREFIX=` empty. Documents go to `docs/raw/` (and the 1.5 caches to `docs/pages/`, `docs/text/`, no prefix).
 - Latency: thinking stays on for now; prompt caching on the model server is ZY's, later.
 
 ## LLM settings kept minimal (2026-11-11)
@@ -118,4 +118,7 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 ## Review outcome (2026-11-12)
 - Fixed: the blocker, all majors, all minors, the cache-mark guard, the memory and poppler-lock suggestions, and the re-review's N1–N5 + Q1. Left as they are: the N6 nits and the remaining lint extras.
 - The env key without `LLM_BASE_URL` stays unbound (predates v2; ZY sees no issue).
-- `docs/raw/` is protected by an IAM Deny for the app user; ZY uploads through the S3 console with their own credentials. ZY applies the policy.
+- ~~`docs/raw/` protected by an IAM Deny for the app user~~: dropped, see below.
+
+## No fine-grained IAM (2026-11-12)
+- ZY: home-use app, no fine-grained IAM. `deploy/iam-policy.json` deleted; docs now just say the app's AWS key needs read/write/list/delete on the bucket. `docs/raw/` is protected only by the app's code (sync never writes or deletes there).

@@ -63,8 +63,8 @@ type probeResult struct {
 	Steps []probeStep `json:"steps"`
 }
 
-// ProbePrefix is where the storage test writes its scratch object. The
-// production IAM policy allows DeleteObject only under it (and docs/).
+// ProbePrefix is where the storage test writes its scratch object; it is the
+// only place the app deletes anything.
 const ProbePrefix = "_probe/"
 
 // testStorage runs the six-step storage probe on a scratch key: create
