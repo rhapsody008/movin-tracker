@@ -288,3 +288,115 @@ func TestOlderVersionIsRefreshedQuietly(t *testing.T) {
 		t.Fatalf("second run refreshed again: %+v", res)
 	}
 }
+
+// Review: an index with records from a newer build is left alone, so an
+// older build never drops fields it doesn't know.
+func TestNewerIndexIsLeftAlone(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	r.put(t, manual, "pdf-manual-v1")
+	r.run(t)
+	ix, _ := r.sync.Index(ctx)
+	ix.Docs[0].Version = docs.ConvertVersion + 1
+	b, _ := ix.Encode(time.Now())
+	_, etag, _ := r.store.Get(ctx, docs.IndexKey)
+	if _, err := r.store.Put(ctx, docs.IndexKey, b, etag); err != nil {
+		t.Fatal(err)
+	}
+	before, _, _ := r.store.Get(ctx, docs.IndexKey)
+	calls := r.conv.CallCount()
+	if _, err := r.sync.Sync(ctx, "daily"); !errors.Is(err, docs.ErrNewerIndex) {
+		t.Fatalf("err %v", err)
+	}
+	after, _, _ := r.store.Get(ctx, docs.IndexKey)
+	if string(before) != string(after) || r.conv.CallCount() != calls {
+		t.Fatal("index rewritten or documents re-read under a newer build's index")
+	}
+}
+
+// Review: a failed re-read keeps the readable record (still searchable, not
+// announced), and its later recovery is a change, not an addition.
+func TestFailedRereadKeepsTheDocument(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	r.put(t, manual, "pdf-manual-v1")
+	r.run(t)
+	// A new version that can't be read yet.
+	r.put(t, manual, "pdf-manual-v2")
+	r.conv.Fail["pdf-manual-v2"] = errors.New("pdftotext: timeout")
+	res := r.run(t)
+	d := r.doc(t, manual)
+	if res.Failed != 1 || res.Changes() || d.Status != docs.StatusOK || d.Pages != 2 || r.notes.count() != 0 {
+		t.Fatalf("failed re-read: %+v doc %+v notes %d", res, d, r.notes.count())
+	}
+	lib := &docs.Library{Sync: r.sync}
+	if hits, _ := lib.Search(ctx, "defrost freezer", docs.SearchOptions{}); len(hits) == 0 {
+		t.Fatal("document not searchable after a failed re-read")
+	}
+	// It works next time: a change, announced once.
+	delete(r.conv.Fail, "pdf-manual-v2")
+	if res := r.run(t); res.Changed != 1 || res.Added != 0 || r.notes.count() != 1 {
+		t.Fatalf("recovery: %+v notes %d", res, r.notes.count())
+	}
+}
+
+// Review: a redo after another writer converts, fails and summarises
+// nothing twice, and keeps the summary it already paid for.
+func TestRedoRemembersEverything(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	sum := &fakeSummaries{}
+	r.put(t, manual, "pdf-manual-v1")
+	r.put(t, drawing, "pdf-drawing-v1")
+	r.conv.Fail["pdf-drawing-v1"] = errors.New("broken")
+	other := "docs/raw/other.pdf"
+	r.put(t, other, "pdf-other")
+	r.conv.Pages["pdf-other"] = []docs.Page{a4(long)}
+	otherInfo, _ := r.store.Stat(ctx, other)
+	rs := &racingStore{Memory: r.store}
+	rs.sneak = func() {
+		theirs := &docs.Index{Docs: []docs.Doc{{ID: "abc12345", Key: other, ETag: otherInfo.ETag, Status: docs.StatusOK, Class: docs.ClassText, Pages: 1, Version: docs.ConvertVersion}}}
+		b, _ := theirs.Encode(time.Now())
+		r.store.Put(ctx, docs.IndexKey, b, "")
+	}
+	s := &docs.Syncer{Store: rs, Conv: r.conv, Summarise: sum, Log: testutil.Logger(nil)}
+	if _, err := s.Sync(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+	// Attempt 1 converts all three and summarises the two readable ones; the
+	// redo converts nothing, and the other writer's summary-less record gets
+	// its single summary try.
+	if r.conv.CallCount() != 3 {
+		t.Fatalf("conversions %d, want 3 (no repeats)", r.conv.CallCount())
+	}
+	if sum.n() != 3 {
+		t.Fatalf("summary calls %d, want 3: %v", sum.n(), sum.calls)
+	}
+	ix, _ := s.Index(ctx)
+	for _, d := range ix.Docs {
+		if d.Key == manual && d.Summary != "About Fridge.pdf" {
+			t.Fatalf("summary lost on the redo: %+v", d)
+		}
+	}
+}
+
+type alwaysConflict struct{ *objstore.Memory }
+
+func (s alwaysConflict) Put(ctx context.Context, key string, body []byte, ifMatch string) (string, error) {
+	if key == docs.IndexKey {
+		return "", objstore.ErrPrecondition
+	}
+	return s.Memory.Put(ctx, key, body, ifMatch)
+}
+
+func TestEndlessConflictIsErrConflict(t *testing.T) {
+	r := newRig(t)
+	r.put(t, manual, "pdf-manual-v1")
+	s := &docs.Syncer{Store: alwaysConflict{r.store}, Conv: r.conv, Log: testutil.Logger(nil)}
+	if _, err := s.Sync(context.Background(), "test"); !errors.Is(err, docs.ErrConflict) {
+		t.Fatalf("err %v", err)
+	}
+	if r.conv.CallCount() != 1 {
+		t.Fatalf("converted %d times over the retries", r.conv.CallCount())
+	}
+}
