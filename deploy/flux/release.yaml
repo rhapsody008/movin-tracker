@@ -1,0 +1,19 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: movin
+spec:
+  # Pause: add `suspend: true` (or `flux suspend kustomization movin`).
+  interval: 30m
+  retryInterval: 2m
+  timeout: 5m
+  wait: true
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: movin
+  # The artifact is one rendered file (movin.yaml) at its root.
+  path: ./
+  # The NKP project's namespace and its service account (rights only there).
+  targetNamespace: movin-tracker
+  serviceAccountName: movin-tracker

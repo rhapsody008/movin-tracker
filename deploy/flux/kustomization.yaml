@@ -1,0 +1,12 @@
+# The bridge NKP watches: point the movin-tracker project's GitOps source at
+# this folder (branch main, path deploy/flux). It tells Flux where the
+# releases are and where to put them; the app's manifests come from the
+# release artifact CI publishes on each `git tag vX.Y.Z`
+# (ghcr.io/rhapsody008/movin-tracker-deploy:X.Y.Z, public).
+#   Roll back: set an exact version in ocirepository.yaml.
+#   Pause: suspend: true in release.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ocirepository.yaml
+  - release.yaml

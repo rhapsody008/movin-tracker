@@ -1,0 +1,16 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: movin
+  annotations:
+    # NKP rewrites OCIRepositories to go through its registry mirror with its
+    # own credentials; this one pulls the public artifact from ghcr.io itself.
+    nkp.nutanix.com/skip-oci-registry-patches: "true"
+spec:
+  interval: 5m
+  url: oci://ghcr.io/rhapsody008/movin-tracker-deploy
+  ref:
+    # The newest release (prereleases like 1.0.0-rc.1 don't match).
+    # Roll back: an exact version, e.g. "1.0.2"; restore ">=1.0.0" after a
+    # fixed release. (semver wins over tag, so don't add a tag: here.)
+    semver: ">=1.0.0"
