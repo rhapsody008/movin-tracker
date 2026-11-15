@@ -63,7 +63,7 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 ## Secrets and sign-in (2026-11-11)
 - Secrets are created by hand in the NKP project namespace for now; SOPS + Flux (one age key) is the later option if rotation gets tedious.
 - Manual secrets: `movin-secrets` (AWS_ACCESS_KEY_ID/SECRET — static IAM user, NKP has no IRSA; SETTINGS_SECRET — self-generated Fernet key, separate from dev, kept stable; TELEGRAM_BOT_TOKEN; LLM_API_KEY optional, prefer the admin page), `oauth2-proxy` (client id/secret + cookie secret), `ghcr-pull` (GitHub token, read:packages, for Flux to pull the private deploy artifact).
-- Web sign-in: **GitHub OAuth App** via oauth2-proxy (`provider = "github"`, `scope = "user:email"`, email allowlist kept). Telegram does not use OAuth.
+- Web sign-in: **GitHub OAuth App** via oauth2-proxy (`provider = "github"`, ~~`scope = "user:email"`~~ `scope = "user:email read:org"` since 2026-11-15: oauth2-proxy v7.12 lists orgs during sign-in and got 403 without it; email allowlist kept). Telegram does not use OAuth.
 - The app image on GHCR is **public** (binary + embedded frontend only, no config or secrets). The deploy artifact stays **private**.
 - After editing a hand-made secret: `kubectl rollout restart deploy/movin` (or Reloader annotation if NKP has it).
 
