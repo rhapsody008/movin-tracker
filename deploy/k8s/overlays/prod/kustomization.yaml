@@ -26,4 +26,4 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/1/env/0/value
-        value: https://board.example.com/oauth2/callback
+        value: https://movin.yolocal.cloud/oauth2/callback
