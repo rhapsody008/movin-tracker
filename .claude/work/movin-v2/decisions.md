@@ -146,3 +146,12 @@ ZY accepted the planner's recommendations (plan.md 'Milestones + morning check-i
 - Do now: move the group rule out of the cached rules section; check-in time and chat editable on the Telegram tab; the older review nits + lint extras; the two edge cases (no size cap on a viewed PDF; a check-in press racing a web edit).
 - **Bucket versioning: turn it on** (reverses 'versioning stays off'). ZY flips it in the console; docs updated.
 - 2026-11-12: ZY turned bucket versioning on in the S3 console, with a lifecycle rule deleting noncurrent versions after 90 days ("Recover older data" in the guide now applies).
+
+## NKP cluster (2026-11-15)
+- Cluster: `zy-all-in-one` (kubeconfig `ops/kubeconfigs/zy-all-in-one.conf`, k8s v1.36.2). Has Flux (kommander-flux, OCIRepository CRD), cert-manager (issuers: kommander-ca, selfsigned-issuer), ingress class `kommander-traefik` (default).
+- The app runs in an NKP project namespace that ZY creates; manifests carry no namespace (D.2 stands).
+- Ingress: `kommander-traefik`, nginx annotations dropped (Traefik doesn't buffer; SSE heartbeat every 25 s).
+- Cutover: local and k8s share the bucket and bot token, so stop the local app (`make dev`) before the pod starts. Downtime is fine.
+- ZY fills the prod overlay (hostname later); the release tag and D.1–D.4 (planner) come after ZY sorts out the prerequisites.
+- **Superseded the same day:** no Ingress. A `cloudflared` Deployment in the project (deploy/tunnel/, image pinned) runs the dashboard-managed tunnel `zy-all-in-one-tunnel` (843cdce6-3498-4a3a-81a7-d1e61290b753) with its token (Secret `cloudflared-token`). The public hostname route (→ `movin.<namespace>.svc:80`) lives in the Cloudflare dashboard, not git (ZY chose this over recreating the tunnel as locally managed). Cloudflare's edge certificate is the only TLS; no cert-manager.
+- `SETTINGS_SECRET` is the same in prod and `.env` (one `settings.json`).

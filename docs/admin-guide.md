@@ -51,13 +51,25 @@ openssl rand -base64 32 | tr '+/' '-_'
 - The first is `SETTINGS_SECRET`: it encrypts the LLM API key saved on the web page. **Keep it stable.** If it changes, the saved key can't be read any more and you have to enter it again.
 - The second is `OAUTH2_PROXY_COOKIE_SECRET`. Changing it signs everyone out of the web page, nothing worse.
 
-Use different values in production and on your laptop.
+`SETTINGS_SECRET` must be the **same** in production and in your `.env`: both read the one `settings.json` in the bucket. The cookie secret can differ.
 
 ### 5. GitHub packages
 
 - The **app image** (`ghcr.io/<you>/movin-tracker`) can be **public**: it holds only the program, no config or secrets. GitHub → your profile → Packages → movin-tracker → Package settings → Change visibility.
 - The **deploy artifact** (planned, `movin-tracker-deploy`) must stay **private**: it contains your host name, bucket and allowed emails.
 - For Flux to pull the private artifact, create a GitHub token with only `read:packages` (fine-grained or classic). It goes into the `ghcr-pull` Secret.
+
+### 6. Cloudflare Tunnel (how the web page is reached)
+
+There is no Ingress. A `cloudflared` pod next to the app holds an outbound tunnel (`zy-all-in-one-tunnel`) to Cloudflare. Cloudflare serves `https://<your host>` with its own certificate and sends the traffic through the tunnel to the `movin` Service (oauth2-proxy, then the app). Nothing in the cluster needs a certificate.
+
+1. Your domain's DNS is on Cloudflare. Use a host one level deep (`board.yourdomain.com`); the free certificate doesn't cover deeper names.
+2. The tunnel is managed in the dashboard: Cloudflare **Zero Trust → Networks → Tunnels → zy-all-in-one-tunnel**.
+3. **Public hostname** tab → **Add a public hostname**: your host, service type **HTTP**, URL `movin.<namespace>.svc:80`. Cloudflare creates the DNS record.
+4. **Token**: open the tunnel's **Edit** (connector install) page; the install command ends in `--token eyJ...`. That string goes into the `cloudflared-token` Secret. Anyone with it can run your tunnel: keep it secret, and rotate it on that page if it leaks.
+5. Every `cloudflared` running this tunnel gets traffic, so run it only in the cluster.
+
+Cloudflare gives up on a request that sends nothing for 100 seconds. The live updates send a heartbeat every 25 s and streamed chat replies start at once, so only a very long non-streamed chat turn can hit it.
 
 ## Secrets in the NKP namespace
 
@@ -71,6 +83,7 @@ Create these in the NKP project's namespace (NKP UI, or `kubectl`). They are not
 | `movin-secrets` | `LLM_API_KEY` | Optional. Better: enter the key on the web page (Settings → LLM) |
 | `oauth2-proxy` | `OAUTH2_PROXY_CLIENT_ID`, `OAUTH2_PROXY_CLIENT_SECRET` | From the GitHub OAuth App (step 2) |
 | `oauth2-proxy` | `OAUTH2_PROXY_COOKIE_SECRET` | Second random value (step 4) |
+| `cloudflared-token` | `token` | The Cloudflare Tunnel's token (step 6) |
 | `ghcr-pull` | docker config | GitHub token with `read:packages` (step 5), for Flux (planned) |
 
 With `kubectl` (replace the namespace and values):
@@ -82,6 +95,7 @@ kubectl -n <namespace> create secret generic movin-secrets \
 kubectl -n <namespace> create secret generic oauth2-proxy \
   --from-literal=OAUTH2_PROXY_CLIENT_ID=... --from-literal=OAUTH2_PROXY_CLIENT_SECRET=... \
   --from-literal=OAUTH2_PROXY_COOKIE_SECRET=...
+kubectl -n <namespace> create secret generic cloudflared-token --from-literal=token=...
 kubectl -n <namespace> create secret docker-registry ghcr-pull \
   --docker-server=ghcr.io --docker-username=<github user> --docker-password=<token>
 ```
@@ -96,7 +110,7 @@ kubectl -n <namespace> rollout restart deploy/movin
 
 These are not secret and live in [deploy/k8s/overlays/prod/kustomization.yaml](../deploy/k8s/overlays/prod/kustomization.yaml):
 
-- **Host name**: the Ingress host, its TLS host and the oauth2-proxy redirect URL (three places, all in that file).
+- **Host name**: the oauth2-proxy redirect URL in that file. The host itself is routed in the Cloudflare dashboard (step 6).
 - **Bucket**: `S3_BUCKET` (the same bucket as `.env`; `S3_PREFIX` stays empty).
 - **Image and version**: `images:` (today; replaced by the OCI artifact when Flux lands).
 

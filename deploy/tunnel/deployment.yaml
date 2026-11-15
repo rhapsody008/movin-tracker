@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  labels: { app: cloudflared }
+spec:
+  # Routes come from the dashboard, so extra replicas (or a cloudflared
+  # elsewhere on this tunnel) would all receive traffic for the same routes.
+  replicas: 1
+  selector:
+    matchLabels: { app: cloudflared }
+  template:
+    metadata:
+      labels: { app: cloudflared }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.10.7
+          args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef: { name: cloudflared-token, key: token }
+          ports:
+            - { name: metrics, containerPort: 2000 }
+          # /ready is 200 once at least one connection to Cloudflare is up.
+          readinessProbe:
+            httpGet: { path: /ready, port: metrics }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /ready, port: metrics }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }

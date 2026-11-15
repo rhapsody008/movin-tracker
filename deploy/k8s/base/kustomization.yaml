@@ -5,14 +5,14 @@ labels:
 resources:
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
   - ../../auth
+  - ../../tunnel
 # The Secrets are not generated here: create them from secrets.example.yaml
 # (kubectl apply, sealed-secrets or SOPS), so no secret lands in git.
 configMapGenerator:
   - name: movin-config
     literals:
-      - S3_BUCKET=zy-condo-board
+      - S3_BUCKET=movintrackerbackend
       - S3_PREFIX=
       - AWS_REGION=ap-southeast-1
       - AUTH_HEADER=X-Forwarded-Email

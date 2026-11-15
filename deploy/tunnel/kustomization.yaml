@@ -1,0 +1,11 @@
+# Cloudflare Tunnel: the only way in to the web page. cloudflared connects
+# out to Cloudflare, which serves https://<host> with its own certificate and
+# sends the traffic through the tunnel to the movin Service (oauth2-proxy).
+# No Ingress, no in-cluster certificate. The tunnel (zy-all-in-one-tunnel) is
+# managed in the Cloudflare dashboard: its public hostname route lives there,
+# and this pod only needs the token (Secret "cloudflared-token").
+# Included by deploy/k8s/base.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
