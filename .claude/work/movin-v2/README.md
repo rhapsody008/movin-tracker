@@ -13,13 +13,14 @@ Everything planned so far is **built, reviewed, accepted by ZY and pushed** (mai
 | Milestones (flag + done day on entries, timeline on the page) and the morning check-in (09:30 Telegram, buttons, catch-up) | done, accepted |
 | Follow-ups: group chats share the prompt cache; check-in time/chat on the Telegram tab; PDF cap 32 MiB; atomic check-in presses (`UpdateIf`); lint/complexity clean-up | done |
 | Bucket versioning (+ 90-day noncurrent rule) | on (ZY, console) |
+| NKP deployment D.1–D.4 (Cloudflare Tunnel, deploy/flux, CI deploy artifact) | built 2026-11-15; first release pending on ZY |
 
 **Open on ZY:** review the admin guide (`docs/admin-guide.md`, step 1.12).
 
 **Backlog (pick one, then run the planner):**
 1. **Phase 2: photos and voice notes** (plan.md "Phase 2").
 2. **Scanned documents**: 9 picture-only PDFs (plan.md "Later phase: scanned documents").
-3. **NKP deployment** (plan.md "Deployment via OCI + NKP"): waits for ZY's cluster.
+3. ~~NKP deployment~~: built; first release runbook in docs/admin-guide.md.
 
 ## Files here
 | File | What |

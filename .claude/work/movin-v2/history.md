@@ -2,6 +2,13 @@
 
 One entry per working session: what was done, what is next, blockers. Newest first.
 
+## 2026-11-15 — NKP deployment built
+- Cluster `zy-all-in-one` ready; project `movin-tracker` created by ZY. Sanity check: CI green, image pushed; ZY made the image public. Ingress replaced by a cloudflared Deployment (dashboard tunnel `zy-all-in-one-tunnel`, token Secret, route in the dashboard to `movin.movin-tracker.svc:80`); real bucket name.
+- Planner on D.1–D.4 with cluster evidence (NKP rewrites OCIRepositories unless annotated skip; Kustomizations forced to SA movin-tracker). ZY approved; repo and deploy artifact go public (history scanned clean).
+- Built and committed D.2 (overlay without namespace), D.3 (`deploy/flux/`), D.1 (`deploy/render.sh` + CI `deploy-artifact` job), D.4 (guide + README).
+- Not yet verified on the real pipeline/cluster: first tag run, Flux pull through the cluster's proxy, NKP leaving the annotated OCIRepository alone.
+- Next (ZY): make the repo public; secrets (movin-secrets, oauth2-proxy, cloudflared-token); hostname in the overlay + OAuth callback; push; `v1.0.0-rc.1` rehearsal; NKP GitOps source → `deploy/flux`; `make down`; tag `v1.0.0`. Optional: strict review of the deploy changes; server dry-run of deploy/flux.
+
 ## 2026-11-12 (end) — phase close
 - ZY pushed (…2c43940) and turned bucket versioning on (+ 90-day noncurrent rule). All planned work done; open: admin guide review. Next session: backlog when ZY picks it (scanned documents, Phase 2, NKP).
 - Final tidy-up of this folder: `README.md` (start here: status, files, how work is done, environment notes), status notes at the top of plan.md and progress.md, superseded decisions marked, a Phase 2 brief for the planner in plan.md, the UI check kept in `tools/ui-check/` with `run.sh` (87/87 from there).

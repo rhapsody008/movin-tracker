@@ -1,8 +1,8 @@
 # Admin guide
 
-How to set up, run and look after movin-tracker. Written for the person who operates it. Last updated 11 Nov 2026, at the end of Phase 1.
+How to set up, run and look after movin-tracker. Written for the person who operates it. Last updated 15 Nov 2026, with the NKP deployment.
 
-Some parts are marked **(planned)**: the OCI + Flux deployment and the drawings feature are designed but not built yet. Everything else describes the app as it is.
+It describes the app as it is; what isn't built yet is listed at the end.
 
 ## What runs where
 
@@ -56,8 +56,7 @@ openssl rand -base64 32 | tr '+/' '-_'
 ### 5. GitHub packages
 
 - The **app image** (`ghcr.io/<you>/movin-tracker`) can be **public**: it holds only the program, no config or secrets. GitHub → your profile → Packages → movin-tracker → Package settings → Change visibility.
-- The **deploy artifact** (planned, `movin-tracker-deploy`) must stay **private**: it contains your host name, bucket and allowed emails.
-- For Flux to pull the private artifact, create a GitHub token with only `read:packages` (fine-grained or classic). It goes into the `ghcr-pull` Secret.
+- The **deploy artifact** (`movin-tracker-deploy`, created by the first release) is **public** too, like the repo: it holds the rendered manifests (host name, bucket name, allowed emails and Telegram IDs, no secrets). After the first release, check its visibility the same way. Being public, Flux needs no token for it, and the NKP GitOps source needs none for the repo.
 
 ### 6. Cloudflare Tunnel (how the web page is reached)
 
@@ -65,7 +64,7 @@ There is no Ingress. A `cloudflared` pod next to the app holds an outbound tunne
 
 1. Your domain's DNS is on Cloudflare. Use a host one level deep (`board.yourdomain.com`); the free certificate doesn't cover deeper names.
 2. The tunnel is managed in the dashboard: Cloudflare **Zero Trust → Networks → Tunnels → zy-all-in-one-tunnel**.
-3. **Public hostname** tab → **Add a public hostname**: your host, service type **HTTP**, URL `movin.<namespace>.svc:80`. Cloudflare creates the DNS record.
+3. **Public hostname** tab → **Add a public hostname**: your host, service type **HTTP**, URL `movin.movin-tracker.svc:80`. Cloudflare creates the DNS record.
 4. **Token**: open the tunnel's **Edit** (connector install) page; the install command ends in `--token eyJ...`. That string goes into the `cloudflared-token` Secret. Anyone with it can run your tunnel: keep it secret, and rotate it on that page if it leaks.
 5. Every `cloudflared` running this tunnel gets traffic, so run it only in the cluster.
 
@@ -73,7 +72,7 @@ Cloudflare gives up on a request that sends nothing for 100 seconds. The live up
 
 ## Secrets in the NKP namespace
 
-Create these in the NKP project's namespace (NKP UI, or `kubectl`). They are not in git. The template with comments is [deploy/k8s/base/secrets.example.yaml](../deploy/k8s/base/secrets.example.yaml).
+Create these in the NKP project's namespace, `movin-tracker` (NKP UI, or `kubectl`). They are not in git. The template with comments is [deploy/k8s/base/secrets.example.yaml](../deploy/k8s/base/secrets.example.yaml).
 
 | Secret | Key | Value |
 | --- | --- | --- |
@@ -84,26 +83,23 @@ Create these in the NKP project's namespace (NKP UI, or `kubectl`). They are not
 | `oauth2-proxy` | `OAUTH2_PROXY_CLIENT_ID`, `OAUTH2_PROXY_CLIENT_SECRET` | From the GitHub OAuth App (step 2) |
 | `oauth2-proxy` | `OAUTH2_PROXY_COOKIE_SECRET` | Second random value (step 4) |
 | `cloudflared-token` | `token` | The Cloudflare Tunnel's token (step 6) |
-| `ghcr-pull` | docker config | GitHub token with `read:packages` (step 5), for Flux (planned) |
 
 With `kubectl` (replace the namespace and values):
 
 ```sh
-kubectl -n <namespace> create secret generic movin-secrets \
+kubectl -n movin-tracker create secret generic movin-secrets \
   --from-literal=AWS_ACCESS_KEY_ID=... --from-literal=AWS_SECRET_ACCESS_KEY=... \
   --from-literal=SETTINGS_SECRET=... --from-literal=TELEGRAM_BOT_TOKEN=...
-kubectl -n <namespace> create secret generic oauth2-proxy \
+kubectl -n movin-tracker create secret generic oauth2-proxy \
   --from-literal=OAUTH2_PROXY_CLIENT_ID=... --from-literal=OAUTH2_PROXY_CLIENT_SECRET=... \
   --from-literal=OAUTH2_PROXY_COOKIE_SECRET=...
-kubectl -n <namespace> create secret generic cloudflared-token --from-literal=token=...
-kubectl -n <namespace> create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io --docker-username=<github user> --docker-password=<token>
+kubectl -n movin-tracker create secret generic cloudflared-token --from-literal=token=...
 ```
 
 **After changing any Secret, restart the pod**, because the app reads them only at start:
 
 ```sh
-kubectl -n <namespace> rollout restart deploy/movin
+kubectl -n movin-tracker rollout restart deploy/movin
 ```
 
 ## Configuration in git
@@ -112,7 +108,7 @@ These are not secret and live in [deploy/k8s/overlays/prod/kustomization.yaml](.
 
 - **Host name**: the oauth2-proxy redirect URL in that file. The host itself is routed in the Cloudflare dashboard (step 6).
 - **Bucket**: `S3_BUCKET` (the same bucket as `.env`; `S3_PREFIX` stays empty).
-- **Image and version**: `images:` (today; replaced by the OCI artifact when Flux lands).
+- **Image and version**: set by the release (CI pins the image by digest); `newTag` there only matters for local renders.
 
 ### Who can open the web page
 
@@ -127,26 +123,44 @@ Managed on the web page: **Settings → Telegram**. The env vars `TELEGRAM_ALLOW
 
 ## Deploy, release, roll back
 
-### Today: apply by hand
+How it fits together: `git tag vX.Y.Z` → GitHub Actions tests, builds the image, renders the prod manifests with the image pinned by digest ([deploy/render.sh](../deploy/render.sh)) and pushes them as `ghcr.io/<you>/movin-tracker-deploy:X.Y.Z`. In the NKP project, Flux watches [deploy/flux/](../deploy/flux/) in git: it picks the newest `X.Y.Z` (1.0.0 or later, no prereleases) and applies it to `movin-tracker`. CI never commits to the repo.
 
-1. Tag a release: `git tag v1.2.3 && git push --tags`. GitHub Actions tests it and pushes the image `ghcr.io/<you>/movin-tracker:1.2.3`.
-2. Set `newTag: "1.2.3"` in the prod overlay.
-3. Apply: `kubectl apply -k deploy/k8s/overlays/prod` (cluster).
-4. Check: the pod is Ready (readiness goes through `/readyz`, which reads S3), then open the web page → **Settings → Storage → Test connection**, and **Settings → Telegram** shows "Running as @yourbot".
+Status: `kubectl -n movin-tracker get ocirepository,kustomization` (the `movin` rows show the version applied) and `kubectl -n movin-tracker get pods`.
 
-Roll back: set the previous `newTag` and apply again, or `kubectl -n <namespace> rollout undo deploy/movin`.
+### Release
 
-**Don't roll back past the milestones release** (or run an older image against the bucket): older builds don't know an entry's `milestone` and `completed` fields and drop them from every entry the next time they save `entries.json`. Rebuild from the current code instead; if it happened, restore `entries.json` from an earlier version ("Recover older data").
+1. Check the render first (needs the real host in the overlay; it refuses `example.com`): `KUSTOMIZE="kubectl kustomize" deploy/render.sh sha256:$(printf x | shasum -a 256 | cut -d' ' -f1) /tmp/out` and read `/tmp/out/movin.yaml`.
+2. Push main, then tag: `git tag v1.2.3 && git push origin v1.2.3`.
+3. Wait for the `image` workflow (about 10 minutes; its last job, `deploy-artifact`, publishes the manifests). Flux checks every 5 minutes.
+4. Check: the `movin` Kustomization says `Applied revision: 1.2.3@sha256:…`, the pod is Ready (readiness reads S3), **Settings → Storage → Test connection** passes and **Settings → Telegram** shows "Running as @yourbot".
 
-### Planned: OCI artifact + Flux in the NKP project
+A prerelease tag (`v1.2.3-rc.1`) runs the whole pipeline and publishes the artifact, but Flux ignores it: a safe rehearsal.
 
-Designed, not built (see [.claude/work/movin-v2/plan.md](../.claude/work/movin-v2/plan.md), "Deployment"). Once it lands:
+The Deployment uses `Recreate`: the old pod stops before the new one starts (one Telegram poller), so each release has a short gap.
 
-- **Release** = `git tag vX.Y.Z` and push. CI builds the image and publishes the manifests, with the image pinned by digest, as `movin-tracker-deploy:X.Y.Z`. CI never commits to the repo.
-- Flux in the NKP project watches the small, static `deploy/flux/` folder, which points it at the newest `X.Y.Z`, and applies it.
-- **Roll back** = pin a version in `deploy/flux/` (a deliberate commit). **Pause** = `flux suspend kustomization movin`.
+### First release
 
-This section will be rewritten with exact commands when the deployment steps are done.
+1. Secrets in `movin-tracker` (above): `movin-secrets` (same `SETTINGS_SECRET` as `.env`), `oauth2-proxy`, `cloudflared-token`. Check: `kubectl -n movin-tracker get secrets`.
+2. Host name in the prod overlay (redirect URL); the GitHub OAuth App callback and the Cloudflare public hostname use the same host. Commit and push.
+3. Optional rehearsal: tag `v1.0.0-rc.1`; check the workflow is green and the `movin-tracker-deploy` package exists.
+4. In the NKP project, add a GitOps source: this repo, branch `main`, path `deploy/flux` (give it a name other than `movin`). Expect the `movin` OCIRepository to report no matching version until step 6.
+5. Stop the local app: `make down` (local and production share the bucket and the bot token; two bots get 409s).
+6. Tag `v1.0.0` and push the tag.
+7. Check as in "Release", plus: the OCIRepository still has no `secretRef`/proxy (NKP left it alone), the pod's image is `…@sha256:…`, sign-in works, and the app log has no 409: `kubectl -n movin-tracker logs deploy/movin -c app`.
+
+To use `make dev` again later, stop production first ("Stop the app" below).
+
+### Roll back
+
+In [deploy/flux/ocirepository.yaml](../deploy/flux/ocirepository.yaml) set an exact version, `semver: "1.2.2"`, commit and push; Flux applies it within minutes. After a fixed release, set it back to `">=1.0.0"`.
+
+**Don't roll back past the milestones release** (or run an older image against the bucket): older builds don't know an entry's `milestone` and `completed` fields and drop them from every entry the next time they save `entries.json`. Every 1.x release has them. If it happened, restore `entries.json` from an earlier version ("Recover older data").
+
+### Pause, stop, resume
+
+- **Pause** (Flux leaves the app as it is): `flux suspend kustomization movin -n movin-tracker`, or for good, `suspend: true` in [deploy/flux/release.yaml](../deploy/flux/release.yaml) (commit, push).
+- **Stop the app** (e.g. to run `make dev`): pause first, then `kubectl -n movin-tracker scale deploy/movin --replicas=0`.
+- **Resume**: `flux resume kustomization movin -n movin-tracker` (or remove `suspend`); Flux scales the app back to one.
 
 ## Using the web page
 
@@ -248,7 +262,6 @@ The bucket keeps earlier versions of every object (for 90 days with the lifecycl
 | AWS access key | Create a second key for the IAM user, update `movin-secrets`, restart the pod, check Settings → Storage, then delete the old key in AWS |
 | Bot token | BotFather `/revoke`, put the new token in `movin-secrets`, restart the pod |
 | GitHub OAuth secret | Generate a new client secret in the OAuth App, update `oauth2-proxy`, restart the pod, delete the old secret in GitHub |
-| GHCR token | New token with `read:packages`, recreate `ghcr-pull` |
 | `SETTINGS_SECRET` | Avoid. If you must: update it, restart, then re-enter the LLM key in Settings → LLM |
 
 ## Using the bot
@@ -316,12 +329,12 @@ make clean     # stop and delete the test MinIO's data (never the bucket)
 | Storage test fails at "refuse stale write" | The storage ignores conditional writes | Use AWS S3 (or MinIO); concurrent edits are not safe otherwise |
 | Storage test fails only at "delete" | The key can't delete objects | Allow s3:DeleteObject on the bucket; the app still works without it |
 | Web page 403 "not on the list" | Email missing in one of the two lists | Add it to `authenticated-emails.txt` and `ALLOWED_EMAILS` |
-| Web page shows "Couldn't reach the server" | Pod not ready, usually S3 unreachable | `kubectl -n <namespace> get pods`; check the app logs and Secrets |
+| Web page shows "Couldn't reach the server" | Pod not ready, usually S3 unreachable | `kubectl -n movin-tracker get pods`; check the app logs and Secrets |
 | Saved LLM key "could not be decrypted" in the logs | `SETTINGS_SECRET` changed | Re-enter the key in Settings → LLM |
 | LLM tab shows "No key saved" after changing the endpoint | Keys don't follow a change of host | Type the new endpoint's key, Test, Save |
 | Log warns "listening beyond loopback" | `LISTEN_ADDR` set to something other than `127.0.0.1` | Fine locally; in k8s keep the default so only oauth2-proxy can reach the app |
 
-Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally `docker compose logs -f app`). Useful messages: `telegram message ignored` (who was refused and why), `agent tool call` (every change the agent made), `storage test`, `telegram bot started`.
+Logs are JSON lines: `kubectl -n movin-tracker logs deploy/movin -c app` (locally `docker compose logs -f app`). Useful messages: `telegram message ignored` (who was refused and why), `agent tool call` (every change the agent made), `storage test`, `telegram bot started`.
 
 ## Reference
 
@@ -368,6 +381,5 @@ Logs are JSON lines: `kubectl -n <namespace> logs deploy/movin -c app` (locally 
 
 - **Scanned documents**: reading pages that are pictures only (OCR or the model's vision), and the garbled text layers. Listed today, not searchable.
 - **Photos and voice notes** on entries.
-- **OCI + Flux deployment** in the NKP project, replacing the manual apply.
 
 This guide gets updated when each lands.
