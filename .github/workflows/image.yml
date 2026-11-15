@@ -1,10 +1,12 @@
-# Test, then build the production image and push it to GHCR.
+# Test, then build the production image and push it to GHCR; on a release
+# tag, also publish the rendered manifests that Flux deploys.
 #
 #   pull request     -> test + build (no push)
 #   push to main     -> ghcr.io/<owner>/<repo>:main, :sha-<short>, :latest
 #   tag v1.2.3       -> ghcr.io/<owner>/<repo>:1.2.3, :1.2, :sha-<short>
-#
-# Point deploy/k8s/overlays/prod at a version tag (or a sha tag), not :latest.
+#                       + ghcr.io/<owner>/<repo>-deploy:1.2.3 (deploy/render.sh,
+#                         image pinned by digest; deploy/flux picks it up)
+#   tag v1.2.3-rc.1  -> the same, but Flux ignores prereleases (a rehearsal)
 name: image
 
 on:
@@ -16,6 +18,11 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Same version as `kubectl kustomize` locally; sha256 from the release's checksums.txt.
+  KUSTOMIZE_VERSION: v5.8.1
+  KUSTOMIZE_SHA256: 029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d
 
 concurrency:
   group: image-${{ github.ref }}
@@ -54,12 +61,27 @@ jobs:
           AWS_SECRET_ACCESS_KEY: minioadmin
         run: go test -race -count=1 ./...
 
+      - name: Install kustomize
+        run: &kustomize |
+          curl -fsSLo /tmp/kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          echo "${KUSTOMIZE_SHA256}  /tmp/kustomize.tgz" | sha256sum -c -
+          tar -xzf /tmp/kustomize.tgz -C /usr/local/bin kustomize
+
+      # Broken manifests fail here, not at release time.
+      - name: Render the manifests
+        run: |
+          kustomize build deploy/k8s/overlays/prod > /dev/null
+          kustomize build deploy/flux > /dev/null
+
   image:
     needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    outputs:
+      # The multi-arch index digest the release pins.
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v5
 
@@ -99,7 +121,8 @@ jobs:
             type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -108,3 +131,38 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Release only: render the prod manifests with the image pinned by digest
+  # and publish them as an OCI artifact. Never commits to the repo.
+  deploy-artifact:
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install kustomize
+        run: *kustomize
+
+      - uses: fluxcd/flux2/action@v2.8.8
+        with:
+          version: 2.8.8
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Render
+        run: deploy/render.sh "${{ needs.image.outputs.digest }}" out
+
+      - name: Push the deploy artifact
+        run: |
+          flux push artifact "oci://ghcr.io/${{ github.repository }}-deploy:${GITHUB_REF_NAME#v}" \
+            --path=./out \
+            --source="${{ github.server_url }}/${{ github.repository }}" \
+            --revision="${GITHUB_REF_NAME}@sha1:${GITHUB_SHA}"
