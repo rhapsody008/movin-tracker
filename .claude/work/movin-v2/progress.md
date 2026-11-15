@@ -113,3 +113,7 @@ Tick a step only after its verification passes; put the evidence (command + resu
 ## Status (2026-11-12)
 - Phase 1, Connections (1.13–1.19), Phase 1.5 documents, milestones + morning check-in and the follow-ups are complete, reviewed and pushed (…2c43940). Bucket versioning on (ZY).
 - Open: ZY's review of the admin guide (1.12). Backlog: scanned documents, Phase 2 media, NKP deployment (waits for the cluster).
+
+## NKP deployment (plan.md "Deployment via OCI + NKP"; ZY approved 2026-11-15)
+- [x] Before the plan (2026-11-15, ae1e562) — Ingress replaced by a cloudflared Deployment (dashboard tunnel zy-all-in-one-tunnel, token Secret `cloudflared-token`); real bucket name; prod allowlists. Cluster check (read-only, zy-all-in-one): project ns `movin-tracker`, Flux v2.8 controllers, OCIRepository/Kustomization v1, NKP patches OCIRepositories unless annotated skip. App image public (anonymous pull OK). `make lint`/`make test` ok.
+- [x] D.2 Overlay without a namespace — 2026-11-15: `namespace: movin` and namespace.yaml removed from overlays/prod; header says Flux sets the namespace and CI pins the digest. `kubectl kustomize deploy/k8s/overlays/prod`: 0 Namespace/namespace lines; 2 ConfigMaps, 2 Deployments, 1 Service. `make lint`/`make test` ok.

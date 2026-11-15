@@ -155,3 +155,13 @@ ZY accepted the planner's recommendations (plan.md 'Milestones + morning check-i
 - ZY fills the prod overlay (hostname later); the release tag and D.1–D.4 (planner) come after ZY sorts out the prerequisites.
 - **Superseded the same day:** no Ingress. A `cloudflared` Deployment in the project (deploy/tunnel/, image pinned) runs the dashboard-managed tunnel `zy-all-in-one-tunnel` (843cdce6-3498-4a3a-81a7-d1e61290b753) with its token (Secret `cloudflared-token`). The public hostname route (→ `movin.<namespace>.svc:80`) lives in the Cloudflare dashboard, not git (ZY chose this over recreating the tunnel as locally managed). Cloudflare's edge certificate is the only TLS; no cert-manager.
 - `SETTINGS_SECRET` is the same in prod and `.env` (one `settings.json`).
+
+## NKP deployment plan (2026-11-15; planner, ZY approved)
+- **Repo and deploy artifact go public** (ZY: nothing sensitive inside; history scanned 2026-11-15: no secrets, only fake test tokens and a synthetic test PDF). Supersedes "the deploy artifact stays private": no `ghcr-pull` Secret, no secretRef on the OCIRepository, and the NKP GitOps source needs no credential. Public: the allowed email, Telegram IDs/group, bucket name, host.
+- Deploy artifact = one rendered file (`movin.yaml`, image pinned by digest), Flux path `./` (not ./overlays/prod).
+- No cosign for now.
+- `targetNamespace: movin-tracker` and `serviceAccountName: movin-tracker` only in `deploy/flux/`; app manifests carry no namespace.
+- OCIRepository carries `nkp.nutanix.com/skip-oci-registry-patches: "true"` so NKP's mirror patch doesn't rewrite it.
+- New CI actions/tools pinned exactly; pinning the existing actions is a separate later commit.
+- Rehearse with `v1.0.0-rc.1` (Flux's `>=1.0.0` ignores prereleases), wire the NKP GitOps source before the first real tag.
+- Keep `deploy/render.sh` (the local test of the CI render).

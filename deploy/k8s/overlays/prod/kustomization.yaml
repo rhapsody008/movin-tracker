@@ -1,11 +1,10 @@
-# Production overlay. Set the image, host and emails here. The planned
-# OCI + Flux deployment (see .claude/work/movin-v2/plan.md, "Deployment")
-# drops namespace.yaml here because the NKP project owns the namespace.
+# Production overlay. Set the host and emails here. No namespace: the NKP
+# project owns it, and Flux puts these objects there (deploy/flux,
+# targetNamespace). On a release, CI pins the image by digest
+# (deploy/render.sh); newTag below only serves local renders.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: movin
 resources:
-  - namespace.yaml
   - ../../base
 images:
   - name: movin

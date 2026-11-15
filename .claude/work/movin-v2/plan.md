@@ -169,12 +169,14 @@ Documents whose pages have no usable text layer. Phase 1.5 indexes them as 'no t
 | 5.0 … / 5.1 Video on redemption of Guocoland e-Voucher.mp4 | – | video, not a document |
 A few pages inside text manuals are also image-only (e.g. fridge 4 of 60, washer 2 of 32); text search simply misses them.
 
-## Deployment via OCI + NKP (potential; not yet planned in detail)
-Status: decided in principle (see decisions.md, "Deployment / GitOps"). Needs a planner pass and a read-only cluster check once ZY's NKP cluster is available. Likely shape:
-- D.1 `.github/workflows/image.yml`: on `v*` tags, after the image push, `kustomize edit set image` with the digest in the workspace and `flux push artifact oci://ghcr.io/<owner>/movin-tracker-deploy:<version>`; optional cosign signing of image + artifact.
-- D.2 `deploy/k8s/overlays/prod`: drop namespace.yaml and the namespace field.
-- D.3 New `deploy/flux/`: kustomization.yaml + OCIRepository (semver >=1.0.0, secretRef ghcr-pull) + Flux Kustomization (./overlays/prod, prune, same service account as the NKP project).
-- D.4 README: release, rollback, pause; ZY creates ghcr-pull and app secrets in the project namespace.
+## Deployment via OCI + NKP (planner 2026-11-15, approved; answers in decisions.md)
+Order D.2, D.3, D.1, D.4. Each step: `make lint && make test`, progress.md, commit.
+- **D.2** Prod overlay without a namespace: drop `namespace: movin` and namespace.yaml. Verify: render has no `kind: Namespace` / `namespace:`.
+- **D.3** `deploy/flux/`: kustomization.yaml + OCIRepository `movin` (oci://ghcr.io/rhapsody008/movin-tracker-deploy, semver `>=1.0.0`, public so no secretRef, annotation `nkp.nutanix.com/skip-oci-registry-patches: "true"`) + Flux Kustomization `movin` (path ./, prune, wait, targetNamespace + serviceAccountName movin-tracker). Verify: render; server dry-run only with ZY's OK.
+- **D.1** `deploy/render.sh <digest> <outdir>`: copy deploy/ to a temp dir, `kustomize edit set image` by digest, build to movin.yaml, guards (one digest image line, no tag form/latest, no Namespace/Secret/namespace, no example.com). CI: render check in the test job; image job exports the digest; tag-only job `deploy-artifact` runs render.sh and `flux push artifact oci://ghcr.io/<repo>-deploy:<version>`. Verify locally with a fake digest (guard fails on the placeholder host), actionlint; the real proof is ZY's rc tag.
+- **D.4** Admin guide + README: release, first release runbook, roll back (exact `semver:` pin in deploy/flux), pause (`suspend: true` or `flux suspend`), stop.
+
+First release (ZY): secrets (movin-secrets, oauth2-proxy, cloudflared-token) -> hostname -> push main -> optional `v1.0.0-rc.1` -> NKP GitOps source (path deploy/flux) -> stop `make dev` -> tag `v1.0.0` -> watch Flux -> checks.
 
 ## Milestones + morning check-in (planner, 2026-11-12; ZY's answers in decisions.md)
 Order: M.1 → M.2 → M.3 → M.4 → C.1 → C.2 → C.3 → C.4 → C.5; then one strict review. C.3 depends on M.1.
