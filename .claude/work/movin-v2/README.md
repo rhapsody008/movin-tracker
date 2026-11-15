@@ -13,7 +13,7 @@ Everything planned so far is **built, reviewed, accepted by ZY and pushed** (mai
 | Milestones (flag + done day on entries, timeline on the page) and the morning check-in (09:30 Telegram, buttons, catch-up) | done, accepted |
 | Follow-ups: group chats share the prompt cache; check-in time/chat on the Telegram tab; PDF cap 32 MiB; atomic check-in presses (`UpdateIf`); lint/complexity clean-up | done |
 | Bucket versioning (+ 90-day noncurrent rule) | on (ZY, console) |
-| NKP deployment D.1–D.4 (Cloudflare Tunnel, deploy/flux, CI deploy artifact) | built 2026-11-15; first release pending on ZY |
+| NKP deployment D.1–D.4 (Cloudflare Tunnel, deploy/flux, CI deploy artifact) | live: v1.0.0 on zy-all-in-one since 2026-11-15, https://movin.yolocal.cloud |
 
 **Open on ZY:** review the admin guide (`docs/admin-guide.md`, step 1.12).
 

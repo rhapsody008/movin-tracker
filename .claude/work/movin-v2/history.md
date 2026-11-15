@@ -7,7 +7,8 @@ One entry per working session: what was done, what is next, blockers. Newest fir
 - Planner on D.1–D.4 with cluster evidence (NKP rewrites OCIRepositories unless annotated skip; Kustomizations forced to SA movin-tracker). ZY approved; repo and deploy artifact go public (history scanned clean).
 - Built and committed D.2 (overlay without namespace), D.3 (`deploy/flux/`), D.1 (`deploy/render.sh` + CI `deploy-artifact` job), D.4 (guide + README).
 - Not yet verified on the real pipeline/cluster: first tag run, Flux pull through the cluster's proxy, NKP leaving the annotated OCIRepository alone.
-- Next (ZY): make the repo public; secrets (movin-secrets, oauth2-proxy, cloudflared-token); hostname in the overlay + OAuth callback; push; `v1.0.0-rc.1` rehearsal; NKP GitOps source → `deploy/flux`; `make down`; tag `v1.0.0`. Optional: strict review of the deploy changes; server dry-run of deploy/flux.
+- Then: repo public, secrets checked (names/sizes), host movin.yolocal.cloud, rehearsal `v1.0.0-rc.1` green (artifact public), NKP GitOps source added (NKP left the OCIRepository alone), local app stopped, **`v1.0.0` released and running** on zy-all-in-one (Flux applied 1.0.0; bot started, no 409; tunnel up; https://movin.yolocal.cloud redirects to GitHub sign-in).
+- Next: ZY checks sign-in, Storage test and Telegram in the browser; optional strict review of the deploy changes. From now on don't run `make dev` against the bucket without stopping production first.
 
 ## 2026-11-12 (end) — phase close
 - ZY pushed (…2c43940) and turned bucket versioning on (+ 90-day noncurrent rule). All planned work done; open: admin guide review. Next session: backlog when ZY picks it (scanned documents, Phase 2, NKP).
