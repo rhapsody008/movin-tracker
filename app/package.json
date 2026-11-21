@@ -1,0 +1,27 @@
+{
+	"name": "movin-tracker",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=24 <25"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p .",
+		"lint": "biome check --error-on-warnings . && tsc --noEmit -p .",
+		"format": "biome check --write .",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "3.1173.0",
+		"@earendil-works/chord": "1.5.2",
+		"@earendil-works/pi-ai": "1.5.2",
+		"@earendil-works/pi-durable": "1.5.2",
+		"@earendil-works/pi-schema": "1.5.2"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.6.8",
+		"@types/node": "24.19.2",
+		"typescript": "7.0.2",
+		"vitest": "5.1.1"
+	}
+}

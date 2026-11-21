@@ -1,0 +1,1 @@
+decode entries.json: json: cannot unmarshal array into Go struct field Doc.entries.0.cost of type entries.Cost

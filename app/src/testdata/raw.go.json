@@ -1,0 +1,206 @@
+[
+  {
+    "name": "escaped quotes, backslashes and brackets inside strings",
+    "input": "eyJhIjoic2F5IFwiaGlcIiBcXCB7WzFdfSIsImIiOiJ7XCJ4XCI6WzEsMl19In0=",
+    "ok": true,
+    "output": "{\n  \"a\": \"say \\\"hi\\\" \\\\ {[1]}\",\n  \"b\": \"{\\\"x\\\":[1,2]}\",\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "CRLF, tab and space whitespace",
+    "input": "ew0KCSJhIiA6CTEgLA0KDQogImIiICA6CXsJImMiCToJMgksDQoJCSJkIiA6IFsgMSAsCTIgXQ0KCX0NCn0=",
+    "ok": true,
+    "output": "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2,\n    \"d\": [\n      1,\n      2\n    ]\n  },\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "empty object and array at depth 1 and 2",
+    "input": "eyJvMSI6e30sImExIjpbXSwibzIiOnsiaW4iOnt9fSwiYTIiOnsiaW4iOltdfX0=",
+    "ok": true,
+    "output": "{\n  \"a1\": [],\n  \"a2\": {\n    \"in\": []\n  },\n  \"o1\": {},\n  \"o2\": {\n    \"in\": {}\n  },\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "duplicate top-level keys: the last wins",
+    "input": "eyJkdXAiOjEsImR1cCI6Mn0=",
+    "ok": true,
+    "output": "{\n  \"dup\": 2,\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "an escaped key next to the plain one it equals, and an HTML key",
+    "input": "eyJcdTAwNjEiOjEsImEiOjIsIjxrPiYiOjN9",
+    "ok": true,
+    "output": "{\n  \"\\u003ck\\u003e\\u0026\": 3,\n  \"a\": 2,\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "keys outside the BMP and in the private and FFFF planes",
+    "input": "eyLwn5iAIjoxLCLugIAiOjIsIu+/vyI6M30=",
+    "ok": true,
+    "output": "{\n  \"schema\": 1,\n  \"\": 2,\n  \"￿\": 3,\n  \"😀\": 1\n}"
+  },
+  {
+    "name": "escapes kept as written: slash, u00E9 and a lone surrogate",
+    "input": "eyJzIjoiYVwvYlx1MDBFOVx1ZDgwMCJ9",
+    "ok": true,
+    "output": "{\n  \"s\": \"a\\/b\\u00E9\\ud800\",\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "number literals kept",
+    "input": "eyJuIjpbMS41MCwxMjM0NTY3ODkwMTIzNDU2Nzg5MCwxRTMsLTAsLTAuMGUrNSwtMS41RS0zXX0=",
+    "ok": true,
+    "output": "{\n  \"n\": [\n    1.50,\n    12345678901234567890,\n    1E3,\n    -0,\n    -0.0e+5,\n    -1.5E-3\n  ],\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "U+2028, U+2029 and the HTML characters",
+    "input": "eyJzIjoiYeKAqGLigKljPD4mIn0=",
+    "ok": true,
+    "output": "{\n  \"s\": \"a\\u2028b\\u2029c\\u003c\\u003e\\u0026\",\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "an empty object",
+    "input": "e30=",
+    "ok": true,
+    "output": "{\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "an empty object with space around it",
+    "input": "IHsgfSA=",
+    "ok": true,
+    "output": "{\n  \"schema\": 1\n}"
+  },
+  {
+    "name": "a trailing comma",
+    "input": "eyJhIjoxLH0=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "an array at the top level",
+    "input": "WzFd",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a string at the top level",
+    "input": "Ingi",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "tru",
+    "input": "eyJhIjp0cnV9",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a leading zero",
+    "input": "eyJhIjowMX0=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a trailing decimal point",
+    "input": "eyJhIjoxLn0=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "an empty exponent",
+    "input": "eyJhIjoxZSt9",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a bare minus",
+    "input": "eyJhIjotfQ==",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "text after the object",
+    "input": "eyJhIjoxfXg=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a missing colon",
+    "input": "eyJhIiAxfQ==",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a missing comma",
+    "input": "eyJhIjoxICJiIjoyfQ==",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a raw control character in a string",
+    "input": "eyJhIjoieAF5In0=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "the escape \\x",
+    "input": "eyJhIjoiXHg0MSJ9",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "the escape \\u12G4",
+    "input": "eyJhIjoiXHUxMkc0In0=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "nullx",
+    "input": "eyJhIjpudWxseH0=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "empty input",
+    "input": "",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "whitespace-only input",
+    "input": "IA0KCSA=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a missing comma in an array",
+    "input": "eyJhIjpbMSAyXX0=",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a missing comma in a nested object",
+    "input": "eyJhIjp7ImIiOjEgImMiOjJ9fQ==",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a missing colon in a nested object",
+    "input": "eyJhIjp7ImIiIDF9fQ==",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a missing colon before the value, no space",
+    "input": "eyJhIjp7ImIieDF9fQ==",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "a missing top-level colon",
+    "input": "eyJhIngxfQ==",
+    "ok": false,
+    "output": ""
+  },
+  {
+    "name": "an object inside an array bracket",
+    "input": "WyJhIjoxfQ==",
+    "ok": false,
+    "output": ""
+  }
+]

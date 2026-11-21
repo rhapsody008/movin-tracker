@@ -57,6 +57,28 @@ services:
       - go-build:/root/.cache/go-build
     depends_on: [minio]
 
+  # `make -C app test`: vitest with the S3 half against MinIO. No env_file on
+  # purpose: tests must never see .env or the real bucket. Built from
+  # app/Dockerfile.test: Node 24 plus poppler, so the converter tests run
+  # against the real tools.
+  app-test:
+    profiles: [tools]
+    build: { context: ., dockerfile: app/Dockerfile.test }
+    image: movin-app-test:local
+    working_dir: /app
+    volumes:
+      - ./app:/app
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      <<: *minio-env
+      REQUIRE_S3: "1"
+      HOME: /tmp
+      # fontconfig's cache dir (as the Go production image, Dockerfile:57);
+      # without it a render logs "No writable cache directories" on stderr.
+      XDG_CACHE_HOME: /tmp/.cache
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    depends_on: [minio]
+
   # `make run`: the production image, locked down as in k8s.
   prod:
     profiles: [prod]

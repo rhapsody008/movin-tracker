@@ -1,0 +1,102 @@
+# movin-tracker v3: progress
+
+Tick a step only after its verification passes; put the evidence (command + result) next to it.
+
+> **Status 2026-11-21:** T0 and T1 done (T1 phase review APPROVE after three fix rounds; local commit, not pushed). Running T1–T3 unattended (decisions.md). Next: T2.
+
+## Facts gathered before T0 (2026-11-20, read-only)
+- `settings.json` llm section: `kind:"openai"`, `baseUrl https://nai.yolocal.cloud/enterpriseai/gateway/v1`, model `movin-backend`, vision/streaming/thinkOnDemand on, key saved. Sections: by, llm, schema, telegram, updated. (v2 README's "Claude native, Opus 5.5" is out of date.)
+- zy-all-in-one: StorageClass `nutanix-volume` (default) csi.nutanix.com, reclaim Delete, WaitForFirstConsumer, expansion on. VolumeSnapshotClass `nutanix-snapshot-class` (Retain), no Velero label.
+- Velero (namespace `zy-all-in-one-workspace`): BSL `default` aws `zyallinonebackups` ap-southeast-1, Available; Schedule `velero-default` `0 0 * * *`, whole cluster, ttl 720h; server args `--uploader-type=kopia`; no node-agent DaemonSet; no backups yet.
+- Flux: `deploy/flux/ocirepository.yaml` `semver: ">=1.0.0"`; `deploy/flux/release.yaml` `prune: true`.
+
+## T0
+- [x] T0.1 Dependency list — approved by ZY 2026-11-20. Scratch project `tmp/v3-t0/` (git-ignored), `node:24-alpine` (Node 24.22.3, npm 11.19.1).
+  - Runtime (exact pins): `@earendil-works/pi-durable` 1.5.2 (published 2026-11-10), `pi-ai` 1.5.2, `chord` 1.5.2, `pi-schema` 1.5.2 (all MIT; pi-durable also brings `pi-codemode`, `pi-telemetry`, `diff`, `@silvia-odwyer/photon`), `@aws-sdk/client-s3` 3.1173.0 (Apache-2.0).
+  - Dev: `typescript` 7.0.2, `vitest` 5.1.1, `@biomejs/biome` 2.6.8 (lint + format, has `noRestrictedImports` for the adapter rule), `@types/node` 24.19.2.
+  - Not taken: web framework, Telegram library, Fernet package (node:crypto), Anthropic SDK of our own, ESLint (Biome is one package instead of a plugin tree), `aws4fetch` (client-s3 shares pi-ai's AWS core: +2 packages, +6 MB).
+  - Counts: lockfile 193 entries, 95 runtime / 98 dev (63 optional platform binaries). `npm ci --omit=dev --ignore-scripts` → exit 0, 52 top-level dirs, 131 MB (125 MB without client-s3). Full `npm ci --ignore-scripts` → exit 0, 134 packages.
+  - Runtime licences: MIT 42, Apache-2.0 39, BSD-3-Clause 12, Unlicense 1, 0BSD 1. Dev adds MPL-2.0 (12) and ISC (1); dev only, not in the image.
+  - Install scripts: `@google/genai` (preinstall `echo no-op`), `protobufjs` (postinstall version notice), `fsevents` (macOS, optional). All skipped with `--ignore-scripts`; nothing needs them.
+  - Native builds: none. SQLite is Node's built-in `node:sqlite` (via `@earendil-works/chord/sqlite/node`); photon is WASM, loaded only if imported.
+  - Provider SDKs: pi-ai hard-depends on `openai` 7.19.0, `@anthropic-ai/sdk` 0.129.0, `@google/genai` 2.21.0, `@aws-sdk/client-bedrock-runtime`. Loader-hook trace of importing pi-durable + sqlite storage + `pi-ai/models` + `api/openai-completions.lazy` + faux + client-s3: only `@earendil-works/*`, `partial-json`, `client-s3` resolve at start (139 ms, RSS 103 MB). Anthropic, Google and Bedrock SDKs are never loaded; they cost ~25 MB on disk. `openai` (27 MB) is loaded lazily by `openai-completions` on the first request; it is the chat-completions client the NAI gateway needs.
+  - API names the plan relies on, found in the 1.5.2 type defs: `requestId`, `resume()`, `sleepUntil(until, checkpoint, ctx)`, `ToolExecutionApi.taskId`, `replay?: "safe" | "unsafe"`, `openNodeSqliteStorage`, `abandonOnRestart`, `afterRun`, `beforeRequest`, `maxTurns`, `onYield`, `control.terminate`; tool `output` is `(TextContent | ImageContent)[]` (images from our own tools: yes); docs have `scope: "session"` (directory doc can be session-scoped); pi-ai `createProvider({ id, baseUrl, auth, models, api: openAICompletionsApi() })` takes a custom OpenAI-compatible endpoint (`openaiProvider()` itself is the Responses API, not used); `pi-ai/providers/faux` exists.
+  - Left for T0.2: host-level default model (`AgentState.model` is optional; confirm what a conversation without one does), how `openai-completions` sends tool-result images to a chat-completions endpoint.
+  - Risk noted: TypeScript 7 is the new native compiler; if it trips on anything, fall back to TS 5.9 (type-check only, vitest does not use tsc).
+- [x] T0.2 Crash, replay and memory spike — 2026-11-20. Scratch `tmp/v3-t0/` (`spike.mjs`, `mem.mjs`, `imgcheck.mjs`, `Dockerfile.spike` = node:24-alpine + poppler-utils + font-dejavu + `npm ci --omit=dev --ignore-scripts`, 108 MB image). Every run: `--read-only --user 65532 --memory=512m`, `NODE_OPTIONS=--max-old-space-size=256`, named volume at `/data`, `/tmp` tmpfs 32m. Faux provider; replay-safe `add_entry` writing a journal file on `/data`; `docker kill -s KILL` for crashes.
+  - Baseline: one input → one journal record, one reply; the same `requestId` (`tg:1001`) returns the same submission (`true`).
+  - A, kill during the tool before its write → resume: tool reran once, wrote once. `{"journal":1,"replies":1}`.
+  - B, kill after the write, before the reply → resume: tool reran, found its change id, did not write. `{"journal":1,"replies":1}`.
+  - R1, DB copied mid-tool (db + wal + shm, like a crash-consistent snapshot), run finished, DB put back, plain `resume()`: the old run is replayed and **its reply produced again** (in Telegram: an old reply resent). Journal still 1.
+  - R2, same, restore path (`root.abort()` before `resume()`): `{"journal":1,"replies":0,"toolRuns":0,"llmCalls":0}`; nothing reran.
+  - **Bug found, R4:** backup taken, message 1 writes with tool task id 12, DB restored, a different message 2 gets task id 12 again → same change id → "found earlier change, not writing": **message 2's write silently skipped.** Task ids are small per-database counters, so `sha256(taskId|index)` also collides between dev and prod on the shared bucket. Fix tested: change id = `sha256(epoch|taskId|index)`, `epoch` a UUID in a session-scoped doc (`movin.epoch`), created with the database and rotated by the restore path. Rerun of R4 with the fix: message 2 got task id 13 again but a different change id and wrote (`journal 2`); crash case B still deduplicated with the salt. Plan updated (Design → Tools, Backup and restore).
+  - Memory (cgroup v2 counters, include poppler children): idle with harness, SQLite, S3 client and `openai` loaded: Node RSS 86 MB, cgroup 35 MB. A1 page (2384×1684 pt, made by scaling the A3 unit plan): full render at 1568 px 150 ms/184 KB, 10%×10% crop at 474 dpi 70 ms/32 KB, cgroup peak **46 MB**, Node RSS 87 MB. A3 original: peak 44 MB. Harness runs (spike.mjs): RSS 74–75 MB. → limits set to request 128Mi, limit 384Mi, heap 256 MB (plan updated); re-measure with real traffic in T6.1.
+  - Tool images over chat completions (pi-ai `openai-completions`, local stub endpoint): the tool message carries the text part; the image goes in an extra user message right after (`"Attached image(s) from tool result"` + `image_url` data URL), the same shape the Go code sends. `Authorization: Bearer` set; `cached_tokens` is read into usage `cacheRead`. Request keys: `model, messages, stream, stream_options, store, max_completion_tokens, tools` — check in T0.3 that the NAI gateway accepts `store` and `max_completion_tokens`.
+  - Custom endpoint wiring: `createProvider({ id, baseUrl, auth: { apiKey: { name, resolve: async () => ({ auth: { apiKey } }) } }, models: [{ id, api: "openai-completions", input: ["text","image"], … }], api: openAICompletionsApi() })`; `resolve` must return `{ auth: { apiKey } }` (a bare string fails with "reading 'apiKey'").
+  - No model: a conversation with no model and no host default settles `unanswered`, reason `no_model`. The adapter sets the model on every conversation it creates (and re-configures when settings change).
+  - Scratch kept for T0.3; volume `movin-t0-data` and image `movin-t0-spike` are local only.
+- [x] T0.3 Prompt layout confirmation — 2026-11-20, **gate passed**. `tmp/v3-t0/run-t03.sh` → `t03.mjs` in the spike image (read-only, uid 65532). It reads `settings.json` and `entries.json` from the real bucket (read-only) and decrypts the saved key with `SETTINGS_SECRET` in memory (Fernet on node:crypto, the T1.4 code in miniature; key never printed or written). pi-durable conversation → pi-ai `openai-completions` → local recording proxy → NAI gateway, model `movin-backend`. System = Go rules (golden fixture); first user message = snapshot of the 19 live entries (4.1 KB); later turns carry the date, turn 3 a delta line. Tools are fakes with the Go schemas plus `view_document_page` returning the real unit plan PNG; nothing was written anywhere.
+  - Tool calling: passes. 4 turns, 11 requests, all 200. Search with sensible arguments, `add_entry` with the right fields, `view_document_page` called and the image read (flex room vs bedroom 3 answered from the plan).
+  - Prefix: every request k+1 starts byte-for-byte with request k's messages (10/10), including across the image turn; only `chat_template_kwargs` changes on the `/think` turn.
+  - Accepted by the gateway: `store`, `max_completion_tokens`, `stream_options`, `chat_template_kwargs {enable_thinking, preserve_thinking}` (compat `thinkingFormat: "qwen-chat-template"`, model `reasoning: true`). Thinking off → `reasoning_tokens: 0`; on → 78–585 reasoning tokens.
+  - Caching: `cached_tokens` never reported (0 of 55,194 prompt tokens). Either the gateway doesn't cache or doesn't report it; every request pays the full prompt. v1 on Claude native read 80–90% from cache.
+  - Latency per request (TTFB / total): no think 0.57–2.3 s / 0.9–3.3 s (the request after the image ~2 s / 3.3 s); think 0.8–2.2 s / 1.4–9.8 s. Per message: 2.3 s (add) to 4.8 s (three searches); v1: 2.6 s.
+  - Tokens: prompt 3.5k on the first request, growing ~100–200 per round; the image adds ~1.8k and stays in every later request of the conversation → the planned placeholder for images from earlier runs matters (T3.3).
+  - One upstream drop: in the first run, the request after the image turn ended with "other side closed" (crashed the spike's proxy, not pi-ai). Not reproduced in two more runs. The adapter must treat it as a retryable transport error (T3.1 test).
+  - Small: the think-turn reply began with blank lines → trim before delivery (T4.3).
+
+## T1 Domain
+- [x] T1.1 Scaffold — 2026-11-20. Brief `briefs/T1.1.md` (+ Amendment 1). Written by `coder`; `ts-reviewer`: REJECT (shell target not interactive; false claim about Biome `indentStyle`; three brief gaps: lint passed on warnings, `./x.js` imports of `.ts` passed lint but crash under Node type stripping, failed `npm ci` left `node_modules` looking current) → fixed → a further shell bug (`-it` after the image) caught by the main session → fixed → **APPROVE**.
+  - Files: `app/{package.json,package-lock.json,tsconfig.json,biome.json,vitest.config.ts,Makefile,.gitignore,README.md,src/runtime.test.ts}`; root `.dockerignore` + `app/node_modules`.
+  - Main session: `make -C app lint test` → `Checked 6 files … No fixes applied`, `Tests 1 passed (1)`. `printf 'node --version\nexit\n' | script -q /dev/null make -C app shell` → `v24.22.3`. Adapter override: `src/durable/adapter.ts` importing `@earendil-works/pi-durable` and `…/storage/sqlite/node` → `Checked 7 files … No fixes applied`; the same file with `openNodeSqliteStorage(…)` not awaited → `lint/nursery/noFloatingPromises`, lint fails (Biome sees promise types from package `.d.ts`). Temp file removed, lint green.
+  - Coder (reproduced by reviewer where possible): pi-durable import outside the adapter fails with the plan message (bare, subpath, dynamic `import()`); `./x.js` import fails `useImportExtensions`; unused import fails (`--error-on-warnings`); stamp `node_modules/.installed` reinstalls only when the lockfile changes; clean `npm ci` → 134 packages; lockfile = T0.1 set (194 entries incl. root); test fails on Node 22 (`expected 22 to be 24`); root `make lint` and `make test` green.
+  - Lessons for briefs: ask the coder to run a target, not grep its command line; ask for full error output, not `tail`.
+- [x] T1.2 Object store — 2026-11-20. Brief `briefs/T1.2.md` (+ Amendments 1, 2). Written by `coder`; `ts-reviewer`: REJECT → CHANGES REQUIRED → **APPROVE** (3 rounds).
+  - Files: `app/src/objstore/{store,memory,s3,objstore.test}.ts`; `app/Makefile` (`test` via compose `app-test`); `app/README.md`; root `docker-compose.yml` (service `app-test`: pinned node image, MinIO env, `REQUIRE_S3=1`, no `env_file`).
+  - Round 1 BLOCKER (found by review, proven on MinIO): `put(k, b, "")` sent `IfMatch: ""`, which MinIO treats as an unconditional write (Go: create-only; memory: refused); and a missing ETag was turned into `""`. Fixed: `""` throws TypeError before I/O in both stores; a missing ETag throws. Also: empty `endpointUrl` = unset (as Go). Six mutations survived round 1 (status half of the error mapper, memory sort, paging, no-credentials message, `info.prefix`), two more in round 2 (no-ETag path, label fallback), and the paging assertion only passed by counting an unrelated call. All now fail a named test.
+  - Main session: `make -C app lint` → `Checked 10 files … No fixes applied`; verbose run in `app-test` → `Tests 19 passed (19)` (memory ×5 and s3 ×9 shared/S3 cases, 5 standalone). Root `make lint` → `lint ok`; `make test` → all Go packages ok, poppler ok.
+  - Reviewer (reproduced): `REQUIRE_S3=1` without S3 env fails the run; MinIO answers a conditional race with 412 only (8 rounds × 4 writers: 8 ok, 24 × 412; 409 covered by the mapper unit test only); fake SDK responses match real MinIO response shapes; abort reaches every list page via the paginator's extra argument.
+  - Credential source: from `$source` on the resolved identity (`@aws-sdk/types/dist-types/identity/AwsCredentialIdentity.d.ts:59-60`). Instance-role credentials show "unknown" (no provider in this SDK sets `CREDENTIALS_IMDS`); prod uses env keys → "env keys" (checked on MinIO).
+- [x] T1.3 Entries, journal, search, agenda — built in three parts (briefs T1.3a/b/c): model + Go golden files (ts-reviewer REJECT → Amendment 1, 22 mutations killed), service + journal + replay-safe change ids (9 mutations), search + agenda (7 mutations). 295 tests green. Ticked after the T1 phase review. Known differences documented in model.ts: duplicate struct-valued keys, journal `tags:null` → `[]`, `-0`, lone surrogates. Phase review to check: a replay after the record was trimmed from the 200-change journal writes again.
+- [x] T1.4 Settings — built and verified by the main session 2026-11-21 (brief T1.4): `app/src/config.ts`, `app/src/settings/*`; Fernet passes the vendored Go vectors; Go↔TS round trip both ways (Go reads a TS save and its key; TS reads Go's); claude fixture byte-identical and its key never decrypted; 8 mutations killed. 381 tests green, lint 0 infos. HTTP-level settings tests deferred to T2.2 (listed in the coder report). Phase review: settings writes fixed to keep untouched sections' raw bytes (T1-fixes F1, byte golden + TS→Go re-save gate identical).
+- [x] T1.5 Documents — split into T1.5a/b/c. T1.5a (poppler converter + `app/Dockerfile.test`, poppler 25.12.0 matching the Go image) and T1.5b (index, sync, summary; Go goldens both ways; fake converter) built and verified by the main session 2026-11-21: 478 tests green, lint 0 infos, root `make lint`/`make test` ok. Main-session fixes: `.gitignore` `!app/Dockerfile.test`; `goTrimSpace` instead of `.trim()` in poppler.ts. T1.5c (sched.ts as the one HH:MM/off home, BM25 search with 24 Go golden queries, viewer + LRU caches, docs background schedule) built and verified 2026-11-21: 573 tests green, lint 0 infos, root lint ok; 7 mutations killed. (Interrupted once by a NAI outage during a zy-metal worker rollout.) Ticked after the T1 phase review.
+- **T1 phase review — APPROVE 2026-11-21** (ts-reviewer `0abcb185-cebf-494`, four rounds). Round 1 REJECT: settings.json saves re-encoded untouched sections (blocker), 11 untested guards, a needless poppler `lookup()`, duplicated Go helpers, replay check only at index 0. Fixed per `briefs/T1-fixes.md` F1–F10, then Amendments 2 (scanner golden table, index-1 collision, BOM/invalid-UTF-8 documented) and 3 (nested refusal rows). Coder `1b1a4f35-41fb-40b`. Final: 631 tests (1 skipped), lint 0 infos, root lint ok; `raw.go.json` (34 rows) and docs `index.go.json` regenerate from Go with unchanged SHA-1. Shared helpers now in `src/gostr.ts`, `src/gojson.ts`, `src/errors.ts`, `log.ts errorMessage`. Kept differences (documented in code): `-0`, lone surrogates, U+0130/final sigma lowercasing, URL authority subset, duplicate struct keys, journal `tags:null`→`[]`, html entities subset, BOM kept (Go replaces the file), invalid UTF-8→U+FFFD, `null` settings body replaced (Go panics). Main-session changes: `.gitignore` `!app/Dockerfile.test`, `goTrimSpace` in poppler, 30 s timeouts on the two 17 MiB tests (flaky under host load).
+  - Follow-up: the Go golden harnesses live in git-ignored `tmp/t1*-golden/`; move them into the repo (e.g. `app/testdata-gen/`, `//go:build ignore`) before T7 so goldens stay reproducible. `.dockerignore` keeps T1's `app/node_modules` line unstaged (mixed with the pre-existing staged change).
+
+## T2 Web
+- [ ] T2.1 REST + SSE
+- [ ] T2.2 Admin routes
+- [ ] T2.3 Page + side-by-side run
+
+## T3 Agent
+- [ ] T3.1 LLM layer
+  - wire LLM summariser for docs (summary.ts)
+- [ ] T3.2 Durable adapter
+- [ ] T3.3 Tools
+- [ ] T3.4 Prompt
+- [ ] T3.5 Web chat
+- [ ] T3.6 chateval port (checkpoint)
+
+## T4 Telegram
+- [ ] T4.1 Client
+- [ ] T4.2 Intake
+- [ ] T4.3 Delivery task
+- [ ] T4.4 Commands + callbacks
+
+## T5 Scheduled work
+- [ ] T5.1 Check-in task
+- [ ] T5.2 Docs sync task
+- [ ] T5.3 Restore safety + Velero notes
+
+## T6 Cutover
+- [ ] T6.1 Image + CI
+- [ ] T6.2 Manifests
+- [ ] T6.3 Flux pin
+- [ ] T6.4 Volume
+- [ ] T6.5 LLM connection check
+- [ ] T6.6 Cutover
+- [ ] T6.7 Velero for the volume (not blocking)
+
+## T7
+- [ ] T7.1 Delete Go
+- [ ] T7.2 Move `app/` to the root

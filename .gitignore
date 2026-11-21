@@ -2,6 +2,7 @@
 .env.bak
 /tmp/
 *.test
+!app/Dockerfile.test
 /movin
 
 # macOS

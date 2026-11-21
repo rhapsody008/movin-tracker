@@ -1,0 +1,5 @@
+{
+  "llm": {"vision":true,"kind":"openai","baseUrl":"https://llm.example/v1","model":"qwen","streaming":true,"thinkOnDemand":false},
+  "checkin": {"schedule":"09:30","chat":"-1001234","updated":"2026-10-14T00:00:00Z","by":"zy@example.com"},
+  "zeta":  {"zeta":1,"alpha":12345678901234567890,"f":1.50,"s":"<a&b> "}
+}

@@ -1,0 +1,44 @@
+{
+  "by": "zy@example.com",
+  "checkin": {
+    "schedule": "07:05",
+    "chat": "-1001234",
+    "updated": "2026-11-11T09:00:00Z",
+    "by": "zy@example.com"
+  },
+  "llm": {
+    "vision": true,
+    "kind": "openai",
+    "baseUrl": "https://llm.example/v1",
+    "apiKeyEnc": "gAAAAABrAUQ75kH28GJSbFuHWUv7bpmGNAtEW_v1_iFnk3bLXHf6eDNpsV1W0SCtcFzbgGr7kVjgHA51EllaYXBtBQQDUfxUJL7F2QMRLcXmMGYjwvtcJT4=",
+    "model": "m2",
+    "streaming": true,
+    "thinkOnDemand": true
+  },
+  "schema": 1,
+  "stt": {
+    "model": "whisper",
+    "notes": [
+      "a \u003c b",
+      "c \u0026 d"
+    ]
+  },
+  "telegram": {
+    "users": [
+      {
+        "id": "111",
+        "name": "ZY"
+      },
+      {
+        "id": "222",
+        "name": "Partner"
+      }
+    ],
+    "groups": [
+      "-1001234"
+    ],
+    "updated": "2026-11-11T09:00:00Z",
+    "by": "zy@example.com"
+  },
+  "updated": "2026-11-11T09:00:00Z"
+}

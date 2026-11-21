@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "docs": [
+    {
+      "id": "aaaa0001",
+      "key": "docs/raw/1.0 Plans/1.1 Layout (A3).pdf",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "size": 1234567890123,
+      "pages": 1,
+      "class": "drawing",
+      "status": "ok",
+      "textPages": 1,
+      "summary": "\u003cb\u003eLayout\u003c/b\u003e \u0026 \"注解\": 玄关\u2028second line 😀",
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 4
+    },
+    {
+      "id": "cccc0003",
+      "key": "docs/raw/2.0 Checklists/warranty \u0026 invoice.pdf",
+      "etag": "\"7f83b1657ff1fc53b92dc18148a1d65c\"",
+      "size": 42,
+      "status": "ok",
+      "error": "couldn't read the new version: pdftotext: timeout",
+      "errorAt": "2026-11-12T03:00:00Z"
+    },
+    {
+      "id": "dddd0004",
+      "key": "docs/raw/9.0 Old/gone.pdf",
+      "etag": "\"deadbeefdeadbeefdeadbeefdeadbeef\"",
+      "size": 1,
+      "pages": 2,
+      "class": "scanned",
+      "status": "removed",
+      "summary": "旧的保修单",
+      "syncedAt": "2026-11-10T03:00:00Z",
+      "v": 3,
+      "removedAt": "2026-11-11T03:00:00Z"
+    },
+    {
+      "id": "bbbb0002",
+      "key": "docs/raw/notes.txt",
+      "etag": "\"0\"",
+      "size": 0,
+      "status": "skipped",
+      "reason": "not a PDF (txt)"
+    }
+  ],
+  "lastSync": {
+    "at": "2026-11-11T03:00:00Z",
+    "reason": "telegram:42",
+    "added": 0,
+    "changed": 1,
+    "removed": 1,
+    "failed": 1,
+    "skipped": 1,
+    "refreshed": 2,
+    "error": "documents index changed by someone else; try the sync again \u003c\u0026\u003e"
+  },
+  "updated": "2026-11-11T03:00:00Z"
+}

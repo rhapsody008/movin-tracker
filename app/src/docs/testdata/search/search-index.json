@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "docs": [
+    {
+      "id": "77666590",
+      "key": "docs/raw/1.0 Plans/1.3 Power.pdf",
+      "etag": "\"00000020\"",
+      "size": 1024,
+      "pages": 1,
+      "class": "drawing",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "d0e8522f",
+      "key": "docs/raw/4.0 Manuals/4.2 Kitchen/Fridge.pdf",
+      "etag": "\"0000002b\"",
+      "size": 1024,
+      "pages": 2,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "4936e08b",
+      "key": "docs/raw/4.0 Manuals/4.2 Kitchen/Oven.pdf",
+      "etag": "\"00000029\"",
+      "size": 1024,
+      "pages": 1,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "d62f708c",
+      "key": "docs/raw/4.0 Manuals/Heater (scanned).pdf",
+      "etag": "\"00000029\"",
+      "size": 1024,
+      "pages": 2,
+      "class": "scanned",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "b173e991",
+      "key": "docs/raw/6.0 General/Warranty.pdf",
+      "etag": "\"00000021\"",
+      "size": 1024,
+      "pages": 2,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "ea41499c",
+      "key": "docs/raw/7.0 中文/合同.pdf",
+      "etag": "\"0000001e\"",
+      "size": 1024,
+      "pages": 2,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "f97d3d50",
+      "key": "docs/raw/8.0 Broken/NoText.pdf",
+      "etag": "\"0000001e\"",
+      "size": 1024,
+      "pages": 1,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "4461fc3e",
+      "key": "docs/raw/9.0 Long/Emoji.pdf",
+      "etag": "\"0000001b\"",
+      "size": 1024,
+      "pages": 1,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "5b05f8a5",
+      "key": "docs/raw/9.0 Long/Gone.pdf",
+      "etag": "\"0000001a\"",
+      "size": 1024,
+      "pages": 1,
+      "class": "text",
+      "status": "removed",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "fcb577c8",
+      "key": "docs/raw/9.0 Long/Valves.pdf",
+      "etag": "\"0000001c\"",
+      "size": 1024,
+      "pages": 26,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    }
+  ],
+  "updated": "2026-11-11T03:00:00Z"
+}

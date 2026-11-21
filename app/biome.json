@@ -1,0 +1,55 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+	"files": {
+		"includes": ["**", "!node_modules", "!coverage", "!**/testdata"]
+	},
+	"formatter": {
+		"indentStyle": "tab",
+		"lineWidth": 120
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double"
+		}
+	},
+	"linter": {
+		"rules": {
+			"preset": "recommended",
+			"correctness": {
+				"useImportExtensions": "error"
+			},
+			"suspicious": {
+				"noExplicitAny": "error"
+			},
+			"style": {
+				"noNonNullAssertion": "error",
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"patterns": [
+							{
+								"group": ["@earendil-works/pi-durable", "@earendil-works/pi-durable/**"],
+								"message": "only src/durable/adapter.ts may import pi-durable (docs/movin-v3/plan.md)"
+							}
+						]
+					}
+				}
+			},
+			"nursery": {
+				"noFloatingPromises": "error"
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["src/durable/adapter.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": "off"
+					}
+				}
+			}
+		}
+	]
+}

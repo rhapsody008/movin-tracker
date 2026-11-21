@@ -1,0 +1,188 @@
+// Every setting that comes from the environment. Port of internal/config/config.go,
+// with the v2 removals (settings-spec §11): no Claude connection, no
+// LLM_CLAUDE_BASE_URL, and LLM_KIND=claude refuses to start.
+//
+// loadConfig takes the environment map so tests never touch process.env; the
+// server passes the default. A bad value throws with Go's message: the process
+// is expected to die at startup rather than run half-configured.
+
+import { DEFAULT_SYNC_SCHEDULE } from "./docs/schedule.ts";
+import { goQuote, goTrim, goTrimRight, goTrimSpace } from "./gostr.ts";
+import { errorMessage } from "./log.ts";
+import { parseSchedule } from "./sched.ts";
+import { type Checkin, DEFAULT_CHECKIN, parseCheckin } from "./settings/checkin.ts";
+import { parseTelegramEnv, type Telegram } from "./settings/telegram.ts";
+
+/** The LLM limits that come from Defaults, not from the environment. */
+export const LLM_DEFAULTS = { timeoutSec: 600, maxToolRounds: 5, streaming: true } as const;
+
+export interface LLMConfig {
+	/** Always "openai" in v2. */
+	kind: "openai";
+	vision: boolean;
+	baseUrl: string;
+	apiKey: string;
+	model: string;
+	timeoutSec: number;
+	maxToolRounds: number;
+	streaming: boolean;
+	thinkOnDemand: boolean;
+}
+
+export interface Config {
+	listenAddr: string;
+	s3Bucket: string;
+	s3Prefix: string;
+	awsRegion: string;
+	s3EndpointUrl: string;
+	authHeader: string;
+	allowedEmails: string[];
+	/** Used when the auth header is missing; local dev only. */
+	devEmail: string;
+	settingsSecret: string;
+	/** The env-level LLM defaults; settings.json overrides them. */
+	llm: LLMConfig;
+	/** DOCS_SYNC_SCHEDULE as written: HH:MM in timeZone, or off. */
+	docsSync: string;
+	checkin: Checkin;
+	/** Empty: the bot does not start. */
+	telegramToken: string;
+	/** The env-level allowlist; settings.json overrides it. */
+	telegram: Telegram;
+	/** The TZ name, for Intl. */
+	timeZone: string;
+	staticDir: string;
+	pollEveryMs: number;
+	logLevel: string;
+}
+
+/** An environment lookup: process.env, or a plain object in tests. */
+export type Env = Record<string, string | undefined>;
+
+/** env(k, d): the trimmed value, or the default when unset or blank. */
+function env(e: Env, k: string, d: string): string {
+	const v = goTrimSpace(e[k] ?? "");
+	return v === "" ? d : v;
+}
+
+/** strconv.ParseBool, whose error text LLM_STREAMING reports. */
+function parseBool(s: string): boolean {
+	switch (s) {
+		case "1":
+		case "t":
+		case "T":
+		case "true":
+		case "TRUE":
+		case "True":
+			return true;
+		case "0":
+		case "f":
+		case "F":
+		case "false":
+		case "FALSE":
+		case "False":
+			return false;
+		default:
+			throw new Error(`strconv.ParseBool: parsing ${goQuote(s)}: invalid syntax`);
+	}
+}
+
+function deepFreeze<T>(value: T): T {
+	if (value === null || typeof value !== "object") return value;
+	Object.freeze(value);
+	for (const inner of Object.values(value)) deepFreeze(inner);
+	return value;
+}
+
+/** Load reads the environment and returns the config or throws on a bad value. */
+export function loadConfig(e: Env): Config {
+	const llm: LLMConfig = {
+		kind: "openai",
+		vision: false,
+		baseUrl: goTrimRight(env(e, "LLM_BASE_URL", ""), "/"),
+		apiKey: env(e, "LLM_API_KEY", ""),
+		model: env(e, "LLM_MODEL", ""),
+		timeoutSec: LLM_DEFAULTS.timeoutSec,
+		maxToolRounds: LLM_DEFAULTS.maxToolRounds,
+		streaming: LLM_DEFAULTS.streaming,
+		thinkOnDemand: false,
+	};
+	const kind = env(e, "LLM_KIND", "openai");
+	if (kind === "claude")
+		throw new Error("LLM_KIND=claude is no longer supported (v2): use an OpenAI-compatible endpoint");
+	if (kind !== "openai") throw new Error('LLM_KIND must be "openai"');
+	const streaming = env(e, "LLM_STREAMING", "");
+	if (streaming !== "") {
+		try {
+			llm.streaming = parseBool(streaming);
+		} catch (err) {
+			throw new Error(`LLM_STREAMING: ${errorMessage(err)}`, { cause: err });
+		}
+	}
+	const think = env(e, "LLM_THINK_ON_DEMAND", "");
+	if (think !== "") {
+		try {
+			llm.thinkOnDemand = parseBool(think);
+		} catch (err) {
+			throw new Error(`LLM_THINK_ON_DEMAND: ${errorMessage(err)}`, { cause: err });
+		}
+	}
+
+	const s3Bucket = env(e, "S3_BUCKET", "");
+	if (s3Bucket === "") throw new Error("S3_BUCKET is required");
+
+	const timeZone = env(e, "TZ", "Asia/Singapore");
+	checkTimeZone(timeZone);
+
+	const docsSync = env(e, "DOCS_SYNC_SCHEDULE", DEFAULT_SYNC_SCHEDULE);
+	parseSchedule("DOCS_SYNC_SCHEDULE", docsSync, DEFAULT_SYNC_SCHEDULE);
+
+	const schedule = env(e, "CHECKIN_SCHEDULE", DEFAULT_CHECKIN);
+	try {
+		parseCheckin(schedule, "");
+	} catch (err) {
+		throw new Error(`CHECKIN_SCHEDULE: ${errorMessage(err)}`, { cause: err });
+	}
+	let checkin: Checkin;
+	try {
+		checkin = parseCheckin(schedule, env(e, "CHECKIN_CHAT", ""));
+	} catch (err) {
+		throw new Error(`CHECKIN_CHAT: ${errorMessage(err)}`, { cause: err });
+	}
+
+	const allowedEmails: string[] = [];
+	for (const part of env(e, "ALLOWED_EMAILS", "").split(",")) {
+		const mail = goTrimSpace(part).toLowerCase();
+		if (mail !== "") allowedEmails.push(mail);
+	}
+
+	return deepFreeze({
+		listenAddr: env(e, "LISTEN_ADDR", "127.0.0.1:8080"),
+		s3Bucket,
+		s3Prefix: goTrim(env(e, "S3_PREFIX", ""), "/"),
+		awsRegion: env(e, "AWS_REGION", "ap-southeast-1"),
+		s3EndpointUrl: env(e, "S3_ENDPOINT_URL", ""),
+		authHeader: env(e, "AUTH_HEADER", "X-Forwarded-Email"),
+		allowedEmails,
+		devEmail: env(e, "DEV_EMAIL", "").toLowerCase(),
+		settingsSecret: env(e, "SETTINGS_SECRET", ""),
+		llm,
+		docsSync,
+		checkin,
+		telegramToken: env(e, "TELEGRAM_BOT_TOKEN", ""),
+		telegram: parseTelegramEnv(env(e, "TELEGRAM_ALLOWED_IDS", ""), env(e, "TELEGRAM_ALLOWED_CHATS", "")),
+		timeZone,
+		staticDir: env(e, "STATIC_DIR", ""),
+		pollEveryMs: 5000,
+		logLevel: env(e, "LOG_LEVEL", "info"),
+	});
+}
+
+// checkTimeZone is time.LoadLocation's job: Intl knows the same zone database.
+function checkTimeZone(name: string): void {
+	try {
+		new Intl.DateTimeFormat("en-US", { timeZone: name });
+	} catch {
+		throw new Error(`TZ: unknown time zone ${goQuote(name)}`);
+	}
+}

@@ -1,0 +1,1 @@
+decode entries.json: json: cannot unmarshal object into Go struct field Doc.entries of type []entries.Entry

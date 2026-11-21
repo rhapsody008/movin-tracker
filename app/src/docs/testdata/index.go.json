@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "docs": [
+    {
+      "id": "3d4e5f60",
+      "key": "docs/raw/1.0 Plans/1.3 Power.pdf",
+      "etag": "\"9f8e7d6c5b4a39281706f5e4d3c2b1a0\"",
+      "size": 2516582,
+      "pages": 1,
+      "class": "drawing",
+      "status": "ok",
+      "textPages": 1,
+      "summary": "Power and lighting plan for the whole unit.",
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "8a9b0c1d",
+      "key": "docs/raw/4.0 Manuals/4.2 Kitchen/Fridge.pdf",
+      "etag": "\"1f2e3d4c5b6a79880a1b2c3d4e5f6a7b\"",
+      "size": 1048576,
+      "pages": 32,
+      "class": "text",
+      "status": "ok",
+      "textPages": 30,
+      "summary": "Fridge manual: temperature settings and defrosting.",
+      "syncedAt": "2026-11-10T03:00:00Z",
+      "v": 3,
+      "error": "couldn't read the new version: pdftotext: timeout",
+      "errorAt": "2026-11-11T03:00:00Z"
+    },
+    {
+      "id": "b7f1c2a9",
+      "key": "docs/raw/4.0 Manuals/4.2 Kitchen/SMEG Oven.pdf",
+      "etag": "\"6a1b2c3d4e5f60718293a4b5c6d7e8f9\"",
+      "size": 1843200,
+      "pages": 24,
+      "class": "text",
+      "status": "ok",
+      "textPages": 24,
+      "summary": "Oven manual: settings, cleaning and the error codes.",
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "aabbccdd",
+      "key": "docs/raw/5.0 Vouchers/5.1 Video.mp4",
+      "etag": "\"ffff0000ffff0000ffff0000ffff0000\"",
+      "size": 73400320,
+      "status": "skipped",
+      "reason": "not a PDF (mp4)"
+    },
+    {
+      "id": "5c6d7e8f",
+      "key": "docs/raw/5.0 Vouchers/5.2 Warranty scan.pdf",
+      "etag": "\"00ff00ff00ff00ff00ff00ff00ff00ff\"",
+      "size": 482304,
+      "status": "failed",
+      "reason": "pdfinfo: no pages found",
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "error": "pdfinfo: no pages found",
+      "errorAt": "2026-11-11T03:00:00Z"
+    },
+    {
+      "id": "66778899",
+      "key": "docs/raw/6.0 Old/Warranty old.pdf",
+      "etag": "\"abcdefabcdefabcdefabcdefabcdefab\"",
+      "size": 233472,
+      "pages": 4,
+      "class": "scanned",
+      "status": "removed",
+      "summary": "Old warranty certificate.",
+      "syncedAt": "2026-11-09T03:00:00Z",
+      "v": 3,
+      "removedAt": "2026-11-11T03:00:00Z"
+    },
+    {
+      "id": "e0000002",
+      "key": "docs/raw/7.0 Extras/ private tag.pdf",
+      "etag": "\"88887777666655554444333322221111\"",
+      "size": 102400,
+      "pages": 1,
+      "class": "text",
+      "status": "ok",
+      "textPages": 1,
+      "summary": "A name with a private-use character.",
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    },
+    {
+      "id": "e0000001",
+      "key": "docs/raw/7.0 Extras/😀 emoji label.pdf",
+      "etag": "\"11112222333344445555666677778888\"",
+      "size": 204800,
+      "pages": 2,
+      "class": "text",
+      "status": "ok",
+      "textPages": 2,
+      "summary": "A label with an emoji in its name.",
+      "syncedAt": "2026-11-11T03:00:00Z",
+      "v": 3
+    }
+  ],
+  "lastSync": {
+    "at": "2026-11-11T03:00:00Z",
+    "reason": "daily",
+    "added": 0,
+    "changed": 1,
+    "removed": 1,
+    "failed": 1,
+    "skipped": 0,
+    "refreshed": 3
+  },
+  "updated": "2026-11-11T03:00:00Z"
+}

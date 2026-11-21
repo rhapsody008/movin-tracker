@@ -1,0 +1,548 @@
+[
+  {
+    "query": "how do I defrost the freezer?",
+    "hits": [
+      {
+        "doc": "d0e8522f",
+        "name": "Fridge.pdf",
+        "folder": "4.0 Manuals/4.2 Kitchen",
+        "page": 2,
+        "score": 4.75,
+        "snippet": "Defrosting: defrost the freezer every six months and clean the door seals. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general i…"
+      }
+    ]
+  },
+  {
+    "query": "socket",
+    "hits": [
+      {
+        "doc": "77666590",
+        "name": "1.3 Power.pdf",
+        "folder": "1.0 Plans",
+        "page": 1,
+        "score": 3.4,
+        "snippet": "POWER LEGEND 13A switched socket outlets; DB distribution board; sockets in bedroom 2. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittin…"
+      }
+    ]
+  },
+  {
+    "query": "sockets",
+    "hits": [
+      {
+        "doc": "77666590",
+        "name": "1.3 Power.pdf",
+        "folder": "1.0 Plans",
+        "page": 1,
+        "score": 3.4,
+        "snippet": "POWER LEGEND 13A switched socket outlets; DB distribution board; sockets in bedroom 2. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittin…"
+      }
+    ]
+  },
+  {
+    "query": "warranties",
+    "hits": [
+      {
+        "doc": "b173e991",
+        "name": "Warranty.pdf",
+        "folder": "6.0 General",
+        "page": 1,
+        "score": 3.45,
+        "snippet": "Warranty: 12 months from handover. Two warranties for the glass panels and the status of each valve. general information about the home and its fittings general information about the home and its fittings general information about the home …"
+      }
+    ]
+  },
+  {
+    "query": "warranty",
+    "hits": [
+      {
+        "doc": "b173e991",
+        "name": "Warranty.pdf",
+        "folder": "6.0 General",
+        "page": 1,
+        "score": 3.45,
+        "snippet": "Warranty: 12 months from handover. Two warranties for the glass panels and the status of each valve. general information about the home and its fittings general information about the home and its fittings general information about the home …"
+      }
+    ]
+  },
+  {
+    "query": "status",
+    "hits": [
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 23,
+        "score": 3.98,
+        "snippet": "valve status glass"
+      },
+      {
+        "doc": "b173e991",
+        "name": "Warranty.pdf",
+        "folder": "6.0 General",
+        "page": 1,
+        "score": 1.92,
+        "snippet": "Warranty: 12 months from handover. Two warranties for the glass panels and the status of each valve. general information about the home and its fittings general information about the home and its fittings general information about the home …"
+      }
+    ]
+  },
+  {
+    "query": "glass",
+    "hits": [
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 23,
+        "score": 3.98,
+        "snippet": "valve status glass"
+      },
+      {
+        "doc": "b173e991",
+        "name": "Warranty.pdf",
+        "folder": "6.0 General",
+        "page": 1,
+        "score": 1.92,
+        "snippet": "Warranty: 12 months from handover. Two warranties for the glass panels and the status of each valve. general information about the home and its fittings general information about the home and its fittings general information about the home …"
+      }
+    ]
+  },
+  {
+    "query": "door",
+    "hits": [
+      {
+        "doc": "4936e08b",
+        "name": "Oven.pdf",
+        "folder": "4.0 Manuals/4.2 Kitchen",
+        "page": 1,
+        "score": 2.06,
+        "snippet": "Oven cleaning with the pyrolytic programme; the door must be closed. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general informa…"
+      },
+      {
+        "doc": "d0e8522f",
+        "name": "Fridge.pdf",
+        "folder": "4.0 Manuals/4.2 Kitchen",
+        "page": 2,
+        "score": 1.99,
+        "snippet": "Defrosting: defrost the freezer every six months and clean the door seals. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general i…"
+      }
+    ]
+  },
+  {
+    "query": "door",
+    "folder": "1.0 plans",
+    "hits": []
+  },
+  {
+    "query": "door",
+    "folder": "/1.0 PLANS/",
+    "hits": []
+  },
+  {
+    "query": "door",
+    "folder": "4.0 manuals/4.2 kitchen",
+    "hits": [
+      {
+        "doc": "4936e08b",
+        "name": "Oven.pdf",
+        "folder": "4.0 Manuals/4.2 Kitchen",
+        "page": 1,
+        "score": 2.06,
+        "snippet": "Oven cleaning with the pyrolytic programme; the door must be closed. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general informa…"
+      },
+      {
+        "doc": "d0e8522f",
+        "name": "Fridge.pdf",
+        "folder": "4.0 Manuals/4.2 Kitchen",
+        "page": 2,
+        "score": 1.99,
+        "snippet": "Defrosting: defrost the freezer every six months and clean the door seals. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general i…"
+      }
+    ]
+  },
+  {
+    "query": "door",
+    "doc": "4936e08b",
+    "hits": [
+      {
+        "doc": "4936e08b",
+        "name": "Oven.pdf",
+        "folder": "4.0 Manuals/4.2 Kitchen",
+        "page": 1,
+        "score": 2.06,
+        "snippet": "Oven cleaning with the pyrolytic programme; the door must be closed. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general informa…"
+      }
+    ]
+  },
+  {
+    "query": "the and of",
+    "hits": []
+  },
+  {
+    "query": "x",
+    "hits": []
+  },
+  {
+    "query": "厨房台面",
+    "hits": [
+      {
+        "doc": "ea41499c",
+        "name": "合同.pdf",
+        "folder": "7.0 中文",
+        "page": 2,
+        "score": 5.2,
+        "snippet": "保修 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台…"
+      },
+      {
+        "doc": "ea41499c",
+        "name": "合同.pdf",
+        "folder": "7.0 中文",
+        "page": 1,
+        "score": 2.06,
+        "snippet": "厨房台面 石英石 保修 十年。热水器 安装在 阳台。 general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings"
+      }
+    ]
+  },
+  {
+    "query": "保修",
+    "hits": [
+      {
+        "doc": "ea41499c",
+        "name": "合同.pdf",
+        "folder": "7.0 中文",
+        "page": 1,
+        "score": 2.06,
+        "snippet": "厨房台面 石英石 保修 十年。热水器 安装在 阳台。 general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings"
+      },
+      {
+        "doc": "ea41499c",
+        "name": "合同.pdf",
+        "folder": "7.0 中文",
+        "page": 2,
+        "score": 1.1,
+        "snippet": "保修 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台面 石英石 厨房台…"
+      }
+    ]
+  },
+  {
+    "query": "valve",
+    "hits": [
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 2,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 3,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 4,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 5,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 6,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 7,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 8,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 9,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      }
+    ]
+  },
+  {
+    "query": "valve",
+    "limit": 100,
+    "hits": [
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 2,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 3,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 4,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 5,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 6,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 7,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 8,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 9,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 10,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 11,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 12,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 13,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 14,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 15,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 16,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 17,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 18,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 19,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 20,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "4461fc3e",
+        "name": "Emoji.pdf",
+        "folder": "9.0 Long",
+        "page": 1,
+        "score": 0.41,
+        "snippet": "…🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 valve"
+      }
+    ]
+  },
+  {
+    "query": "valve",
+    "limit": 3,
+    "hits": [
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 2,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 3,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      },
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 4,
+        "score": 0.51,
+        "snippet": "valve valve valve valve valve valve valve valve valve valve valve valve"
+      }
+    ]
+  },
+  {
+    "query": "valve",
+    "doc": "4461fc3e",
+    "hits": [
+      {
+        "doc": "4461fc3e",
+        "name": "Emoji.pdf",
+        "folder": "9.0 Long",
+        "page": 1,
+        "score": 0.41,
+        "snippet": "…🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 🚰 valve"
+      }
+    ]
+  },
+  {
+    "query": "annex",
+    "hits": [
+      {
+        "doc": "b173e991",
+        "name": "Warranty.pdf",
+        "folder": "6.0 General",
+        "page": 2,
+        "score": 1.32,
+        "snippet": "…se clause clause clause clause clause clause clause clause clause clause clause annex appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix appendix a…"
+      }
+    ]
+  },
+  {
+    "query": "needle",
+    "hits": [
+      {
+        "doc": "fcb577c8",
+        "name": "Valves.pdf",
+        "folder": "9.0 Long",
+        "page": 1,
+        "score": 2.69,
+        "snippet": "…he loop draining the loop draining the loop draining the loop draining the loop needle valve"
+      }
+    ]
+  },
+  {
+    "query": "oven pyrolytic",
+    "hits": [
+      {
+        "doc": "4936e08b",
+        "name": "Oven.pdf",
+        "folder": "4.0 Manuals/4.2 Kitchen",
+        "page": 1,
+        "score": 4.92,
+        "snippet": "Oven cleaning with the pyrolytic programme; the door must be closed. general information about the home and its fittings general information about the home and its fittings general information about the home and its fittings general informa…"
+      }
+    ]
+  },
+  {
+    "query": "unknownwordnotpresent",
+    "hits": []
+  }
+]

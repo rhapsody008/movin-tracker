@@ -1,0 +1,14 @@
+{
+  "by": "zy@example.com",
+  "llm": {
+    "vision": false,
+    "kind": "claude",
+    "baseUrl": "https://api.anthropic.com",
+    "apiKeyEnc": "gAAAAABrAUQ7GbP5WUU3fLYenx_bzgZUJ4ANPj42U81wo8IIyjyC7axvtx3lPcdoY9OPSqoxaQLtBrBA9RxEOgI-qWiUCCSVz-P_efGA8x2ipkDsz0GQzB8=",
+    "model": "claude-opus-5-5",
+    "streaming": false,
+    "thinkOnDemand": false
+  },
+  "schema": 1,
+  "updated": "2026-11-11T09:00:00Z"
+}
