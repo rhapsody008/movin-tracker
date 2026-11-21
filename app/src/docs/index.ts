@@ -287,7 +287,7 @@ export function encodeIndex(ix: Index, at: string): string {
 	return goMarshalIndent(new Ordered(entries));
 }
 
-function encodeDocValue(d: Doc): Ordered {
+export function encodeDocValue(d: Doc): Ordered {
 	const e: (readonly [string, unknown])[] = [
 		["id", d.id],
 		["key", d.key],
@@ -308,7 +308,7 @@ function encodeDocValue(d: Doc): Ordered {
 	return new Ordered(e);
 }
 
-function encodeSyncValue(s: Sync): Ordered {
+export function encodeSyncValue(s: Sync): Ordered {
 	const e: (readonly [string, unknown])[] = [
 		["at", s.at],
 		["reason", s.reason],

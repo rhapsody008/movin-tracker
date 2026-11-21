@@ -1,0 +1,548 @@
+{
+  "steps": [
+    {
+      "name": "storage-view",
+      "method": "GET",
+      "path": "/api/admin/storage",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"backend\":\"memory\",\"lastWrite\":{\"key\":\"entries.json\",\"at\":\"2026-11-21T17:53:26.264677672Z\"}}\n"
+    },
+    {
+      "name": "storage-probe",
+      "method": "POST",
+      "path": "/api/admin/storage/test",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"ok\":true,\"key\":\"_probe/01M7ZKVPQSPHCDZ8DT7G84ERK3.json\",\"steps\":[{\"name\":\"create (only if absent)\",\"ok\":true,\"ms\":0},{\"name\":\"head\",\"ok\":true,\"ms\":0},{\"name\":\"get\",\"ok\":true,\"ms\":0},{\"name\":\"refuse stale write\",\"ok\":true,\"ms\":0},{\"name\":\"write with current ETag\",\"ok\":true,\"ms\":0},{\"name\":\"delete\",\"ok\":true,\"ms\":0}]}\n"
+    },
+    {
+      "name": "telegram-get",
+      "method": "GET",
+      "path": "/api/admin/telegram",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"status\":{\"tokenSet\":false,\"running\":false,\"rejected\":[]},\"allowlist\":{\"users\":[{\"id\":\"111\",\"name\":\"ZY\"},{\"id\":\"222\",\"name\":\"Partner\"}],\"groups\":[\"-1001234\"],\"fromEnv\":true},\"checkin\":{\"on\":false,\"noBot\":true,\"setting\":{\"schedule\":\"09:30\",\"chat\":\"\",\"fromEnv\":true}}}\n"
+    },
+    {
+      "name": "telegram-save",
+      "method": "PUT",
+      "path": "/api/settings/telegram",
+      "reqHeaders": [],
+      "reqBody": "{\"users\":[{\"id\":\"111\",\"name\":\"ZY\"},{\"id\":\" 222 \",\"name\":\"  Partner   Lim \"}],\"groups\":[\"-1001\"]}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"status\":{\"tokenSet\":false,\"running\":false,\"rejected\":[]},\"allowlist\":{\"users\":[{\"id\":\"111\",\"name\":\"ZY\"},{\"id\":\"222\",\"name\":\"Partner Lim\"}],\"groups\":[\"-1001\"],\"fromEnv\":false,\"updated\":\"2026-11-12T10:00:00Z\",\"by\":\"zy@example.com\"},\"checkin\":{\"on\":false,\"noBot\":true,\"setting\":{\"schedule\":\"09:30\",\"chat\":\"\",\"fromEnv\":true}}}\n"
+    },
+    {
+      "name": "telegram-save-invalid",
+      "method": "PUT",
+      "path": "/api/settings/telegram",
+      "reqHeaders": [],
+      "reqBody": "{\"users\":[{\"id\":\"-5\",\"name\":\"x\"}]}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"Telegram user ID \\\"-5\\\" must be a positive number\"}\n"
+    },
+    {
+      "name": "telegram-use-env",
+      "method": "PUT",
+      "path": "/api/settings/telegram",
+      "reqHeaders": [],
+      "reqBody": "{\"useEnv\":true}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"status\":{\"tokenSet\":false,\"running\":false,\"rejected\":[]},\"allowlist\":{\"users\":[{\"id\":\"111\",\"name\":\"ZY\"},{\"id\":\"222\",\"name\":\"Partner\"}],\"groups\":[\"-1001234\"],\"fromEnv\":true},\"checkin\":{\"on\":false,\"noBot\":true,\"setting\":{\"schedule\":\"09:30\",\"chat\":\"\",\"fromEnv\":true}}}\n"
+    },
+    {
+      "name": "telegram-get-after",
+      "method": "GET",
+      "path": "/api/admin/telegram",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"status\":{\"tokenSet\":false,\"running\":false,\"rejected\":[]},\"allowlist\":{\"users\":[{\"id\":\"111\",\"name\":\"ZY\"},{\"id\":\"222\",\"name\":\"Partner\"}],\"groups\":[\"-1001234\"],\"fromEnv\":true},\"checkin\":{\"on\":false,\"noBot\":true,\"setting\":{\"schedule\":\"09:30\",\"chat\":\"\",\"fromEnv\":true}}}\n"
+    },
+    {
+      "name": "checkin-save",
+      "method": "PUT",
+      "path": "/api/settings/checkin",
+      "reqHeaders": [],
+      "reqBody": "{\"schedule\":\"8:05\",\"chat\":\"\"}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"status\":{\"tokenSet\":false,\"running\":false,\"rejected\":[]},\"allowlist\":{\"users\":[{\"id\":\"111\",\"name\":\"ZY\"},{\"id\":\"222\",\"name\":\"Partner\"}],\"groups\":[\"-1001234\"],\"fromEnv\":true},\"checkin\":{\"on\":false,\"noBot\":true,\"setting\":{\"schedule\":\"08:05\",\"chat\":\"\",\"fromEnv\":false,\"updated\":\"2026-11-12T10:00:00Z\",\"by\":\"zy@example.com\"}}}\n"
+    },
+    {
+      "name": "checkin-late-is-400",
+      "method": "PUT",
+      "path": "/api/settings/checkin",
+      "reqHeaders": [],
+      "reqBody": "{\"schedule\":\"21:00\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"the check-in time must be before 20:00 (later ones are skipped)\"}\n"
+    },
+    {
+      "name": "checkin-format-is-400",
+      "method": "PUT",
+      "path": "/api/settings/checkin",
+      "reqHeaders": [],
+      "reqBody": "{\"schedule\":\"9am\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"the check-in time must be HH:MM (24 h) or off, not \\\"9am\\\"\"}\n"
+    },
+    {
+      "name": "checkin-chat-is-400",
+      "method": "PUT",
+      "path": "/api/settings/checkin",
+      "reqHeaders": [],
+      "reqBody": "{\"schedule\":\"09:30\",\"chat\":\"group\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"the check-in chat must be a Telegram chat ID (a number), not \\\"group\\\"\"}\n"
+    },
+    {
+      "name": "checkin-use-env",
+      "method": "PUT",
+      "path": "/api/settings/checkin",
+      "reqHeaders": [],
+      "reqBody": "{\"useEnv\":true}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"status\":{\"tokenSet\":false,\"running\":false,\"rejected\":[]},\"allowlist\":{\"users\":[{\"id\":\"111\",\"name\":\"ZY\"},{\"id\":\"222\",\"name\":\"Partner\"}],\"groups\":[\"-1001234\"],\"fromEnv\":true},\"checkin\":{\"on\":false,\"noBot\":true,\"setting\":{\"schedule\":\"09:30\",\"chat\":\"\",\"fromEnv\":true}}}\n"
+    },
+    {
+      "name": "checkin-empty-body-is-400",
+      "method": "PUT",
+      "path": "/api/settings/checkin",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"Request body must be JSON: EOF\"}\n"
+    },
+    {
+      "name": "docs-off-list",
+      "method": "GET",
+      "path": "/api/docs",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"on\":false,\"running\":false,\"docs\":[]}\n"
+    },
+    {
+      "name": "docs-off-sync",
+      "method": "POST",
+      "path": "/api/docs/sync",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 404,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"Documents are not switched on.\"}\n"
+    },
+    {
+      "name": "guide",
+      "method": "GET",
+      "path": "/api/admin/guide",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "text/markdown; charset=utf-8",
+        "cache-control": "no-cache",
+        "x-content-type-options": ""
+      },
+      "body": "# Admin guide\n\nSet TELEGRAM_BOT_TOKEN and keep it in the NKP namespace.\n\n## Secrets in the NKP namespace\n\n## Troubleshooting\n\nAsk in the group. It ends here"
+    },
+    {
+      "name": "settings-get",
+      "method": "GET",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"vision\":false,\"claudeOrigin\":\"https://api.anthropic.com\",\"kind\":\"openai\",\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"env-model\",\"streaming\":false,\"thinkOnDemand\":false,\"keySet\":true,\"keyLast4\":\"aaaa\",\"keyFromEnv\":true,\"canStoreKey\":true}\n"
+    },
+    {
+      "name": "settings-save",
+      "method": "PUT",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"\u003cLLM\u003e/v1\",\"apiKey\":\"sk-drawer-secret-7f3a\",\"model\":\"model-b\",\"streaming\":false}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"vision\":false,\"claudeOrigin\":\"https://api.anthropic.com\",\"kind\":\"openai\",\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"model-b\",\"streaming\":false,\"thinkOnDemand\":false,\"keySet\":true,\"keyLast4\":\"7f3a\",\"keyFromEnv\":false,\"canStoreKey\":true,\"updated\":\"2026-11-12T10:00:00Z\",\"by\":\"zy@example.com\"}\n"
+    },
+    {
+      "name": "settings-get-after-save",
+      "method": "GET",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"vision\":false,\"claudeOrigin\":\"https://api.anthropic.com\",\"kind\":\"openai\",\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"model-b\",\"streaming\":false,\"thinkOnDemand\":false,\"keySet\":true,\"keyLast4\":\"7f3a\",\"keyFromEnv\":false,\"canStoreKey\":true,\"updated\":\"2026-11-12T10:00:00Z\",\"by\":\"zy@example.com\"}\n"
+    },
+    {
+      "name": "settings-save-bad-url",
+      "method": "PUT",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"ftp://x\",\"model\":\"m\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"endpoint URL must start with http:// or https://\"}\n"
+    },
+    {
+      "name": "settings-save-empty-model",
+      "method": "PUT",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"model is required\"}\n"
+    },
+    {
+      "name": "settings-save-bad-kind",
+      "method": "PUT",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "{\"kind\":\"gpt\",\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"m\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"kind must be openai or claude\"}\n"
+    },
+    {
+      "name": "settings-save-empty-body",
+      "method": "PUT",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"Request body must be JSON: EOF\"}\n"
+    },
+    {
+      "name": "settings-test-ok",
+      "method": "POST",
+      "path": "/api/settings/llm/test",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"model-a\",\"streaming\":true}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"ok\":true,\"latencyMs\":0,\"toolCalls\":true,\"models\":[\"model-a\",\"model-b\"],\"vision\":true}\n"
+    },
+    {
+      "name": "settings-test-no-tools",
+      "method": "POST",
+      "path": "/api/settings/llm/test",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"no-tools-model\"}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"ok\":false,\"latencyMs\":0,\"toolCalls\":false,\"models\":[\"model-a\",\"model-b\"],\"vision\":false,\"error\":\"The endpoint answered but did not return tool_calls. Pick a model that supports tool calling.\"}\n"
+    },
+    {
+      "name": "settings-test-think",
+      "method": "POST",
+      "path": "/api/settings/llm/test",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"think-model\",\"thinkOnDemand\":true}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"ok\":true,\"latencyMs\":0,\"toolCalls\":true,\"models\":[\"model-a\",\"model-b\"],\"vision\":true}\n"
+    },
+    {
+      "name": "settings-test-bad-url",
+      "method": "POST",
+      "path": "/api/settings/llm/test",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"ftp://x\",\"model\":\"m\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"endpoint URL must start with http:// or https://\"}\n"
+    },
+    {
+      "name": "models-ok",
+      "method": "POST",
+      "path": "/api/settings/llm/models",
+      "reqHeaders": [],
+      "reqBody": "{}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"models\":[\"model-a\",\"model-b\"]}\n"
+    },
+    {
+      "name": "models-with-url",
+      "method": "POST",
+      "path": "/api/settings/llm/models",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"\u003cLLM\u003e/other/v1\"}",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"models\":[\"model-a\",\"model-b\"]}\n"
+    },
+    {
+      "name": "models-bad-kind",
+      "method": "POST",
+      "path": "/api/settings/llm/models",
+      "reqHeaders": [],
+      "reqBody": "{\"kind\":\"gpt\"}",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"kind must be openai or claude\"}\n"
+    },
+    {
+      "name": "models-502",
+      "method": "POST",
+      "path": "/api/settings/llm/models",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"\u003cLLM\u003e/bad/v1\"}",
+      "status": 502,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"endpoint returned 404: Invalid API key\"}\n"
+    },
+    {
+      "name": "models-dead-endpoint",
+      "method": "POST",
+      "path": "/api/settings/llm/models",
+      "reqHeaders": [],
+      "reqBody": "{\"baseUrl\":\"http://127.0.0.1:1/v1\"}",
+      "status": 502,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"Get \\\"http://127.0.0.1:1/v1/models\\\": dial tcp 127.0.0.1:1: connect: connection refused\"}\n"
+    },
+    {
+      "name": "models-empty-body",
+      "method": "POST",
+      "path": "/api/settings/llm/models",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"error\":\"Request body must be JSON: EOF\"}\n"
+    },
+    {
+      "name": "settings-get-final",
+      "method": "GET",
+      "path": "/api/settings/llm",
+      "reqHeaders": [],
+      "reqBody": "",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "",
+        "x-content-type-options": ""
+      },
+      "body": "{\"vision\":false,\"claudeOrigin\":\"https://api.anthropic.com\",\"kind\":\"openai\",\"baseUrl\":\"\u003cLLM\u003e/v1\",\"model\":\"model-b\",\"streaming\":false,\"thinkOnDemand\":false,\"keySet\":true,\"keyLast4\":\"7f3a\",\"keyFromEnv\":false,\"canStoreKey\":true,\"updated\":\"2026-11-12T10:00:00Z\",\"by\":\"zy@example.com\"}\n"
+    }
+  ],
+  "llmCalls": [
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "body": "",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "body": "{\"model\":\"model-a\",\"messages\":[{\"role\":\"system\",\"content\":\"You set dates on a board. Always use the tool.\"},{\"role\":\"user\",\"content\":\"We move in on 2026-12-05.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"set_dates\",\"description\":\"Set the move-in date (YYYY-MM-DD).\",\"parameters\":{\"type\":\"object\",\"properties\":{\"move_in\":{\"type\":\"string\"}},\"required\":[\"move_in\"]}}}]}",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "body": "{\"model\":\"model-a\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply with one word: what colour is this square?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC\"}}]}]}",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "body": "",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "body": "{\"model\":\"no-tools-model\",\"messages\":[{\"role\":\"system\",\"content\":\"You set dates on a board. Always use the tool.\"},{\"role\":\"user\",\"content\":\"We move in on 2026-12-05.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"set_dates\",\"description\":\"Set the move-in date (YYYY-MM-DD).\",\"parameters\":{\"type\":\"object\",\"properties\":{\"move_in\":{\"type\":\"string\"}},\"required\":[\"move_in\"]}}}]}",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "body": "",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "body": "{\"model\":\"think-model\",\"messages\":[{\"role\":\"system\",\"content\":\"You set dates on a board. Always use the tool.\"},{\"role\":\"user\",\"content\":\"We move in on 2026-12-05.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"set_dates\",\"description\":\"Set the move-in date (YYYY-MM-DD).\",\"parameters\":{\"type\":\"object\",\"properties\":{\"move_in\":{\"type\":\"string\"}},\"required\":[\"move_in\"]}}}],\"chat_template_kwargs\":{\"enable_thinking\":false}}",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "body": "{\"model\":\"think-model\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply with one word: what colour is this square?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC\"}}]}],\"chat_template_kwargs\":{\"enable_thinking\":false}}",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "body": "",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "GET",
+      "path": "/other/v1/models",
+      "body": "",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    },
+    {
+      "method": "GET",
+      "path": "/bad/v1/models",
+      "body": "",
+      "auth": "Bearer sk-drawer-secret-7f3a"
+    }
+  ]
+}

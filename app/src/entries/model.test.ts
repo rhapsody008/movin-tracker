@@ -12,10 +12,10 @@ import {
 	cloneDoc,
 	cloneEntry,
 	decodeDoc,
-	docView,
 	type Entry,
 	emptyDoc,
 	encodeDoc,
+	encodeDocView,
 	findEntry,
 	isMilestone,
 	KIND_NOTE,
@@ -560,13 +560,12 @@ describe("clones and lookups are deep (TestCloneIsDeep)", () => {
 		expect(at(d.entries, 0).title).toBe("");
 	});
 
-	it("emptyDoc and docView have the documented shape", () => {
+	it("emptyDoc and encodeDocView have the documented shape", () => {
 		expect(emptyDoc()).toEqual({ schema: 1, meta: { moveDate: null, keyDate: null }, entries: [], changes: [] });
 		const d = emptyDoc();
 		d.changes.push({ id: "c", at: "", by: "", channel: "", op: "undo", entryId: "", before: null, after: null });
-		const view = docView(d);
-		expect(view).toEqual({ schema: 1, meta: { moveDate: null, keyDate: null }, entries: [] });
-		expect("changes" in view).toBe(false);
+		// The view is the document without the journal, in Go struct order.
+		expect(goMarshal(encodeDocView(d))).toBe('{"schema":1,"meta":{"moveDate":null,"keyDate":null},"entries":[]}');
 	});
 });
 

@@ -1,0 +1,1832 @@
+{
+  "fmtDate": [
+    {
+      "in": "2026-11-20",
+      "out": "Fri, 20 Nov"
+    },
+    {
+      "in": "2026-01-01",
+      "out": "Thu, 1 Jan"
+    },
+    {
+      "in": "2026-12-31",
+      "out": "Thu, 31 Dec"
+    },
+    {
+      "in": "2026-02-28",
+      "out": "Sat, 28 Feb"
+    },
+    {
+      "in": "2026-02-29",
+      "out": "2026-02-29"
+    },
+    {
+      "in": "2026-2-3",
+      "out": "2026-2-3"
+    },
+    {
+      "in": "2026-13-01",
+      "out": "2026-13-01"
+    },
+    {
+      "in": "tomorrow",
+      "out": "tomorrow"
+    },
+    {
+      "in": "",
+      "out": ""
+    },
+    {
+      "in": "2026-11-20T00:00:00Z",
+      "out": "2026-11-20T00:00:00Z"
+    }
+  ],
+  "money": [
+    {
+      "in": 0,
+      "out": "$0"
+    },
+    {
+      "in": 0.005,
+      "out": "$0.01"
+    },
+    {
+      "in": 0.01,
+      "out": "$0.01"
+    },
+    {
+      "in": 0.1,
+      "out": "$0.10"
+    },
+    {
+      "in": 0.995,
+      "out": "$1"
+    },
+    {
+      "in": 0.999,
+      "out": "$1"
+    },
+    {
+      "in": 12.345,
+      "out": "$12.35"
+    },
+    {
+      "in": 99.99,
+      "out": "$99.99"
+    },
+    {
+      "in": 100.005,
+      "out": "$100"
+    },
+    {
+      "in": 999.999,
+      "out": "$1,000"
+    },
+    {
+      "in": 1200,
+      "out": "$1,200"
+    },
+    {
+      "in": 1234.5,
+      "out": "$1,234.50"
+    },
+    {
+      "in": 5400.5,
+      "out": "$5,400.50"
+    },
+    {
+      "in": 1000000,
+      "out": "$1,000,000"
+    },
+    {
+      "in": 1234567.5,
+      "out": "$1,234,567.50"
+    },
+    {
+      "in": -0.005,
+      "out": "$0"
+    },
+    {
+      "in": -1.5,
+      "out": "$-2.50"
+    },
+    {
+      "in": -1234.5678,
+      "out": "$-1,235.43"
+    }
+  ],
+  "doc": {
+    "schema": 1,
+    "meta": {
+      "moveDate": null,
+      "keyDate": null
+    },
+    "entries": [],
+    "changes": [
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "create",
+        "entryId": "e1",
+        "before": null,
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "decision",
+          "title": "Quartz countertop",
+          "room": "wet kitchen",
+          "category": "",
+          "status": "decided",
+          "cost": {
+            "estimate": 3000,
+            "actual": 5400.5
+          },
+          "vendor": "Stone Atelier",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": true,
+          "milestone": true,
+          "completed": "2026-11-20",
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "create",
+        "entryId": "e1",
+        "before": null,
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Book movers",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "create",
+        "entryId": "e1",
+        "before": null,
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "idea",
+          "title": "Odd amounts",
+          "room": null,
+          "category": "",
+          "status": "idea",
+          "cost": {
+            "estimate": 0.995,
+            "actual": 1234567.5
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "create",
+        "entryId": "e1",
+        "before": null,
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Lift booking",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": "2026-11-20",
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "create",
+        "entryId": "e1",
+        "before": null,
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "question",
+          "title": "Curtains",
+          "room": "living",
+          "category": "",
+          "status": "shortlisted",
+          "cost": {
+            "estimate": 999.999,
+            "actual": null
+          },
+          "vendor": "Curtain World",
+          "date": "2026-12-05",
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [
+            "curtain"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "delete",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Book movers",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": null
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "undo",
+        "entryId": "e1",
+        "before": null,
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Book movers",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "undo",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Book movers",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": null
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "undo",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "decision",
+          "title": "Wardrobe carcass",
+          "room": "bedroom 2",
+          "category": "carpentry",
+          "status": "decided",
+          "cost": {
+            "estimate": 1300,
+            "actual": null
+          },
+          "vendor": "Hock Seng",
+          "date": "2026-12-05",
+          "time": "09:30",
+          "source": "",
+          "notes": "",
+          "tags": [
+            "wardrobe"
+          ],
+          "archived": false,
+          "milestone": true,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Old sofa",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Old sofa",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": true,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Old sofa",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": true,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Old sofa",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Handover",
+          "room": null,
+          "category": "",
+          "status": "done",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "completed": "2026-11-11",
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Handover",
+          "room": null,
+          "category": "",
+          "status": "done",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "completed": "2026-11-12",
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "decision",
+          "title": "Wardrobe carcass",
+          "room": "bedroom 2",
+          "category": "carpentry",
+          "status": "decided",
+          "cost": {
+            "estimate": 1300,
+            "actual": null
+          },
+          "vendor": "Hock Seng",
+          "date": "2026-12-05",
+          "time": "09:30",
+          "source": "",
+          "notes": "",
+          "tags": [
+            "wardrobe"
+          ],
+          "archived": false,
+          "milestone": true,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "TV console",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "milestone": true,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "TV console",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Old sofa",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Old sofa (sold)",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": true,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Sofa",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Sofa",
+          "room": null,
+          "category": "",
+          "status": "todo",
+          "cost": {
+            "estimate": null,
+            "actual": null
+          },
+          "vendor": "",
+          "date": null,
+          "time": null,
+          "source": "",
+          "notes": "",
+          "tags": [],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T11:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe (fitted)",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "decision",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "decided",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "done",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "completed": "2026-11-12",
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "bedroom 2",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": null,
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "joinery",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1300,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": null
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-12-05",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "11:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Hock Seng",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "doing",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "milestone": true,
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      },
+      {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        "at": "2026-11-12T10:00:00Z",
+        "by": "zy@example.com",
+        "channel": "web",
+        "op": "update",
+        "entryId": "e1",
+        "before": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "done",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "completed": "2026-11-12",
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        },
+        "after": {
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "kind": "task",
+          "title": "Wardrobe",
+          "room": "master bedroom",
+          "category": "furniture",
+          "status": "done",
+          "cost": {
+            "estimate": 1200,
+            "actual": 600
+          },
+          "vendor": "Carpentry Co",
+          "date": "2026-11-20",
+          "time": "10:00",
+          "source": "WhatsApp",
+          "notes": "oak, 2.4 m",
+          "tags": [
+            "wardrobe",
+            "oak"
+          ],
+          "archived": false,
+          "completed": "2026-11-13",
+          "by": "zy@example.com",
+          "channel": "web",
+          "created": "2026-11-12T10:00:00Z",
+          "updated": "2026-11-12T10:00:00Z"
+        }
+      }
+    ]
+  },
+  "changeTexts": [
+    "Saved: wet kitchen · decision · Quartz countertop · Fri, 20 Nov 10:00 · est $3,000 · paid $5,400.50 · Stone Atelier · done Fri, 20 Nov · ★ milestone",
+    "Saved: task · Book movers",
+    "Saved: idea · Odd amounts · est $1 · paid $1,234,567.50",
+    "Saved: task · Lift booking · Fri, 20 Nov",
+    "Saved: living · question · Curtains · Sat, 5 Dec · est $1,000 · Curtain World",
+    "Deleted: Book movers",
+    "Undone: restored Book movers",
+    "Undone: removed Book movers",
+    "Undone: Wardrobe carcass",
+    "Archived: Old sofa",
+    "Restored: Old sofa",
+    "Updated: Handover (done on 2026-11-12)",
+    "Updated: Wardrobe carcass (renamed from Wardrobe, now a decision, status decided, room bedroom 2, category carpentry, est $1,300, paid none, date 2026-12-05, time 09:30, vendor Hock Seng, source, notes, tags, ★ milestone)",
+    "Updated: TV console (no longer a milestone)",
+    "Archived: Old sofa (sold)",
+    "Updated: Sofa",
+    "Updated: Wardrobe (fitted) (renamed from Wardrobe)",
+    "Updated: Wardrobe (now a decision, status decided)",
+    "Updated: Wardrobe (status done)",
+    "Updated: Wardrobe (room bedroom 2)",
+    "Updated: Wardrobe (room none)",
+    "Updated: Wardrobe (category joinery)",
+    "Updated: Wardrobe (est $1,300)",
+    "Updated: Wardrobe (paid none)",
+    "Updated: Wardrobe (date 2026-12-05)",
+    "Updated: Wardrobe (time 11:00)",
+    "Updated: Wardrobe (vendor Hock Seng)",
+    "Updated: Wardrobe (source)",
+    "Updated: Wardrobe (notes)",
+    "Updated: Wardrobe (tags)",
+    "Updated: Wardrobe (★ milestone)",
+    "Updated: Wardrobe (done on 2026-11-13)"
+  ]
+}

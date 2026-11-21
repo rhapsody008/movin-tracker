@@ -6,12 +6,20 @@
 // server passes the default. A bad value throws with Go's message: the process
 // is expected to die at startup rather than run half-configured.
 
+import { fileURLToPath } from "node:url";
 import { DEFAULT_SYNC_SCHEDULE } from "./docs/schedule.ts";
 import { goQuote, goTrim, goTrimRight, goTrimSpace } from "./gostr.ts";
 import { errorMessage } from "./log.ts";
 import { parseSchedule } from "./sched.ts";
 import { type Checkin, DEFAULT_CHECKIN, parseCheckin } from "./settings/checkin.ts";
 import { parseTelegramEnv, type Telegram } from "./settings/telegram.ts";
+
+/**
+ * The admin guide's Markdown: the repo's docs/, next to app/ where this file
+ * lives (main.go:110-116 reads it on every request in dev, and the built Go
+ * binary embeds the same file).
+ */
+const DEFAULT_GUIDE_FILE = fileURLToPath(new URL("../../docs/admin-guide.md", import.meta.url));
 
 /** The LLM limits that come from Defaults, not from the environment. */
 export const LLM_DEFAULTS = { timeoutSec: 600, maxToolRounds: 5, streaming: true } as const;
@@ -52,6 +60,10 @@ export interface Config {
 	/** The TZ name, for Intl. */
 	timeZone: string;
 	staticDir: string;
+	/** GUIDE_FILE: the admin guide's Markdown, read on every request. */
+	guideFile: string;
+	/** false when MOVIN_DOCS=off: no syncer, no syncs, and GET /api/docs says on:false. */
+	docsOff: boolean;
 	pollEveryMs: number;
 	logLevel: string;
 }
@@ -150,6 +162,11 @@ export function loadConfig(e: Env): Config {
 		throw new Error(`CHECKIN_CHAT: ${errorMessage(err)}`, { cause: err });
 	}
 
+	// MOVIN_DOCS is the one switch v2 adds: the dev app can share the real bucket
+	// without writing the documents index before T3.1 brings the summariser.
+	const docsSwitch = env(e, "MOVIN_DOCS", "on");
+	if (docsSwitch !== "on" && docsSwitch !== "off") throw new Error('MOVIN_DOCS must be "on" or "off"');
+
 	const allowedEmails: string[] = [];
 	for (const part of env(e, "ALLOWED_EMAILS", "").split(",")) {
 		const mail = goTrimSpace(part).toLowerCase();
@@ -173,6 +190,8 @@ export function loadConfig(e: Env): Config {
 		telegram: parseTelegramEnv(env(e, "TELEGRAM_ALLOWED_IDS", ""), env(e, "TELEGRAM_ALLOWED_CHATS", "")),
 		timeZone,
 		staticDir: env(e, "STATIC_DIR", ""),
+		guideFile: env(e, "GUIDE_FILE", DEFAULT_GUIDE_FILE),
+		docsOff: docsSwitch === "off",
 		pollEveryMs: 5000,
 		logLevel: env(e, "LOG_LEVEL", "info"),
 	});

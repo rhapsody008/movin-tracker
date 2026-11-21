@@ -97,3 +97,17 @@ export function compareBytes(a: string, b: string): number {
 export function goStamp(at: Date): string {
 	return at.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
+
+/**
+ * time.Time's JSON form, which is RFC 3339 in UTC with the fraction's trailing
+ * zeros trimmed: a whole second has no fraction at all, and .810 is written
+ * .81 (time.Time.MarshalJSON, RFC3339Nano). The storage view's lastWrite.at is
+ * the one place the app writes a time.Time rather than a stamp.
+ */
+export function goTimeJSON(at: Date): string {
+	const iso = at.toISOString();
+	const dot = iso.indexOf(".");
+	if (dot < 0) return iso;
+	const fraction = iso.slice(dot + 1, iso.length - 1).replace(/0+$/, "");
+	return fraction === "" ? `${iso.slice(0, dot)}Z` : `${iso.slice(0, dot)}.${fraction}Z`;
+}

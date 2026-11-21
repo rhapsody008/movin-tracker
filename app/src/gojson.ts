@@ -154,7 +154,7 @@ export class RawObject {
 				i = skipSpace(text, keyEnd);
 				if (text[i] !== ":") throw new TypeError(`no ":" after the key at byte ${i}`);
 				const start = skipSpace(text, i + 1);
-				i = scanValue(text, start);
+				i = scanJsonValue(text, start);
 				// A duplicate key: the last one wins, as it does in a Go map.
 				out.values.set(key, text.slice(start, i));
 				i = skipSpace(text, i);
@@ -320,8 +320,12 @@ function scanString(text: string, i: number): number {
 
 const NUMBER = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
 
-/** The index just past the JSON value that starts at the first non-space from `i`. */
-function scanValue(text: string, from: number): number {
+/**
+ * The index just past the first JSON value at or after `from`, as Go's
+ * json.Decoder reads one value and stops: the HTTP layer uses it so a body with
+ * trailing data decodes the first value only (server-spec §9.12).
+ */
+export function scanJsonValue(text: string, from: number): number {
 	const i = skipSpace(text, from);
 	const c = text[i];
 	if (c === '"') return scanString(text, i);
@@ -348,7 +352,7 @@ function scanContainer(text: string, i: number): number {
 			if (text[i] !== ":") throw new TypeError(`no ":" after the key at byte ${i}`);
 			i++;
 		}
-		i = skipSpace(text, scanValue(text, i));
+		i = skipSpace(text, scanJsonValue(text, i));
 		if (text[i] === ",") {
 			i++;
 			continue;

@@ -1,0 +1,758 @@
+[
+  {
+    "name": "healthz",
+    "method": "GET",
+    "path": "/healthz",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "ok\n"
+  },
+  {
+    "name": "readyz",
+    "method": "GET",
+    "path": "/readyz",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "ok\n"
+  },
+  {
+    "name": "icon-without-auth",
+    "method": "GET",
+    "path": "/icon.svg",
+    "reqHeaders": [
+      [
+        "X-Forwarded-Email",
+        ""
+      ]
+    ],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "image/svg+xml",
+      "etag": "",
+      "location": "",
+      "cache-control": "no-cache",
+      "x-content-type-options": ""
+    },
+    "body": "\u003csvg/\u003e"
+  },
+  {
+    "name": "page",
+    "method": "GET",
+    "path": "/",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "no-cache",
+      "x-content-type-options": ""
+    },
+    "body": "\u003c!doctype html\u003e\u003ctitle\u003eOur new place\u003c/title\u003e"
+  },
+  {
+    "name": "page-for-a-stranger",
+    "method": "GET",
+    "path": "/",
+    "reqHeaders": [
+      [
+        "X-Forwarded-Email",
+        "stranger@example.com"
+      ]
+    ],
+    "reqBody": "",
+    "status": 403,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": "nosniff"
+    },
+    "body": "This page is private. stranger@example.com is not on the list.\n"
+  },
+  {
+    "name": "api-entries-without-auth",
+    "method": "GET",
+    "path": "/api/entries",
+    "reqHeaders": [
+      [
+        "X-Forwarded-Email",
+        ""
+      ]
+    ],
+    "reqBody": "",
+    "status": 401,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": "nosniff"
+    },
+    "body": "Not signed in.\n"
+  },
+  {
+    "name": "api-entries-for-a-stranger",
+    "method": "GET",
+    "path": "/api/entries",
+    "reqHeaders": [
+      [
+        "X-Forwarded-Email",
+        "stranger@example.com"
+      ]
+    ],
+    "reqBody": "",
+    "status": 403,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": "nosniff"
+    },
+    "body": "This page is private. stranger@example.com is not on the list.\n"
+  },
+  {
+    "name": "index-html-redirects",
+    "method": "GET",
+    "path": "/index.html",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 301,
+    "headers": {
+      "content-type": "",
+      "etag": "",
+      "location": "./",
+      "cache-control": "no-cache",
+      "x-content-type-options": ""
+    },
+    "body": ""
+  },
+  {
+    "name": "missing-file",
+    "method": "GET",
+    "path": "/nope.txt",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": "nosniff"
+    },
+    "body": "404 page not found\n"
+  },
+  {
+    "name": "api-404",
+    "method": "GET",
+    "path": "/api/nope",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"no such endpoint\"}\n"
+  },
+  {
+    "name": "api-trailing-slash",
+    "method": "GET",
+    "path": "/api/entries/",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"no such endpoint\"}\n"
+  },
+  {
+    "name": "bad-escape",
+    "method": "GET",
+    "path": "/api/entries/%zz",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 400,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "400 Bad Request"
+  },
+  {
+    "name": "entries-empty",
+    "method": "GET",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "\"2d2f8a2b930a190e8b506e07f2431129\"",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[]},\"etag\":\"\\\"2d2f8a2b930a190e8b506e07f2431129\\\"\"}\n"
+  },
+  {
+    "name": "entries-304",
+    "method": "GET",
+    "path": "/api/entries",
+    "reqHeaders": [
+      [
+        "If-None-Match",
+        "\"2d2f8a2b930a190e8b506e07f2431129\""
+      ]
+    ],
+    "reqBody": "",
+    "status": 304,
+    "headers": {
+      "content-type": "",
+      "etag": "\"2d2f8a2b930a190e8b506e07f2431129\"",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": ""
+  },
+  {
+    "name": "head-entries",
+    "method": "HEAD",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "\"2d2f8a2b930a190e8b506e07f2431129\"",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": ""
+  },
+  {
+    "name": "case-insensitive-email",
+    "method": "GET",
+    "path": "/api/entries",
+    "reqHeaders": [
+      [
+        "X-Forwarded-Email",
+        "Partner@Example.COM"
+      ]
+    ],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "\"2d2f8a2b930a190e8b506e07f2431129\"",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[]},\"etag\":\"\\\"2d2f8a2b930a190e8b506e07f2431129\\\"\"}\n"
+  },
+  {
+    "name": "clean-path-redirect",
+    "method": "GET",
+    "path": "//api//entries",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 307,
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "etag": "",
+      "location": "/api/entries",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "\u003ca href=\"/api/entries\"\u003eTemporary Redirect\u003c/a\u003e.\n\n"
+  },
+  {
+    "name": "create",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"Book movers\",\"kind\":\"task\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"cost\":{\"estimate\":1200}}",
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"entry\":{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"todo\",\"cost\":{\"estimate\":1200,\"actual\":null},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},\"change\":{\"id\":\"01M7ZJQBMEJPM9W8PM2603NRMY\",\"text\":\"Saved: task · Book movers · Fri, 20 Nov 10:00 · est $1,200\"},\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"todo\",\"cost\":{\"estimate\":1200,\"actual\":null},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"50b125e39285f527970cb19acbf72315\\\"\"}\n"
+  },
+  {
+    "name": "create-html",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"Paint \u003c\u0026\\\" seal\",\"kind\":\"idea\",\"room\":\"flex\",\"date\":\"2026-12-01\",\"time\":\"08:30\",\"vendor\":\"Ah Seng \u0026 Sons\",\"cost\":{\"estimate\":1234.5},\"notes\":\"a \u003e b \u0026 c\",\"source\":\"WhatsApp\"}",
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"entry\":{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u003c\\u0026\\\" seal\",\"room\":\"flex\",\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":1234.5,\"actual\":null},\"vendor\":\"Ah Seng \\u0026 Sons\",\"date\":\"2026-12-01\",\"time\":\"08:30\",\"source\":\"WhatsApp\",\"notes\":\"a \\u003e b \\u0026 c\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},\"change\":{\"id\":\"01M7ZJQBMEJPM9W8PM28Z4PYZM\",\"text\":\"Saved: flex · idea · Paint \\u003c\\u0026\\\" seal · Tue, 1 Dec 08:30 · est $1,234.50 · Ah Seng \\u0026 Sons\"},\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"todo\",\"cost\":{\"estimate\":1200,\"actual\":null},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u003c\\u0026\\\" seal\",\"room\":\"flex\",\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":1234.5,\"actual\":null},\"vendor\":\"Ah Seng \\u0026 Sons\",\"date\":\"2026-12-01\",\"time\":\"08:30\",\"source\":\"WhatsApp\",\"notes\":\"a \\u003e b \\u0026 c\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"9c843715bb9e4156d27f34566f01aae7\\\"\"}\n"
+  },
+  {
+    "name": "create-empty-title",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"\"}",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"title must be 1–200 characters\"}\n"
+  },
+  {
+    "name": "create-bad-date",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"x\",\"date\":\"tomorrow\"}",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"date must be YYYY-MM-DD\"}\n"
+  },
+  {
+    "name": "create-bad-room",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"x\",\"room\":\"garage\"}",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"room must be one of living, dining, dry kitchen, wet kitchen, flex, master bedroom, bedroom 2, bedroom 3, master bathroom, bathroom 2, balcony, whole-house, or empty\"}\n"
+  },
+  {
+    "name": "create-unknown-field",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"x\",\"nope\":1}",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"unknown field \\\"nope\\\"\"}\n"
+  },
+  {
+    "name": "create-empty-body",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"Request body must be JSON: EOF\"}\n"
+  },
+  {
+    "name": "create-trailing-data",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"Trailing\"} {\"title\":\"never read\"}",
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"entry\":{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},\"change\":{\"id\":\"01M7ZJQBMF0N8XKFGQMZHW1STS\",\"text\":\"Saved: note · Trailing\"},\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"todo\",\"cost\":{\"estimate\":1200,\"actual\":null},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u003c\\u0026\\\" seal\",\"room\":\"flex\",\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":1234.5,\"actual\":null},\"vendor\":\"Ah Seng \\u0026 Sons\",\"date\":\"2026-12-01\",\"time\":\"08:30\",\"source\":\"WhatsApp\",\"notes\":\"a \\u003e b \\u0026 c\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"fdbfd3d51e4bd65bb3e1c6659e8b4722\\\"\"}\n"
+  },
+  {
+    "name": "create-bad-json",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"Request body must be JSON: unexpected EOF\"}\n"
+  },
+  {
+    "name": "create-too-large",
+    "method": "POST",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "",
+    "reqBodyKind": "oversize",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"Request body must be JSON: http: request body too large\"}\n"
+  },
+  {
+    "name": "entries-two",
+    "method": "GET",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "\"fdbfd3d51e4bd65bb3e1c6659e8b4722\"",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"todo\",\"cost\":{\"estimate\":1200,\"actual\":null},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u003c\\u0026\\\" seal\",\"room\":\"flex\",\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":1234.5,\"actual\":null},\"vendor\":\"Ah Seng \\u0026 Sons\",\"date\":\"2026-12-01\",\"time\":\"08:30\",\"source\":\"WhatsApp\",\"notes\":\"a \\u003e b \\u0026 c\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"fdbfd3d51e4bd65bb3e1c6659e8b4722\\\"\"}\n"
+  },
+  {
+    "name": "patch-every-field",
+    "method": "PATCH",
+    "path": "/api/entries/01M7ZJQBMEJPM9W8PM2867PBDZ",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"Paint \u0026 seal\",\"vendor\":\"Hock Seng\",\"source\":\"\",\"notes\":\"\",\"category\":\"Paint\",\"room\":\"living\",\"status\":\"decided\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"cost\":{\"estimate\":1300,\"actual\":500},\"tags\":[\"paint\",\"wet\"],\"milestone\":true}",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"entry\":{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},\"change\":{\"id\":\"01M7ZJQBMHH5024G1Y0VPXYYZ2\",\"text\":\"Updated: Paint \\u0026 seal (renamed from Paint \\u003c\\u0026\\\" seal, status decided, room living, category paint, est $1,300, paid $500, date 2026-12-05, time 09:00, vendor Hock Seng, source, notes, tags, ★ milestone)\"},\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"todo\",\"cost\":{\"estimate\":1200,\"actual\":null},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"a3eafe7b4ec28b48ec5c46a50186b995\\\"\"}\n"
+  },
+  {
+    "name": "patch-by-the-partner",
+    "method": "PATCH",
+    "path": "/api/entries/01M7ZJQBMEJPM9W8PM25VYTMPY",
+    "reqHeaders": [
+      [
+        "X-Forwarded-Email",
+        "partner@example.com"
+      ]
+    ],
+    "reqBody": "{\"status\":\"done\",\"cost\":{\"actual\":1200}}",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"entry\":{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},\"change\":{\"id\":\"01M7ZJQBMHH5024G1Y0WQE75AC\",\"text\":\"Updated: Book movers (status done, paid $1,200)\"},\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":null,\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"e2b749004143325c4760f587409a0604\\\"\"}\n"
+  },
+  {
+    "name": "patch-missing",
+    "method": "PATCH",
+    "path": "/api/entries/nope",
+    "reqHeaders": [],
+    "reqBody": "{\"status\":\"todo\"}",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"That entry no longer exists.\"}\n"
+  },
+  {
+    "name": "patch-escaped-id",
+    "method": "PATCH",
+    "path": "/api/entries/a%2Fb",
+    "reqHeaders": [],
+    "reqBody": "{\"status\":\"todo\"}",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"That entry no longer exists.\"}\n"
+  },
+  {
+    "name": "meta",
+    "method": "PUT",
+    "path": "/api/meta",
+    "reqHeaders": [],
+    "reqBody": "{\"moveDate\":\"2026-12-05\",\"keyDate\":\"2026-10-29\"}",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":\"2026-12-05\",\"keyDate\":\"2026-10-29\"},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"4e115d6b7372c887a1a2a7231b3b0bd8\\\"\"}\n"
+  },
+  {
+    "name": "meta-null",
+    "method": "PUT",
+    "path": "/api/meta",
+    "reqHeaders": [],
+    "reqBody": "{\"keyDate\":null}",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":\"2026-12-05\",\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"043f7c6d5169b02ca85c24670f14f523\\\"\"}\n"
+  },
+  {
+    "name": "meta-bad-date",
+    "method": "PUT",
+    "path": "/api/meta",
+    "reqHeaders": [],
+    "reqBody": "{\"moveDate\":\"5 Dec\"}",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"moveDate must be YYYY-MM-DD\"}\n"
+  },
+  {
+    "name": "meta-not-a-string",
+    "method": "PUT",
+    "path": "/api/meta",
+    "reqHeaders": [],
+    "reqBody": "{\"moveDate\":5}",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"moveDate must be a string or null\"}\n"
+  },
+  {
+    "name": "meta-unknown-field",
+    "method": "PUT",
+    "path": "/api/meta",
+    "reqHeaders": [],
+    "reqBody": "{\"nope\":\"x\"}",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"unknown field nope\"}\n"
+  },
+  {
+    "name": "delete",
+    "method": "DELETE",
+    "path": "/api/entries/01M7ZJQBMEJPM9W8PM25VYTMPY",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"change\":{\"id\":\"01M7ZJQBMHH5024G1Y0ZFQCMD7\",\"text\":\"Deleted: Book movers\"},\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":\"2026-12-05\",\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"5a129a261445a9aaebbad4e7e21187c4\\\"\"}\n"
+  },
+  {
+    "name": "delete-again",
+    "method": "DELETE",
+    "path": "/api/entries/01M7ZJQBMEJPM9W8PM25VYTMPY",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"That entry no longer exists.\"}\n"
+  },
+  {
+    "name": "undo",
+    "method": "POST",
+    "path": "/api/changes/01M7ZJQBMHH5024G1Y0ZFQCMD7/undo",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"entry\":{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},\"change\":{\"id\":\"01M7ZJQBMHH5024G1Y139XPE91\",\"text\":\"Undone: restored Book movers\"},\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":\"2026-12-05\",\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"65eab1ed5da5217de3994dfe9f175e61\\\"\"}\n"
+  },
+  {
+    "name": "undo-again",
+    "method": "POST",
+    "path": "/api/changes/01M7ZJQBMHH5024G1Y0ZFQCMD7/undo",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":\"2026-12-05\",\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"error\":\"That entry was changed again since, so it can't be undone.\",\"etag\":\"\\\"65eab1ed5da5217de3994dfe9f175e61\\\"\"}\n"
+  },
+  {
+    "name": "undo-unknown",
+    "method": "POST",
+    "path": "/api/changes/nope/undo",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"That change is too old to undo.\"}\n"
+  },
+  {
+    "name": "method-mismatch",
+    "method": "PUT",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "{\"title\":\"x\"}",
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"error\":\"no such endpoint\"}\n"
+  },
+  {
+    "name": "post-healthz",
+    "method": "POST",
+    "path": "/healthz",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "etag": "",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": "nosniff"
+    },
+    "body": "404 page not found\n"
+  },
+  {
+    "name": "entries-final",
+    "method": "GET",
+    "path": "/api/entries",
+    "reqHeaders": [],
+    "reqBody": "",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "etag": "\"65eab1ed5da5217de3994dfe9f175e61\"",
+      "location": "",
+      "cache-control": "",
+      "x-content-type-options": ""
+    },
+    "body": "{\"doc\":{\"schema\":1,\"meta\":{\"moveDate\":\"2026-12-05\",\"keyDate\":null},\"entries\":[{\"id\":\"01M7ZJQBMEJPM9W8PM2867PBDZ\",\"kind\":\"idea\",\"title\":\"Paint \\u0026 seal\",\"room\":\"living\",\"category\":\"paint\",\"status\":\"decided\",\"cost\":{\"estimate\":1300,\"actual\":500},\"vendor\":\"Hock Seng\",\"date\":\"2026-12-05\",\"time\":\"09:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[\"paint\",\"wet\"],\"archived\":false,\"milestone\":true,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMF0N8XKFGQMXJQ2SHZ\",\"kind\":\"note\",\"title\":\"Trailing\",\"room\":null,\"category\":\"\",\"status\":\"idea\",\"cost\":{\"estimate\":null,\"actual\":null},\"vendor\":\"\",\"date\":null,\"time\":null,\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"by\":\"zy@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"},{\"id\":\"01M7ZJQBMEJPM9W8PM25VYTMPY\",\"kind\":\"task\",\"title\":\"Book movers\",\"room\":null,\"category\":\"\",\"status\":\"done\",\"cost\":{\"estimate\":1200,\"actual\":1200},\"vendor\":\"\",\"date\":\"2026-11-20\",\"time\":\"10:00\",\"source\":\"\",\"notes\":\"\",\"tags\":[],\"archived\":false,\"completed\":\"2026-11-12\",\"by\":\"partner@example.com\",\"channel\":\"web\",\"created\":\"2026-11-12T10:00:00Z\",\"updated\":\"2026-11-12T10:00:00Z\"}]},\"etag\":\"\\\"65eab1ed5da5217de3994dfe9f175e61\\\"\"}\n"
+  }
+]

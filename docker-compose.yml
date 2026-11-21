@@ -79,6 +79,31 @@ services:
       NPM_CONFIG_UPDATE_NOTIFIER: "false"
     depends_on: [minio]
 
+  # `make -C app ui-check` and app/tools/side-by-side.sh: the TS app in the
+  # test image (Node 24 plus poppler), on MinIO when the caller passes its S3_*
+  # as -e. Like `app`, it takes .env's LLM_* and SETTINGS_SECRET when it exists;
+  # unlike `app` it is off unless the `ts` profile is asked for, so nothing runs
+  # it by accident. `node src/main.ts` runs the TypeScript directly (Node 24
+  # strips the types; the imports carry their .ts extension).
+  app-ts:
+    profiles: [ts]
+    image: movin-app-test:local
+    build: { context: ., dockerfile: app/Dockerfile.test }
+    working_dir: /src/app
+    command: ["node", "src/main.ts"]
+    env_file:
+      - { path: .env, required: false }
+    environment:
+      LISTEN_ADDR: ":8080"
+      STATIC_DIR: /src/app/static
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/.cache
+    ports:
+      - "127.0.0.1:${APP_TS_PORT:-8081}:8080"
+    volumes:
+      - .:/src
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+
   # `make run`: the production image, locked down as in k8s.
   prod:
     profiles: [prod]

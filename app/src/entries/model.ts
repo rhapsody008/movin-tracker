@@ -75,13 +75,6 @@ export interface Doc {
 	changes: Change[];
 }
 
-/** The document as the web page receives it: without the journal. */
-export interface DocView {
-	schema: number;
-	meta: Meta;
-	entries: Entry[];
-}
-
 export const KINDS: readonly string[] = ["idea", "decision", "task", "note", "question"];
 
 // Rooms come from the Type C5 unit layout plan. Room is optional: an entry with
@@ -245,10 +238,18 @@ export function emptyDoc(): Doc {
 	return { schema: SCHEMA_VERSION, meta: { moveDate: null, keyDate: null }, entries: [], changes: [] };
 }
 
-// Like Go's View, this shares meta and entries with the document: callers must
-// not modify them.
-export function docView(d: Doc): DocView {
-	return { schema: d.schema, meta: d.meta, entries: d.entries };
+/**
+ * encodeDocView is Go's View as the wire spells it: schema, meta, entries, with
+ * the entries in Go's struct order and its omitempty fields left out. Without
+ * the second part a milestone:false or completed:null would go out, which Go
+ * never writes.
+ */
+export function encodeDocView(d: Doc): Record<string, unknown> {
+	return {
+		schema: d.schema,
+		meta: { moveDate: d.meta.moveDate, keyDate: d.meta.keyDate },
+		entries: d.entries.map(encodeEntry),
+	};
 }
 
 // A set of field changes: values are already-parsed JSON, as the HTTP body or

@@ -27,10 +27,10 @@ import {
 	cloneEntry,
 	type Doc,
 	decodeDoc,
-	docView,
 	type Entry,
 	emptyDoc,
 	encodeDoc,
+	encodeDocView,
 	type MetaPatch,
 	newEntry,
 	type Patch,
@@ -151,7 +151,7 @@ export interface ServiceOptions {
 
 /** Go's wire snapshot: the document without the journal, plus the ETag. */
 export function snapshotJson(snap: Snapshot): string {
-	return goMarshal({ doc: docView(snap.doc), etag: snap.etag });
+	return goMarshal({ doc: encodeDocView(snap.doc), etag: snap.etag });
 }
 
 interface Loaded {

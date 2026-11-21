@@ -117,3 +117,26 @@ describe("loadConfig", () => {
 		]);
 	});
 });
+
+describe("MOVIN_DOCS and GUIDE_FILE (F13)", () => {
+	it("defaults to the documents on and the repo's admin guide", () => {
+		const c = loadConfig(env());
+		expect(c.docsOff).toBe(false);
+		expect(c.guideFile.endsWith("/docs/admin-guide.md")).toBe(true);
+	});
+
+	it("reads MOVIN_DOCS as on or off", () => {
+		expect(loadConfig(env({ MOVIN_DOCS: "off" })).docsOff).toBe(true);
+		expect(loadConfig(env({ MOVIN_DOCS: "on" })).docsOff).toBe(false);
+		// Blank is unset, as every other env() read treats it.
+		expect(loadConfig(env({ MOVIN_DOCS: "  " })).docsOff).toBe(false);
+	});
+
+	it("refuses any other MOVIN_DOCS value", () => {
+		expect(() => loadConfig(env({ MOVIN_DOCS: "maybe" }))).toThrow('MOVIN_DOCS must be "on" or "off"');
+	});
+
+	it("lets GUIDE_FILE move the admin guide", () => {
+		expect(loadConfig(env({ GUIDE_FILE: "/tmp/guide.md" })).guideFile).toBe("/tmp/guide.md");
+	});
+});

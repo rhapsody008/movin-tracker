@@ -3,7 +3,7 @@
 // moved here with the code, from model.test.ts and docs/index.test.ts.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { compareBytes, goFields, goQuote, goStamp, goTrim, goTrimRight, goTrimSpace } from "./gostr.ts";
+import { compareBytes, goFields, goQuote, goStamp, goTimeJSON, goTrim, goTrimRight, goTrimSpace } from "./gostr.ts";
 
 // Every member of Go's unicode.IsSpace set, one row each.
 const goSpace = [
@@ -102,5 +102,19 @@ describe("compareBytes", () => {
 		// The same list in UTF-16 order is a different order, so this test is
 		// not passing by accident.
 		expect([...reversed].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))).not.toEqual(goOrder);
+	});
+});
+
+describe("goTimeJSON", () => {
+	// time.Time's JSON form: RFC 3339 in UTC, with the fraction's trailing zeros
+	// trimmed off — so a whole second has no fraction at all.
+	it("trims the fraction the way time.Time does (F9)", () => {
+		expect(goTimeJSON(new Date("2026-11-21T03:04:05.000Z"))).toBe("2026-11-21T03:04:05Z");
+		expect(goTimeJSON(new Date("2026-11-21T03:04:05.810Z"))).toBe("2026-11-21T03:04:05.81Z");
+		expect(goTimeJSON(new Date("2026-11-21T03:04:05.123Z"))).toBe("2026-11-21T03:04:05.123Z");
+		// A whole second: S3's LastModified has one-second resolution.
+		expect(goTimeJSON(new Date("2026-11-21T03:04:05Z"))).toBe("2026-11-21T03:04:05Z");
+		// An offset date is written in UTC, as r.Send does.
+		expect(goTimeJSON(new Date("2026-11-21T11:04:05.500+08:00"))).toBe("2026-11-21T03:04:05.5Z");
 	});
 });

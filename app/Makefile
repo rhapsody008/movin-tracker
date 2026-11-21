@@ -7,7 +7,7 @@ NODE_IMAGE ?= node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9
 DOCKER := docker run --rm --user $$(id -u):$$(id -g) -e NPM_CONFIG_UPDATE_NOTIFIER=false -e HOME=/tmp -v $(CURDIR):/app -w /app
 RUN := $(DOCKER) $(NODE_IMAGE)
 
-.PHONY: help lint test format shell clean
+.PHONY: help lint test format shell clean ui-check
 
 help: ## List the targets
 	@awk 'BEGIN{FS=":.*## "} /^[a-z-]+:.*## /{printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -24,6 +24,9 @@ test: node_modules/.installed ## Vitest on Node 24, the S3 half against the comp
 
 format: node_modules/.installed ## Biome check --write
 	$(RUN) npm run format
+
+ui-check: ## Headless Chrome against the TS app on MinIO; screenshots in tmp/ui-check-ts
+	tools/ui-check/run.sh
 
 shell: node_modules/.installed ## Interactive sh in the container
 	$(DOCKER) -it $(NODE_IMAGE) sh
