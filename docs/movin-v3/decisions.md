@@ -1002,3 +1002,11 @@ fixes all seven in `app/src/durable/**`, `app/src/tasks/docsync.ts` and `app/src
 - **The Go goldens are frozen fixtures.** `app/src/testdata/README.md` says so; the `app/golden/<step>/main.go` generators went with the Go tree, and the code comments that named them now say "the Go v1 code, tag v1.0.1, golden tNN". The historical entries above keep their `app/golden/…` paths — they record what happened, and this section records the deletion.
 - **Compose service names are unchanged** (plan question 3): `minio`, `app-test`, `app-ts`, `app-image` stay; only the Go `app`, `test` and `prod` are gone.
 - **`actionlint` is clean on the new workflow**, so the two shellcheck warnings the Go job used to produce (`SC2046` on the gofmt line, `SC2034` on the MinIO wait loop) are gone with it.
+
+## T7.2: app/ at the root (2026-11-22)
+- Image layout unchanged (`/srv/app`), so `deploy/` is untouched; only the guide moves inside the image to `/srv/app/docs/admin-guide.md`, and `src/config.ts` resolves `../docs`.
+- `Dockerfile.test` is gone: compose's `app-test`/`app-ts` build the `runtime` target and mount the repo (dev deps come from the mounted `node_modules`). The root `.dockerignore` is the image's allowlist.
+- Biome lints an allowlist (`src`, `eval`, `test`, root config files): 160 files, the 161st was `app/README.md`.
+- Compose service names kept; `make build` = `make image`; `make dev` starts `app-ts`.
+- Restarts: `kubectl delete pod`, not `rollout restart` (Flux reverts the annotation and restarts again).
+- Velero: the CSI feature flag is required after all (velero.md corrected); fixing it is an NKP app change for ZY.

@@ -48,8 +48,8 @@ describe("contentTypeOf", () => {
 });
 
 describe("DEFAULT_STATIC_DIR", () => {
-	it("is app/static, the tree this build serves", () => {
-		expect(DEFAULT_STATIC_DIR.endsWith(join("app", "static"))).toBe(true);
+	it("is static/, the tree this build serves", () => {
+		expect(DEFAULT_STATIC_DIR).toBe(join(import.meta.dirname, "..", "..", "static"));
 		expect(createDiskStatic(DEFAULT_STATIC_DIR).get("index.html")?.body.length).toBeGreaterThan(80_000);
 	});
 });

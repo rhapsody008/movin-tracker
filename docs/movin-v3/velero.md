@@ -23,7 +23,7 @@ ZY runs every state-changing command.
 | Uploader | kopia, but **no node-agent** DaemonSet, so there are no file-system backups |
 | Snapshot class | `nutanix-snapshot-class`, labelled `velero.io/csi-volumesnapshot-class: "true"` on 2026-11-22 (`decisions.md`, "ZY's answers on the open items") |
 
-- **CSI in v1.18:** it is built in, and no `--features=EnableCSI` is needed.
+- **CSI in v1.18 still needs the feature flag (corrected 2026-11-22).** The first manual backup (`movin-data-manual-20261122`) completed with the PVC object only: the log says `Skip action velero.io/csi-pvc-backupper … because the CSI feature is not enabled`, and `velero-default` takes no volume snapshots either. The server runs without `--features=EnableCSI`. Fix: add `configuration.features: EnableCSI` to the Velero app's config overrides in NKP (ConfigMap `velero-config-overrides`, owned by Kommander), then re-run the backup and check for a VolumeSnapshot. **Until then nothing on this cluster has its volume data backed up.**
 - **The label can be lost.** The snapshot class belongs to the `nutanix-csi` Helm release (`ntnx-system`), and a chart upgrade can drop an extra label. Without it, a backup copies the PVC object but **not its data**.
 - **Where snapshots live:** on the same Nutanix storage as the volume, not off-site. That was accepted, see `decisions.md`.
 - **Secrets are in the cluster backup.** `velero-default` already copies the whole cluster into `zyallinonebackups`, `movin-secrets` included. That's a cluster-wide choice, outside this plan.

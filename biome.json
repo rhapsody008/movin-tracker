@@ -1,7 +1,17 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
 	"files": {
-		"includes": ["**", "!node_modules", "!coverage", "!**/testdata", "!static", "!tools"]
+		"includes": [
+			"src/**",
+			"eval/**",
+			"test/**",
+			"biome.json",
+			"package.json",
+			"package-lock.json",
+			"tsconfig.json",
+			"vitest.config.ts",
+			"!**/testdata"
+		]
 	},
 	"formatter": {
 		"indentStyle": "tab",

@@ -1,16 +1,20 @@
-# app/Dockerfile.test builds this context (compose `app-test` and `app-ts`),
-# which is the repo root. app/Dockerfile has its own allowlist
-# (app/Dockerfile.dockerignore), which BuildKit prefers for that Dockerfile.
-# The Go v1 image this file was written for is gone (T7.1).
-.git
-.env
-.env.*
-!.env.example
-reference
-deploy
-*.md
+# The allowlist for the production image's build context, which is the repo
+# root. T7.2 moved the app up from app/, so app/Dockerfile's old allowlist
+# (app/Dockerfile.dockerignore) is this file without the app/ prefix; the
+# compose containers (`app-test`, `app-ts`) build the `runtime` stage from the
+# same context. Everything else in the repo (reference/, unitmaterial/, tmp/,
+# docs/movin-v2, tools) stays out of it.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!vitest.config.ts
+!src
+!test
+!static
 !docs/admin-guide.md
-unitmaterial
-docs/movin-v2
-tmp
-app/node_modules
+
+# src carries the tests and the testdata (Go goldens, sample PDFs) because the
+# poppler-test stage runs src/docs/convert/poppler.test.ts and
+# src/render.test.ts; the app-src stage strips both before the production stage
+# copies the tree, so the image itself ships neither.

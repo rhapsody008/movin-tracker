@@ -65,10 +65,10 @@ const SEED_CLEANING = "01K9SEED000000000000000002";
 
 /**
  * Go's default fixture, `fixtures/entries.sample.json` relative to the repo
- * root, which is where the Go binary ran it from. This file sits in app/eval, so
- * the same file is two directories up.
+ * root, which is where the Go binary ran it from. This file sits in eval/, one
+ * directory below the root, so the same file is one directory up.
  */
-const DEFAULT_FIXTURE = fileURLToPath(new URL("../../fixtures/entries.sample.json", import.meta.url));
+const DEFAULT_FIXTURE = fileURLToPath(new URL("../fixtures/entries.sample.json", import.meta.url));
 
 /** The short weekday and month names Go's layout prints, in Go's order. */
 const WEEKDAYS: readonly string[] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

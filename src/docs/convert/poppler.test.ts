@@ -1,9 +1,9 @@
-// Port of internal/docs/convert/poppler_test.go. The real tools come from
-// app/Dockerfile.test (the `app-test` image installs poppler-utils, so unlike
-// the Go tests these never skip), run against the same hand-built
-// testdata/sample.pdf; the cases a real tool cannot produce (a tool that hangs,
-// a grandchild the kill cannot reach, HTML entities in a word) use shell
-// scripts on PATH, as the Go tests do.
+// Port of internal/docs/convert/poppler_test.go. The real tools come from the
+// compose `app-test` image (Dockerfile's `runtime` stage, which has
+// poppler-utils, so unlike the Go tests these never skip), run against the same
+// hand-built testdata/sample.pdf; the cases a real tool cannot produce (a tool
+// that hangs, a grandchild the kill cannot reach, HTML entities in a word) use
+// shell scripts on PATH, as the Go tests do.
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

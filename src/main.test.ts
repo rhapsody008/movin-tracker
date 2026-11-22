@@ -1,5 +1,5 @@
 // The process wiring, tested end to end on the memory store: the two probes,
-// the page served from app/static, a shutdown that ends an open SSE stream, and
+// the page served from static/, a shutdown that ends an open SSE stream, and
 // the healthcheck command's exit code. No clock, network or real bucket.
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -103,7 +103,7 @@ describe("startServe", () => {
 			expect(readyz.status).toBe(200);
 			expect(await readyz.text()).toBe("ok\n");
 
-			// GET / is app/static/index.html, byte for byte, and always revalidated.
+			// GET / is static/index.html, byte for byte, and always revalidated.
 			// The page is behind auth, so the request carries the proxy's header.
 			const page = await fetch(`${base}/`, { headers: { "X-Forwarded-Email": "zy@example.com" } });
 			expect(page.status).toBe(200);

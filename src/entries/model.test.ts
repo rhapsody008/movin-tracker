@@ -788,7 +788,7 @@ describe("golden files: Go's own bytes are the judge", () => {
 	// The files are the Go v1 code's own bytes at tag v1.0.1 (golden t13), from the Go app's own
 	// Decode and json.Marshal, never by hand. <input>.json is the input,
 	// <input>.go.json the bytes Go stores, <input>.go.err Go's error text.
-	// app/biome.json excludes this directory so the formatter cannot rewrite
+	// biome.json excludes this directory so the formatter cannot rewrite
 	// either side.
 	const dir = join(import.meta.dirname, "testdata");
 	const files = readdirSync(dir).sort();

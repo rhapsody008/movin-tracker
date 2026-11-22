@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# UI check for app/static/index.html: headless Chrome against a THROWAWAY TS app
+# UI check for static/index.html: headless Chrome against a THROWAWAY TS app
 # on MinIO (never the real bucket: the check edits entries and settings).
 #   app-ts on 127.0.0.1:8090 (bot off), fake LLM on :18090, screenshots and the
 #   result in tmp/ui-check-ts/. Run from anywhere:
-#   app/tools/ui-check/run.sh      (or: make -C app ui-check)
+#   tools/ui-check/run.sh      (or: make ui-check)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-root=$(cd "$here/../../.." && pwd)
+root=$(cd "$here/../.." && pwd)
 out="$root/tmp/ui-check-ts"
 mkdir -p "$out"
 cd "$root"

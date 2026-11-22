@@ -10,7 +10,10 @@ T0 done (gate passed); T1.1, T1.2 done. Next: T1.3 entries.
 | T0 spikes (deps, crash/replay/memory, prompt layout) | done 2026-11-20 |
 | T1–T5 build (domain, web, agent, Telegram, scheduled work) | T1.1, T1.2 done |
 | T6 cutover to `v2.0.0` on zy-all-in-one | not started |
-| T7 delete Go, move `app/` to the root | not started |
+| T7 delete Go (T7.1 done), move `app/` to the root (T7.2) | T7.2 in progress; see `progress.md` |
+
+## Layout
+Since T7.2 the app is the repo root, not `app/`: `src/`, `static/`, `eval/`, `test/`, `tools/`, `package.json`, `package-lock.json`, `tsconfig.json`, `biome.json`, `vitest.config.ts`, `Dockerfile` and the root `.dockerignore` (the image's allowlist). The goldens stay next to their tests as `src/**/testdata`, frozen (Go v1, tag `v1.0.1`). `fixtures/`, `reference/`, `unitmaterial/` and `tmp/` stay where they were; the root `Makefile` runs everything in Docker.
 
 ## Files here
 | File | What |
@@ -23,7 +26,7 @@ T0 done (gate passed); T1.1, T1.2 done. Next: T1.3 entries.
 ## How work is done here
 - **Planning:** non-trivial work goes to the `planner` agent first; ZY sees the plan before code starts.
 - **Who writes code:** the `coder` agent (zy-pi-uep, decided by ZY 2026-11-20) implements one step from the main session's brief (files, approach, verification, allowed paths and deps). The main session checks the actual diff and reruns the checks before ticking the step.
-- **Steps:** one plan step at a time; Go `make lint && make test` and `make -C app lint test` after each; evidence into `progress.md`; commit per step on main only when ZY asks, never push (ZY pushes).
+- **Steps:** one plan step at a time; `make lint test` after each (one app, one Makefile, in Docker); evidence into `progress.md`; commit per step on main only when ZY asks, never push (ZY pushes).
 - **Tests prove something:** for each fix, a test that fails without it (revert the line, see it fail, restore).
 - **Review (from 2026-11-20, ZY):** the main session verifies every step (reruns lint/test, reads the diff, runs targeted mutations on compatibility-critical code). `ts-reviewer` (Opus, read-only, stricter mode for `coder` output: brief item by item, coder's checks rerun, dependency calls against `.d.ts`, ported code against the Go source, the code line each test protects) reviews once per phase over the whole phase, plus separate reviews for T3.2 and T3.3. A phase is ticked only on **APPROVE**; fixes go back to `coder`, then a re-review. T1.1 and T1.2 were reviewed per step.
 - **The Go code is frozen** until T7, so a `v1.0.x` hotfix stays possible.

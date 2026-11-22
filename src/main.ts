@@ -59,7 +59,7 @@ export interface ServeDeps {
 	store?: ObjectStore;
 	/** The clock the entries service and the document schedule read. */
 	now?: () => Date;
-	/** The page's files; the default reads app/static, or STATIC_DIR when it is set. */
+	/** The page's files; the default reads static/, or STATIC_DIR when it is set. */
 	staticFiles?: StaticFiles;
 	/** Server.Guide; null (the default) is a build with no guide, as Go's nil Guide. */
 	guide?: (() => Promise<Uint8Array>) | null;

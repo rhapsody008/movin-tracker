@@ -15,11 +15,11 @@ import { type Checkin, DEFAULT_CHECKIN, parseCheckin } from "./settings/checkin.
 import { parseTelegramEnv, type Telegram } from "./settings/telegram.ts";
 
 /**
- * The admin guide's Markdown: the repo's docs/, next to app/ where this file
- * lives (main.go:110-116 reads it on every request in dev, and the built Go
- * binary embeds the same file).
+ * The admin guide's Markdown: the repo's docs/, one directory up from src/ where
+ * this file lives, which the image has as /srv/app/docs (main.go:110-116 reads
+ * it on every request in dev, and the built Go binary embeds the same file).
  */
-const DEFAULT_GUIDE_FILE = fileURLToPath(new URL("../../docs/admin-guide.md", import.meta.url));
+const DEFAULT_GUIDE_FILE = fileURLToPath(new URL("../docs/admin-guide.md", import.meta.url));
 
 /** The LLM limits that come from Defaults, not from the environment. */
 export const LLM_DEFAULTS = { timeoutSec: 600, maxToolRounds: 5, streaming: true } as const;

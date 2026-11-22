@@ -1,7 +1,7 @@
 # Test, then build the production image and push it to GHCR; on a release
 # tag, also publish the rendered manifests that Flux deploys. The app is the
-# TypeScript service under app/ (app/Dockerfile) and its tests run in
-# app/Makefile's containers; the Go v1 tree was deleted in T7.1, so the job
+# TypeScript service at the repo root (Dockerfile) and its tests run in the
+# root Makefile's containers; the Go v1 tree was deleted in T7.1, so the job
 # that used to run `go test` now only checks the manifests.
 #
 #   pull request     -> manifests + ts-test + build (no push)
@@ -60,7 +60,7 @@ jobs:
           kustomize build deploy/k8s/overlays/prod > /dev/null
           kustomize build deploy/flux > /dev/null
 
-  # The app under app/. Everything runs in Docker (app/Makefile: Biome, tsc,
+  # The app at the repo root. Everything runs in Docker (Makefile: Biome, tsc,
   # vitest with the S3 half against the compose MinIO), so the runner needs
   # nothing installed but make and Docker.
   ts-test:
@@ -76,7 +76,7 @@ jobs:
           for _ in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
 
       - name: Lint and test the TypeScript app
-        run: make -C app lint test
+        run: make lint test
 
   image:
     needs: [manifests, ts-test]
@@ -101,7 +101,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: app/Dockerfile
+          file: Dockerfile
           target: poppler-test
           platforms: linux/amd64
           push: false
@@ -132,7 +132,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: app/Dockerfile
+          file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Screenshots go to the repo's tmp/ui-check-ts/ (git-ignored).
-const OUT = new URL("../../../tmp/ui-check-ts/", import.meta.url).pathname;
+const OUT = new URL("../../tmp/ui-check-ts/", import.meta.url).pathname;
 // Never point this at the real bucket: it edits entries and resets the
 // Telegram allowlist. Run it against a throwaway app on MinIO (BASE=:8090).
 const BASE = process.env.BASE || "http://127.0.0.1:8090";
@@ -68,7 +68,7 @@ async function newTab() {
  */
 function writeClaudeSection() {
   const script = `
-import { createS3Store } from "/src/app/src/objstore/s3.ts";
+import { createS3Store } from "/src/src/objstore/s3.ts";
 const store = createS3Store({
   bucket: process.env.S3_BUCKET, prefix: process.env.S3_PREFIX,
   region: process.env.AWS_REGION, endpointUrl: process.env.S3_ENDPOINT_URL,

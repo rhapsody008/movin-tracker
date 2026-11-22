@@ -100,8 +100,10 @@ kubectl -n movin-tracker create secret generic cloudflared-token --from-literal=
 **After changing any Secret, restart the pod**, because the app reads them only at start:
 
 ```sh
-kubectl -n movin-tracker rollout restart deploy/movin
+kubectl -n movin-tracker delete pod -l app=movin
 ```
+
+Don't use `kubectl rollout restart` here: Flux puts the deployment back as it is in git and drops the restart annotation, which restarts the pod a second time a few minutes later.
 
 ## Configuration in git
 
@@ -298,9 +300,9 @@ PDFs, photos and voice notes get "I can only read text for now" until those feat
 You need Docker and make.
 
 ```sh
-make dev       # the app with live reload, http://localhost:8080, on the real bucket
-make test      # all tests (their own MinIO, race detector)
-make lint      # gofmt + go vet
+make dev       # the app at http://127.0.0.1:8081, on the real bucket in .env
+make lint      # Biome + tsc
+make test      # all tests (their own MinIO, stubbed LLM and fake Telegram)
 make run       # the production image, read-only filesystem, as in k8s
 make down      # stop
 make clean     # stop and delete the test MinIO's data (never the bucket)
@@ -311,9 +313,9 @@ make clean     # stop and delete the test MinIO's data (never the bucket)
 - **Same `SETTINGS_SECRET` everywhere**: `settings.json` is shared, so the saved LLM key only decrypts with the key that saved it.
 - **LLM on your Mac**: from inside Docker use `http://host.docker.internal:<port>/v1`, not `localhost`. Check the port isn't also used by another container: `lsof -nP -iTCP:<port> -sTCP:LISTEN`.
 - **Saved settings win over `.env`**: if the chat uses an unexpected endpoint, check Settings → LLM; it was saved there earlier.
-- **Bot locally**: put a test bot's token in `TELEGRAM_BOT_TOKEN` in `.env`, then `docker compose up -d app`. Only one copy may run the bot per token (otherwise 409): once production runs the bot, leave `TELEGRAM_BOT_TOKEN` empty in `.env`.
-- `make chat-eval` runs 10 real messages through the agent against the model in `.env` and prints PASS/FAIL for each.
-- Ports in use? Run `APP_PORT=8088 make dev` (likewise `MINIO_PORT`, `MINIO_CONSOLE_PORT` for the test MinIO).
+- **Bot locally**: put a test bot's token in `TELEGRAM_BOT_TOKEN` in `.env` and run `make dev` (it starts the compose `app-ts` service). Only one copy may run the bot per token (otherwise 409): once production runs the bot, leave `TELEGRAM_BOT_TOKEN` empty in `.env`.
+- `make chat-eval` runs 12 real messages through the agent against the model in `.env` and prints PASS/FAIL for each.
+- Ports in use? Run `APP_TS_PORT=8088 make dev` (likewise `MINIO_PORT`, `MINIO_CONSOLE_PORT` for the test MinIO).
 
 ## Troubleshooting
 
@@ -336,7 +338,7 @@ make clean     # stop and delete the test MinIO's data (never the bucket)
 | LLM tab shows "No key saved" after changing the endpoint | Keys don't follow a change of host | Type the new endpoint's key, Test, Save |
 | Log warns "listening beyond loopback" | `LISTEN_ADDR` set to something other than `127.0.0.1` | Fine locally; in k8s keep the default so only oauth2-proxy can reach the app |
 
-Logs are JSON lines: `kubectl -n movin-tracker logs deploy/movin -c app` (locally `docker compose logs -f app`). Useful messages: `telegram message ignored` (who was refused and why), `agent tool call` (every change the agent made), `storage test`, `telegram bot started`.
+Logs are JSON lines: `kubectl -n movin-tracker logs deploy/movin -c app` (locally `docker compose logs -f app-ts`). Useful messages: `telegram message ignored` (who was refused and why), `agent tool call` (every change the agent made), `storage test`, `telegram bot started`.
 
 ## Reference
 

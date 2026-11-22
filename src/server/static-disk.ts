@@ -1,6 +1,6 @@
 // The real source for T2.1's StaticFiles: the page and its icons read from a
 // directory on every request, which is Go's os.DirFS(STATIC_DIR) in dev
-// (cmd/movin/main.go:108-116). This build ships app/static next to the code
+// (cmd/movin/main.go:108-116). This build ships static/ next to the code
 // instead of an //go:embed tree (web.go:11-22), so the same disk source is what
 // production serves: an edited page shows up on the next load, and there is no
 // build-time copy to forget.
@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { StaticFile, StaticFiles } from "./static.ts";
 
-/** app/static, resolved from this file (app/src/server/) so the cwd does not matter. */
+/** static/, resolved from this file (src/server/) so the cwd does not matter. */
 export const DEFAULT_STATIC_DIR = fileURLToPath(new URL("../../static", import.meta.url));
 
 /** The four extensions the page has (server-spec §2.5). */
