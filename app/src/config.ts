@@ -62,6 +62,8 @@ export interface Config {
 	staticDir: string;
 	/** GUIDE_FILE: the admin guide's Markdown, read on every request. */
 	guideFile: string;
+	/** DATA_DIR: the volume, holding the durable harness's SQLite file (`<dataDir>/harness.db`). */
+	dataDir: string;
 	/** false when MOVIN_DOCS=off: no syncer, no syncs, and GET /api/docs says on:false. */
 	docsOff: boolean;
 	pollEveryMs: number;
@@ -191,6 +193,7 @@ export function loadConfig(e: Env): Config {
 		timeZone,
 		staticDir: env(e, "STATIC_DIR", ""),
 		guideFile: env(e, "GUIDE_FILE", DEFAULT_GUIDE_FILE),
+		dataDir: env(e, "DATA_DIR", "/data"),
 		docsOff: docsSwitch === "off",
 		pollEveryMs: 5000,
 		logLevel: env(e, "LOG_LEVEL", "info"),

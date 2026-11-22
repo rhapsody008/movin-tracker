@@ -28,8 +28,13 @@
 					"options": {
 						"patterns": [
 							{
-								"group": ["@earendil-works/pi-durable", "@earendil-works/pi-durable/**"],
-								"message": "only src/durable/adapter.ts may import pi-durable (docs/movin-v3/plan.md)"
+								"group": [
+									"@earendil-works/pi-durable",
+									"@earendil-works/pi-durable/**",
+									"@earendil-works/chord",
+									"@earendil-works/chord/**"
+								],
+								"message": "only src/durable/adapter.ts may import pi-durable or chord (docs/movin-v3/briefs/T3.2.md)"
 							}
 						]
 					}

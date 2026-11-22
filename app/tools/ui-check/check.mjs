@@ -37,6 +37,29 @@ async function shot(name, w, h) {
 }
 
 /**
+ * newTab opens a second browser tab and drives it over its own CDP socket, the
+ * way the first one is driven. The second tab is what "two tabs stay in step"
+ * means: it hears the first one's chat frames on /api/events.
+ */
+async function newTab() {
+  const made = await cmd("Target.createTarget", { url: BASE + "/" });
+  const targetId = made.result.targetId;
+  const list = await (await fetch("http://127.0.0.1:9333/json")).json();
+  const target = list.find(t => t.id === targetId);
+  if (!target) throw new Error("the second tab did not appear");
+  const sock = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise(r => sock.onopen = r);
+  let seq = 0; const waits = new Map();
+  sock.onmessage = m => { const d = JSON.parse(m.data); if (d.id && waits.has(d.id)) { waits.get(d.id)(d); waits.delete(d.id); } };
+  const evalIn = async expr => {
+    const r = await new Promise(done => { const n = ++seq; waits.set(n, done); sock.send(JSON.stringify({ id: n, method: "Runtime.evaluate", params: { expression: expr, awaitPromise: true, returnByValue: true } })); });
+    if (r.result.exceptionDetails) throw new Error("second tab: " + JSON.stringify(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails));
+    return r.result.result.value;
+  };
+  return { ev: evalIn, close: () => { try { sock.close(); } catch {} cmd("Target.closeTarget", { targetId }); } };
+}
+
+/**
  * writeClaudeSection puts a v1 Claude connection into settings.json, the way an
  * older version would have saved one: `llm.kind = "claude"`, which v2 never
  * uses (settings-spec §11). It writes through the app's own store inside the
@@ -206,6 +229,76 @@ try {
   // chat change lines render with Undo (no LLM: feed the renderer directly)
   await ev(`(()=>{ const a=bubble('a','ok'); changeLines(a,[{id:'X',text:'Saved: flex · note · test'},{text:'Move-in set to Sat, 5 Dec'}]); return true; })()`);
   check("chat change lines: Undo only on journaled ones", (await ev("document.querySelectorAll('.msg .ch .undo').length")) === 1);
+
+  // ---- the web chat on the server (T3.5) ----
+  // Point the connection at the local stub, then talk to it: the page sends only
+  // the new message and the server keeps the conversation, so a reload draws it
+  // and a second tab follows it live.
+  const CHAT_URL = "http://host.docker.internal:18090/v1";
+  const CHAT_REPLY = "Saved it. Anything else?";
+  const CHAT_TITLE = "UI check: chat note";
+  await fetch(BASE + "/api/settings/llm", { method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "openai", baseUrl: CHAT_URL, model: "stub-openai-model", streaming: true, thinkOnDemand: false, vision: false }) });
+  const chatInput = async text => { await ev(`(()=>{ $('input').value=${JSON.stringify(text)}; send(); return true; })()`); };
+  const chatDone = async (expr, tries = 100) => { for (let i = 0; i < tries && !(await ev(expr)); i++) await sleep(200); return await ev(expr); };
+  await chatInput("Please note the paint colour");
+  check("chat: the reply streams into its bubble", await chatDone(`[...document.querySelectorAll('#log .msg.a')].some(d=>d.textContent.startsWith(${JSON.stringify(CHAT_REPLY)}))`), await ev("$('log').innerText"));
+  check("chat: the change line arrives with its Undo", await ev("document.querySelectorAll('#log .msg .ch .undo').length >= 1"),
+    await ev("[...document.querySelectorAll('#log .ch')].map(c=>c.textContent).join(' | ')"));
+  check("chat: the model line names the model that answered", /Answering: stub-openai-model/.test(await ev("$('modelLine').textContent")), await ev("$('modelLine').textContent"));
+  const chatEntry = await find(CHAT_TITLE);
+  check("chat: the entry the model saved is on the board", chatEntry !== undefined, JSON.stringify(chatEntry && { kind: chatEntry.kind, channel: chatEntry.channel }));
+
+  // A reload draws the server's history, change rows and Undo included.
+  await cmd("Page.navigate", { url: BASE + "/" });
+  for (let i = 0; i < 60 && !(await ev("typeof S!=='undefined' && S.loaded")); i++) await sleep(200);
+  check("chat: a reload draws the server's history", await chatDone("document.querySelectorAll('#log .msg').length >= 2"),
+    await ev("$('log').innerText"));
+  check("chat: a change row from the history keeps its Undo", await ev("document.querySelectorAll('#log .msg .ch .undo').length >= 1"),
+    await ev("[...document.querySelectorAll('#log .ch')].map(c=>c.textContent).join(' | ')"));
+
+  // A second tab hears the same conversation while the first one talks.
+  const tab2 = await newTab();
+  try {
+    for (let i = 0; i < 60 && !(await tab2.ev("typeof onChatFrame==='function' && S.loaded && document.querySelectorAll('#log .msg').length >= 2")); i++) await sleep(200);
+    check("chat: the second tab starts from the same history", (await tab2.ev("document.querySelectorAll('#log .msg').length")) >= 2, await tab2.ev("$('log').innerText"));
+    await chatInput("Add one more note please");
+    const got = await (async () => {
+      for (let i = 0; i < 100; i++) {
+        if (await tab2.ev(`[...document.querySelectorAll('#log .msg.a')].filter(d=>d.textContent.startsWith(${JSON.stringify(CHAT_REPLY)})).length >= 2`)) return true;
+        await sleep(200);
+      }
+      return false;
+    })();
+    check("chat: the second tab receives the streamed reply live", got, await tab2.ev("$('log').innerText"));
+    check("chat: the second tab shows the user's message too", await tab2.ev("[...document.querySelectorAll('#log .msg.u')].some(d=>d.textContent==='Add one more note please')"));
+    check("chat: the sending tab does not draw its own frames twice", (await ev(`[...document.querySelectorAll('#log .msg.a')].filter(d=>d.textContent.startsWith(${JSON.stringify(CHAT_REPLY)})).length`)) === 2,
+      await ev("$('log').innerText"));
+  } finally { tab2.close(); }
+
+  // ---- P6: an input error shows its text in both response forms ----
+  // "/think" alone is Go's blank turn: the server refuses it before submitting.
+  const LAST_TURN = "the last turn must be a user message";
+  const chatFailed = async (text) => {
+    const expr = `[...document.querySelectorAll('#log .msg.a')].some(d=>d.textContent === ${JSON.stringify(text)})`;
+    for (let i = 0; i < 100 && !(await ev(expr)); i++) await sleep(200);
+    return await ev(expr);
+  };
+  const saveLLM = async (streaming) =>
+    fetch(BASE + "/api/settings/llm", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "openai", baseUrl: CHAT_URL, model: "stub-openai-model", streaming, thinkOnDemand: false, vision: false }) });
+  await chatInput("/think");
+  check("chat: an input error arrives as an error frame and reaches the bubble", await chatFailed(LAST_TURN), await ev("$('log').innerText"));
+  await saveLLM(false);
+  await chatInput("/think");
+  check("chat: the same error in the JSON form reaches the bubble", await chatFailed(LAST_TURN), await ev("$('log').innerText"));
+  await saveLLM(true);
+
+  // The transcript stays (it is the point of the step); the two entries it made
+  // are cleaned up, so the next run starts from the same board.
+  for (const e of (await api("/api/entries")).doc.entries.filter(e => e.title === CHAT_TITLE))
+    await fetch(BASE + "/api/entries/" + e.id, { method: "DELETE" });
+  await sleep(500);
 
   // admin panel: Storage + LLM tabs
   await ev("$('openAdmin').click(); true"); await sleep(300);
@@ -377,7 +470,7 @@ try {
 
   await shot("mobile.png", 390, 844);
   check("no horizontal page scroll on phone width", (await ev("document.documentElement.scrollWidth <= window.innerWidth + 1")), await ev("document.documentElement.scrollWidth+' vs '+window.innerWidth"));
-  const real = errors.filter(x => !/api\/settings\/llm\/models/.test(x) && !/400 .*api\/settings\/(telegram|checkin)/.test(x)); check("no console errors (ignoring the down LLM endpoint's 502 and the deliberate invalid Telegram and check-in saves)", real.length === 0, real.join(" ; "));
+  const real = errors.filter(x => !/api\/settings\/llm\/models/.test(x) && !/400 .*api\/settings\/(telegram|checkin)/.test(x) && !/400 .*\/api\/chat/.test(x)); check("no console errors (ignoring the down LLM endpoint's 502, the deliberate invalid Telegram and check-in saves, and the deliberate chat 400)", real.length === 0, real.join(" ; "));
 } catch (e) {
   results.push("ERROR " + e.message);
 } finally {

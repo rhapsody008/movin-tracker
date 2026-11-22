@@ -9,7 +9,8 @@
 //	GET /manifest.webmanifest, the four icons            no auth (iOS fetches them)
 //	GET /api/entries, POST /api/entries,
 //	PATCH|DELETE /api/entries/{id}, POST /api/changes/{id}/undo,
-//	PUT /api/meta, GET /api/events                       behind auth
+//	PUT /api/meta, GET /api/events,
+//	POST /api/chat, GET /api/chat/history          behind auth
 //	GET /api/admin/guide, GET /api/admin/storage,
 //	POST /api/admin/storage/test, GET /api/admin/telegram,
 //	PUT /api/settings/telegram, PUT /api/settings/checkin,
@@ -18,17 +19,19 @@
 //	POST /api/settings/llm/models                        behind auth
 //	everything else                                      auth -> the catch-all
 //
-// Not routed yet, so it falls to the catch-all's JSON 404 until its step lands:
-// POST /api/chat (T3.5).
+// The chat routes are T3.5's: POST /api/chat is Go's, GET /api/chat/history is
+// v3's own (the server keeps the web conversation now).
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Syncer } from "../docs/sync.ts";
+import type { Agent } from "../durable/adapter.ts";
 import type { EntriesService } from "../entries/service.ts";
 import { errorMessage, type Log } from "../log.ts";
 import type { ObjectStore } from "../objstore/store.ts";
 import type { SettingsService } from "../settings/settings.ts";
 import { type AdminRoutes, createAdminRoutes, type TelegramStatusSource } from "./admin.ts";
 import { createAuth } from "./auth.ts";
+import { type ChatRoutes, createChatRoutes } from "./chat.ts";
 import { createDocsRoutes, type DocsRoutes } from "./docs.ts";
 import { createEntriesRoutes, type EntriesRoutes } from "./entries.ts";
 import { createEvents, DEFAULT_HEARTBEAT_MS } from "./events.ts";
@@ -61,6 +64,11 @@ export interface ServerDeps {
 	guide?: (() => Promise<Uint8Array>) | null;
 	/** The Telegram bot's view of the world (T4); null in T2, as Go's nil *Bot. */
 	telegram?: TelegramStatusSource | null;
+	/**
+	 * The durable agent, read on every chat request: serve() opens it after the
+	 * listener (T3.2), so the chat routes ask for it rather than holding it.
+	 */
+	agent?: () => Agent | null;
 }
 
 export interface Server {
@@ -80,6 +88,7 @@ interface ApiRoutes {
 	admin: AdminRoutes;
 	llm: LLMSettingsRoutes;
 	docs: DocsRoutes;
+	chat: ChatRoutes;
 }
 
 export function createServer(deps: ServerDeps): Server {
@@ -109,6 +118,12 @@ export function createServer(deps: ServerDeps): Server {
 	});
 	const llm = createLLMSettingsRoutes({ entries: deps.entries, settings: deps.settings, log });
 	const docs = createDocsRoutes({ entries: deps.entries, docs: deps.docs ?? null, log });
+	const chat = createChatRoutes({
+		agent: deps.agent ?? ((): null => null),
+		settings: deps.settings,
+		chatStream: streams.chat,
+		log,
+	});
 
 	// The root mux: the probes, the files that need no sign-in, and a catch-all
 	// that runs everything else behind auth.
@@ -121,7 +136,7 @@ export function createServer(deps: ServerDeps): Server {
 	// through to the static handler, which is where Go's `api.Handle("/")` sits
 	// and why nothing here can answer 405 (§9.5).
 	const api = createRouter();
-	addApiRoutes(api, { entries, events: streams.events, admin, llm, docs });
+	addApiRoutes(api, { entries, events: streams.events, admin, llm, docs, chat });
 
 	async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
 		const { path: sent, query } = requestPath(req.url);
@@ -185,7 +200,7 @@ export function createServer(deps: ServerDeps): Server {
 
 /** Every API route, in Go's registration order (server.go:79-100). */
 function addApiRoutes(router: Router, routes: ApiRoutes): void {
-	const { entries, events, admin, llm, docs } = routes;
+	const { entries, events, admin, llm, docs, chat } = routes;
 	router.add("GET", "/api/entries", entries.getEntries);
 	router.add("POST", "/api/entries", entries.createEntry);
 	router.add("PATCH", "/api/entries/{id}", entries.patchEntry);
@@ -193,7 +208,10 @@ function addApiRoutes(router: Router, routes: ApiRoutes): void {
 	router.add("POST", "/api/changes/{id}/undo", entries.undoChange);
 	router.add("PUT", "/api/meta", entries.putMeta);
 	router.add("GET", "/api/events", events);
-	// POST /api/chat (T3.5) goes here.
+	router.add("POST", "/api/chat", chat.chat);
+	// v3 only: the transcript a page reload draws (T3.5). Go kept the web chat
+	// in the page, so it has no such route.
+	router.add("GET", "/api/chat/history", chat.history);
 	router.add("GET", "/api/admin/guide", admin.getGuide);
 	router.add("GET", "/api/admin/storage", admin.getStorage);
 	router.add("POST", "/api/admin/storage/test", admin.testStorage);

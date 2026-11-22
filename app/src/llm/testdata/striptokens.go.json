@@ -1,0 +1,58 @@
+[
+	{
+		"in": "Saved it.\u003c|im_end|\u003e",
+		"out": "Saved it."
+	},
+	{
+		"in": "Saved it. \u003c|eot_id|\u003e\n",
+		"out": "Saved it."
+	},
+	{
+		"in": "\u003c|im_start|\u003eassistant hi",
+		"out": "assistant hi"
+	},
+	{
+		"in": "plain text",
+		"out": "plain text"
+	},
+	{
+		"in": "a \u003c|not_a_token|\u003e stays",
+		"out": "a \u003c|not_a_token|\u003e stays"
+	},
+	{
+		"in": "\u003c|im_end|\u003e",
+		"out": ""
+	},
+	{
+		"in": "  spaces kept when no token  ",
+		"out": "  spaces kept when no token  "
+	},
+	{
+		"in": "one\u003c|im_end|\u003etwo",
+		"out": "onetwo"
+	},
+	{
+		"in": "\u003c|im_start|\u003ea\u003c|im_end|\u003e\u003c|im_end|\u003eb\u003c|im_end|\u003e",
+		"out": "ab"
+	},
+	{
+		"in": "\u003c|im_start|\u003e\u003c|im_end|\u003e\u003c|eot_id|\u003e",
+		"out": ""
+	},
+	{
+		"in": "\u003c|im_end|\u003e\u003c|im_start|\u003e\u003c|eot_id|\u003e\u003c|end_of_text|\u003e\u003c|endoftext|\u003e\u003c|end|\u003e\u003c|eom_id|\u003e",
+		"out": ""
+	},
+	{
+		"in": "x \u003c|im_end|\u003e y \u003c|eot|\u003e z",
+		"out": "x  y \u003c|eot|\u003e z"
+	},
+	{
+		"in": "\u003c|IM_END|\u003e keeps its case",
+		"out": "\u003c|IM_END|\u003e keeps its case"
+	},
+	{
+		"in": "\t\n \u003c|eom_id|\u003e hi there \u003c|end|\u003e \n",
+		"out": "hi there"
+	}
+]

@@ -1,7 +1,9 @@
 // The process: `serve` (the default) and `healthcheck`, ported from
-// cmd/movin/main.go. The agent and the Telegram bot are later steps (T3, T4),
-// so serve builds the store, the entries service, the settings service, the
-// document syncer and the HTTP server, and nothing else.
+// cmd/movin/main.go. The Telegram bot is a later step (T4); serve builds the
+// store, the entries service, the settings service, the document syncer and the
+// HTTP server, then the durable agent on the data volume — with the entry tools,
+// the document tools, the page viewer and the prompt wiring of T3.3/T3.4, which
+// the chat route (T3.5) drives.
 //
 // Startup order is Go's (server-spec §8.2), with one Node-only note: the listen
 // uses explicit header/idle timeouts and switches off the two Node timeouts Go
@@ -12,16 +14,22 @@
 // Shutdown is Go's too: stop the background jobs, end the SSE streams, close
 // the listener, give in-flight requests 10 s, then cut the connections and warn.
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { createServer as createHTTPServer } from "node:http";
 import { type AddressInfo, isIP } from "node:net";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promptHooks } from "./agent/prompt.ts";
+import { buildTools } from "./agent/tools.ts";
 import { type Config, type Env, loadConfig } from "./config.ts";
 import { createPoppler } from "./docs/convert/poppler.ts";
+import { createLLMSummariser } from "./docs/llmsummary.ts";
+import { createViewer, type Viewer } from "./docs/render.ts";
 import { startDocsBackground } from "./docs/schedule.ts";
-import { createSyncer } from "./docs/sync.ts";
-import { createEntriesService } from "./entries/service.ts";
+import { createLibrary } from "./docs/search.ts";
+import { createSyncer, type Syncer } from "./docs/sync.ts";
+import { type Agent, type AgentEnd, openAgent } from "./durable/adapter.ts";
+import { createEntriesService, type EntriesService } from "./entries/service.ts";
 import { goQuote } from "./gostr.ts";
 import { createLog, errorMessage, type Level, type Log } from "./log.ts";
 import { createS3Store } from "./objstore/s3.ts";
@@ -29,7 +37,7 @@ import type { ObjectStore } from "./objstore/store.ts";
 import { type Server as AppServer, createServer } from "./server/server.ts";
 import type { StaticFiles } from "./server/static.ts";
 import { createDiskStatic, DEFAULT_STATIC_DIR } from "./server/static-disk.ts";
-import { createSettingsService } from "./settings/settings.ts";
+import { createSettingsService, type SettingsService } from "./settings/settings.ts";
 
 /** A shutdown's budget before the connections are cut (Go's 10 s, main.go:157). */
 export const SHUTDOWN_BUDGET_MS = 10_000;
@@ -47,12 +55,37 @@ export interface ServeDeps {
 	staticFiles?: StaticFiles;
 	/** Server.Guide; null (the default) is a build with no guide, as Go's nil Guide. */
 	guide?: (() => Promise<Uint8Array>) | null;
+	/** The durable agent, once serve() has opened it: the chat routes read it on every request. */
+	agent?: () => Agent | null;
+}
+
+/**
+ * What the durable agent reads of the running app: the entries, the documents
+ * and the page viewer, wired once at open (T3.5). The chat routes hold the
+ * agent, so this travels with the server's own construction.
+ */
+export interface AgentDeps {
+	entries: EntriesService;
+	/** The documents syncer, or null when MOVIN_DOCS=off: no document tools, no documents section. */
+	syncer: Syncer | null;
+	/** The viewer that renders a page for the vision tool, or null when documents are off. */
+	viewer: Viewer | null;
+	/** The zone the prompt's date line is in (Go's r.Loc). */
+	timeZone: string;
+	/** The clock the prompt reads the date from. */
+	now: () => Date;
 }
 
 export interface Running {
 	/** The address listened on, with the port the OS picked filled in. */
 	address: string;
 	port: number;
+	/** The settings service: serve() gives it to the durable agent, which resolves the connection per use. */
+	settings: SettingsService;
+	/** The logger, so the agent writes the same stream as the server. */
+	log: Log;
+	/** The entries, documents and viewer serve() built, for the agent it opens next. */
+	agentDeps: AgentDeps;
 	/** Stops the background jobs, ends the streams and closes the listener. Idempotent. */
 	stop: () => Promise<void>;
 }
@@ -119,11 +152,24 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 		log.warn("ALLOWED_EMAILS is empty; every user the proxy lets through can use the web page");
 	}
 
-	// Documents: one converter shared by the syncs, so a big render can't stack
-	// up. No summariser yet: T3.1 plugs the LLM one in, and an empty summary is
-	// what Go writes with none configured.
-	const syncer = config.docsOff ? null : createSyncer({ store, converter: createPoppler(), log, now });
+	// Documents: one converter shared by the syncs and the page views, so a big
+	// render can't stack up (Go's "one Poppler", main.go:118-123), and the LLM
+	// summariser, which resolves the saved connection per file.
+	const poppler = config.docsOff ? null : createPoppler();
+	const syncer =
+		poppler === null
+			? null
+			: createSyncer({
+					store,
+					converter: poppler,
+					summariser: createLLMSummariser({ settings }),
+					log,
+					now,
+				});
 	if (syncer === null) log.warn("documents are switched off (MOVIN_DOCS=off)");
+	// The page viewer is Go's docs.Viewer (main.go:123): only the vision tool uses
+	// it, and only when the connection takes images.
+	const viewer = syncer === null || poppler === null ? null : createViewer({ source: syncer, store, conv: poppler });
 
 	const staticFiles =
 		deps.staticFiles ?? createDiskStatic(config.staticDir === "" ? DEFAULT_STATIC_DIR : config.staticDir);
@@ -139,6 +185,7 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 		devEmail: config.devEmail,
 		guide: deps.guide ?? null,
 		telegram: null,
+		agent: deps.agent ?? ((): null => null),
 	});
 
 	// The options come first and the request listener second: `handler` is not an
@@ -226,6 +273,9 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 	return {
 		address,
 		port: bound,
+		settings,
+		log,
+		agentDeps: { entries, syncer, viewer, timeZone: config.timeZone, now },
 		stop: () => {
 			stopping ??= shutdown();
 			return stopping;
@@ -233,18 +283,85 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 	};
 }
 
+/** The durable harness's database: on the data volume, so chat history survives the pod (plan.md · Storage). */
+export function harnessDbPath(dataDir: string): string {
+	return join(dataDir, "harness.db");
+}
+
+/**
+ * openDurableAgent is serve's agent: the harness on `<dataDir>/harness.db`, with
+ * the entry tools and the document tools of T3.3 and the prompt of T3.4 wired in
+ * (T3.5). The directory is made here because a fresh volume has nothing in it.
+ */
+export async function openDurableAgent(
+	config: Config,
+	settings: SettingsService,
+	log: Log,
+	deps: AgentDeps,
+): Promise<Agent> {
+	await mkdir(config.dataDir, { recursive: true });
+	// Go builds the search library over the syncer (main.go:120); without documents
+	// there is no library, and buildTools offers the five entry tools alone.
+	const docs = deps.syncer === null ? null : createLibrary({ source: deps.syncer, log });
+	return openAgent({
+		dbPath: harnessDbPath(config.dataDir),
+		settings,
+		log,
+		tools: buildTools({ entries: deps.entries, docs, viewer: deps.viewer }),
+		hooks: promptHooks({
+			entries: deps.entries,
+			docs: deps.syncer,
+			viewer: deps.viewer !== null,
+			timeZone: deps.timeZone,
+			now: deps.now,
+			log,
+		}),
+	});
+}
+
+/**
+ * exitIfFailed is the pod-restart rule (plan.md · Deploy): a harness whose
+ * storage failed ends the process, so Kubernetes starts a new one. A close of
+ * our own (`closed`) leaves the exit code alone.
+ */
+export function exitIfFailed(end: AgentEnd, exit: (code: number) => void): void {
+	if (end.kind === "failed") exit(1);
+}
+
 /** serve is `movin`: the same build, then wait for SIGINT or SIGTERM. */
 async function serve(env: Env): Promise<void> {
 	const config = loadConfig(env);
-	const running = await startServe(config, { guide: guideReader(config.guideFile) });
-	await new Promise<void>((done) => {
-		// One shutdown, whoever asks: both signals can arrive, and stop() is idempotent.
-		const onSignal = (): void => {
-			void running.stop().then(done);
-		};
-		process.once("SIGINT", onSignal);
-		process.once("SIGTERM", onSignal);
-	});
+	// Set once the harness is open, and read by the chat routes per request: the
+	// agent opens after the listener, so a slow volume never delays readiness or
+	// the page (T3.2).
+	let agent: Agent | null = null;
+	const running = await startServe(config, { guide: guideReader(config.guideFile), agent: () => agent });
+	// The agent opens after the listener, like Go's background jobs (main.go:172-182),
+	// so a slow volume never delays readiness or the page.
+	let opened: Agent;
+	try {
+		opened = await openDurableAgent(config, running.settings, running.log, running.agentDeps);
+	} catch (err) {
+		// A start that fails must leave nothing running: the listener and the
+		// background jobs would hold the event loop open while the process reported
+		// exit code 1, and the pod would keep answering with no agent.
+		await running.stop();
+		throw err;
+	}
+	agent = opened;
+	void opened.closed.then((end) => exitIfFailed(end, (code) => process.exit(code)));
+	try {
+		await new Promise<void>((done) => {
+			// One shutdown, whoever asks: both signals can arrive, and stop() is idempotent.
+			const onSignal = (): void => {
+				void running.stop().then(done);
+			};
+			process.once("SIGINT", onSignal);
+			process.once("SIGTERM", onSignal);
+		});
+	} finally {
+		await opened.close();
+	}
 }
 
 /**

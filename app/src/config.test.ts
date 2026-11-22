@@ -123,6 +123,7 @@ describe("MOVIN_DOCS and GUIDE_FILE (F13)", () => {
 		const c = loadConfig(env());
 		expect(c.docsOff).toBe(false);
 		expect(c.guideFile.endsWith("/docs/admin-guide.md")).toBe(true);
+		expect(c.dataDir).toBe("/data");
 	});
 
 	it("reads MOVIN_DOCS as on or off", () => {
@@ -138,5 +139,11 @@ describe("MOVIN_DOCS and GUIDE_FILE (F13)", () => {
 
 	it("lets GUIDE_FILE move the admin guide", () => {
 		expect(loadConfig(env({ GUIDE_FILE: "/tmp/guide.md" })).guideFile).toBe("/tmp/guide.md");
+	});
+
+	it("lets DATA_DIR move the durable harness's volume", () => {
+		expect(loadConfig(env({ DATA_DIR: "/tmp/movin-data" })).dataDir).toBe("/tmp/movin-data");
+		// Blank is unset, as every other env() read treats it: the mount is /data.
+		expect(loadConfig(env({ DATA_DIR: "  " })).dataDir).toBe("/data");
 	});
 });

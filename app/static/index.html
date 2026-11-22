@@ -894,12 +894,18 @@ $("keyCancel").onclick = ()=>$("keyDlg").close();
 $("toggleArchived").onclick = ()=>{ S.showArchived=!S.showArchived; render(); };
 
 /* ---------- chat ---------- */
-const turns = [];
-let busy = false, ctl = null;
+// One conversation per signed-in email, kept by the server (T3.5): a reload
+// draws GET /api/chat/history, this tab sends only the new message, and the
+// other tabs follow the turn over the /api/events `chat` frames. Each request
+// carries an id, so a tab can tell its own frames from another tab's.
+let busy = false, ctl = null, requestSeq = 0;
+const ownRequests = new Set(); // this tab's requests: its own chat frames are already drawn
+const others = new Map(); // another tab's request id -> the bubble it is filling
 function bubble(role, text){
   const d = document.createElement("div"); d.className = "msg " + role; d.textContent = text;
-  $("log").appendChild(d); $("log").scrollTop = $("log").scrollHeight; return d;
+  $("log").appendChild(d); scrollLog(); return d;
 }
+function scrollLog(){ $("log").scrollTop = $("log").scrollHeight; }
 function showHints(){
   const ex = ["Thinking of fluted glass for the dry kitchen sliding door", "Lim quoted 18k for carpentry, paid 30% today", "Electrician coming Friday 2pm to check the DB", "What did we decide for the kitchen and what did it cost?"];
   const h = document.createElement("div"); h.className="hint"; h.id="hints";
@@ -914,6 +920,25 @@ function changeLines(a, changes){
     if(c.id){ const u = document.createElement("button"); u.type = "button"; u.className = "undo"; u.dataset.undo = c.id; u.textContent = "Undo"; row.appendChild(u); }
     a.appendChild(row);
   }
+}
+// addRow is one transcript row: a bubble and the change lines that hang on it.
+// A failed run's changes hang on its user row (the server decides that), and a
+// reloaded answer carries its own, so the role does not matter here.
+function addRow(role, text, changes){
+  const row = bubble(role === "user" ? "u" : "a", text);
+  if(changes && changes.length) changeLines(row, changes);
+  return row;
+}
+// loadHistory draws the server's transcript, oldest first.
+async function loadHistory(){
+  let page;
+  try{ page = await api("GET", "/api/chat/history?limit=50"); }
+  catch{ return; } // no history yet is an empty chat, not an error
+  $("log").innerHTML = "";
+  const items = page.items || [];
+  for(const item of items) addRow(item.role, item.text, item.changes || []);
+  if(!items.length) showHints();
+  scrollLog();
 }
 // Reads a text/event-stream response body and calls on(event, data) per event.
 async function readSSE(resp, on){
@@ -940,38 +965,64 @@ async function send(){
   if(!text || busy) return;
   $("hints")?.remove();
   $("input").value = ""; autosize();
-  bubble("u", text);
-  turns.push({role:"user", content:text});
-  while(turns.length > 12) turns.shift();
-  if(turns[0].role !== "user") turns.shift();
+  addRow("user", text, []);
   const a = bubble("a", "Thinking…");
   busy = true; $("send").textContent = "Stop";
   ctl = new AbortController();
+  const request = "tab-" + Date.now().toString(36) + "-" + (++requestSeq);
+  ownRequests.add(request);
   let changes = [], reply = "", streamed = "", failed = null;
   try{
     const resp = await fetch("/api/chat", {method:"POST", signal:ctl.signal, credentials:"same-origin",
-      headers:{"Content-Type":"application/json", "Accept":"text/event-stream, application/json"}, body:JSON.stringify({turns})});
+      headers:{"Content-Type":"application/json", "Accept":"text/event-stream, application/json"},
+      body:JSON.stringify({turns:[{role:"user", content:text}], request})});
     if((resp.headers.get("Content-Type")||"").startsWith("text/event-stream")){
       await readSSE(resp, (ev, d)=>{
-        if(ev==="delta"){ streamed += d.text; a.textContent = streamed; }
+        if(ev==="delta"){ streamed += d.text; a.textContent = streamed; scrollLog(); }
         else if(ev==="reset"){ streamed = ""; a.textContent = "Thinking…"; }
         else if(ev==="change"){ changes.push({id:d.id, text:d.text}); }
         else if(ev==="done"){ reply = d.reply; changes = d.changes || changes; if(d.model) setModelLine(d.model); }
-        else if(ev==="error"){ failed = d.error; changes = d.changes || changes; }
+        else if(ev==="error"){ failed = d.error; changes = d.changes || changes; if(d.model) setModelLine(d.model); }
       });
       if(!reply && !failed) failed = "The answer was cut off. Send it again.";
     } else {
       let d = {}; try{ d = await resp.json(); }catch{}
       if(resp.ok){ reply = d.reply; changes = d.changes || []; if(d.model) setModelLine(d.model); }
-      else { failed = d.error || `HTTP ${resp.status}`; changes = d.changes || []; }
+      else { failed = d.error || `HTTP ${resp.status}`; changes = d.changes || []; if(d.model) setModelLine(d.model); }
     }
   }catch(e){
     failed = e.name==="AbortError" ? "Stopped." : "Something interrupted that. Send it again.";
   }finally{
-    if(failed){ a.textContent = (streamed ? streamed+"\n" : "") + failed; turns.pop(); }
-    else { a.textContent = reply; turns.push({role:"assistant", content:reply}); }
+    a.textContent = failed ? (streamed ? streamed+"\n" : "") + failed : reply;
     if(changes.length) changeLines(a, changes);
-    busy = false; ctl = null; $("send").textContent = "Send"; $("log").scrollTop = $("log").scrollHeight;
+    busy = false; ctl = null; $("send").textContent = "Send"; scrollLog();
+  }
+}
+// onChatFrame draws another tab's turn from the /api/events stream. Its own
+// frames are skipped: this tab already drew them from the request itself.
+function onChatFrame(d){
+  if(!d || !d.request || ownRequests.has(d.request)) return;
+  let st = others.get(d.request);
+  if(d.type === "user"){
+    $("hints")?.remove();
+    addRow("user", d.text, []);
+    others.set(d.request, { bubble: bubble("a", "Thinking…"), streamed: "" });
+    return;
+  }
+  if(!st) return; // a frame of a turn this tab was not open for
+  if(d.type === "delta"){ st.streamed += d.text; st.bubble.textContent = st.streamed; scrollLog(); }
+  else if(d.type === "reset"){ st.streamed = ""; st.bubble.textContent = "Thinking…"; }
+  else if(d.type === "done"){
+    st.bubble.textContent = d.reply;
+    if(d.changes && d.changes.length) changeLines(st.bubble, d.changes);
+    if(d.model) setModelLine(d.model);
+    others.delete(d.request); scrollLog();
+  }
+  else if(d.type === "error"){
+    st.bubble.textContent = (st.streamed ? st.streamed + "\n" : "") + (d.error || "Something interrupted that. Send it again.");
+    if(d.changes && d.changes.length) changeLines(st.bubble, d.changes);
+    if(d.model) setModelLine(d.model);
+    others.delete(d.request); scrollLog();
   }
 }
 $("send").onclick = ()=>{ if(busy && ctl) ctl.abort(); else send(); };
@@ -1351,7 +1402,7 @@ $("docsSync").onclick = async ()=>{
   $("fText").value = S.f.text;
 }
 render();
-showHints();
+loadHistory();
 if(location.hash === "#settings"){ history.replaceState(null, "", location.pathname); openSettings(null, $("openAdmin")); }
 api("GET","/api/settings/llm").then(v=>setModelLine(v.model)).catch(()=>{});
 (function connect(){
@@ -1365,6 +1416,7 @@ api("GET","/api/settings/llm").then(v=>setModelLine(v.model)).catch(()=>{});
     applyServer(snap);
   });
   es.addEventListener("docs", e=>{ docsState = JSON.parse(e.data); if(curTab === "docs") renderDocs(); });
+  es.addEventListener("chat", e=>{ onChatFrame(JSON.parse(e.data)); });
   es.onopen = ()=>{ opened = true; clearTimeout(downTimer); if($("banner").textContent.startsWith("Stopped syncing")) banner(""); };
   es.onerror = ()=>{
     // EventSource reconnects by itself; only say something if it stays down.

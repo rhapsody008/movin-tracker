@@ -98,6 +98,9 @@ services:
       STATIC_DIR: /src/app/static
       HOME: /tmp
       XDG_CACHE_HOME: /tmp/.cache
+      # The durable harness's SQLite file. No data volume is mounted for this
+      # container, so it writes to /tmp: a throwaway chat history per run.
+      DATA_DIR: /tmp/movin-data
     ports:
       - "127.0.0.1:${APP_TS_PORT:-8081}:8080"
     volumes:

@@ -69,7 +69,7 @@ T7: T7.1 → T7.2
 ### Tools
 - Same eight. Reads are replay-safe.
 - Writes derive the change ID from `sha256(epoch|taskId|index)` (base32, 26 chars, so `undo:<id>` fits Telegram's 64-byte callback data); a rerun finds its earlier journal record and returns it instead of writing again. `epoch` is a UUID in a session doc (`movin.epoch`), created with the database and rotated by the restore path: task ids are small per-database counters, so without it dev and prod collide on the shared journal and a restored database reuses ids, silently skipping new writes (found in T0.2). As a second guard the last 10 characters of the change ID are a hash of the call's arguments (decisions.md, 2026-11-20); a found record with the same prefix but a different hash is a collision, logged, and the write goes ahead with a fresh id.
-- `set_dates` is journaled (Go refuses to undo it as an "empty record", which is safe).
+- `set_dates` is not journaled, as in Go: a meta record would become "the latest change", so an undo without an id would be refused, and Go's `/recent` crashes on it while the bucket is shared. A rerun after a crash writes the same dates again (decisions.md, 2026-11-22).
 - Images: at most 6 per run, counted in the tool; images from earlier runs are replaced by a placeholder before each request.
 
 ### Telegram

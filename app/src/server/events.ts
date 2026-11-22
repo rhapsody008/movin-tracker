@@ -39,16 +39,31 @@ export interface Events {
 	events: Handler;
 	/** Ends every open stream, so a shutdown does not wait for them (Go's CloseStreams). */
 	closeStreams: () => void;
+	/**
+	 * Sends one `chat` frame (T3.5) to every stream signed in as `email`, the
+	 * sender's own included — the sender recognises its request id (chat.ts). A
+	 * stream of another email never sees it: the frame carries no user and the
+	 * subscription is per email.
+	 */
+	chat: (email: string, payload: string) => void;
+}
+
+/** One open stream: who it belongs to, and how to write to it. */
+interface OpenStream {
+	email: string;
+	send: (event: string, payload: string) => boolean;
+	stop: () => void;
 }
 
 export function createEvents(o: EventsOptions): Events {
-	// Every open stream's teardown, so closeStreams can end them all.
-	const open = new Set<() => void>();
+	// Every open stream, so closeStreams can end them all and a chat frame can
+	// reach the ones of one email.
+	const open = new Set<OpenStream>();
 	// Go's s.closing: closed for good by CloseStreams, so a later stream notices
 	// at its first select and returns.
 	let closing = false;
 
-	const events: Handler = async (req, res) => {
+	const events: Handler = async (req, res, at) => {
 		// Go subscribes before it reads the snapshot and before it writes the
 		// headers; a change that lands in between waits in a one-slot channel.
 		let started = false;
@@ -70,7 +85,7 @@ export function createEvents(o: EventsOptions): Events {
 			if (ticker !== null) clearInterval(ticker);
 			cancelEntries?.();
 			stopDocs?.();
-			open.delete(stop);
+			open.delete(stream);
 			if (res.headersSent && !res.writableEnded) res.end();
 		}
 
@@ -79,6 +94,8 @@ export function createEvents(o: EventsOptions): Events {
 			res.write(`event: ${event}\ndata: ${payload}\n\n`);
 			return true;
 		}
+
+		const stream: OpenStream = { email: at.user, send, stop };
 
 		cancelEntries = o.entries.subscribe((snap) => {
 			if (!started) {
@@ -119,7 +136,7 @@ export function createEvents(o: EventsOptions): Events {
 		}
 
 		startSSE(res);
-		open.add(stop);
+		open.add(stream);
 		res.on("close", stop);
 		if (!send("entries", snapshotJson(snap))) {
 			stop();
@@ -158,13 +175,19 @@ export function createEvents(o: EventsOptions): Events {
 		events,
 		closeStreams: () => {
 			closing = true;
-			for (const stop of [...open]) stop();
+			for (const stream of [...open]) stream.stop();
+		},
+		chat: (email, payload) => {
+			for (const stream of [...open]) {
+				if (stream.email !== email) continue;
+				if (!stream.send("chat", payload)) stream.stop();
+			}
 		},
 	};
 }
 
 /** startSSE writes Go's three headers and nothing else, then flushes them at once (§3.1). */
-function startSSE(res: ServerResponse): void {
+export function startSSE(res: ServerResponse): void {
 	res.writeHead(200, {
 		"Content-Type": "text/event-stream",
 		"Cache-Control": "no-cache",

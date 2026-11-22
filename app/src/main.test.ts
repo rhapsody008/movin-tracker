@@ -1,14 +1,16 @@
 // The process wiring, tested end to end on the memory store: the two probes,
 // the page served from app/static, a shutdown that ends an open SSE stream, and
 // the healthcheck command's exit code. No clock, network or real bucket.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { request } from "node:http";
-import { createServer as createNetServer } from "node:net";
+import { connect, createServer as createNetServer } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type Config, loadConfig } from "./config.ts";
 import { createTestLog } from "./log.ts";
-import { run, startServe } from "./main.ts";
+import { exitIfFailed, harnessDbPath, openDurableAgent, run, startServe } from "./main.ts";
 import { createMemoryStore } from "./objstore/memory.ts";
 import { DEFAULT_STATIC_DIR } from "./server/static-disk.ts";
 
@@ -51,6 +53,18 @@ function openEvents(port: number): Promise<Stream> {
 		);
 		req.on("error", reject);
 		req.end();
+	});
+}
+
+/** connects resolves when something accepts a connection on the port. */
+function connects(port: number): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const socket = connect(port, "127.0.0.1");
+		socket.once("connect", () => {
+			socket.destroy();
+			resolve();
+		});
+		socket.once("error", reject);
 	});
 }
 
@@ -146,6 +160,57 @@ describe("startServe with docsOff", () => {
 		} finally {
 			await running.stop();
 		}
+	});
+});
+
+describe("the durable agent", () => {
+	it("opens the harness on the data volume and closes with the session", async () => {
+		const dataDir = await mkdtemp(join(tmpdir(), "movin-main-data-"));
+		const config = { ...testConfig(), dataDir };
+		const { log } = createTestLog();
+		const running = await startServe(config, { store: createMemoryStore(), log });
+		try {
+			expect(harnessDbPath(dataDir)).toBe(join(dataDir, "harness.db"));
+			const agent = await openDurableAgent(config, running.settings, running.log, running.agentDeps);
+			try {
+				// The database is on the volume, with a session document created with it.
+				expect(existsSync(harnessDbPath(dataDir))).toBe(true);
+				expect(agent.epoch).toMatch(/^[0-9a-f-]{36}$/);
+			} finally {
+				await agent.close();
+			}
+			expect(await agent.closed).toEqual({ kind: "closed" });
+		} finally {
+			await running.stop();
+			await rm(dataDir, { recursive: true, force: true });
+		}
+	});
+
+	it("exits 1 and closes the server when the harness cannot open", { timeout: 20_000 }, async () => {
+		const port = await closedPort();
+		const deadS3 = await closedPort();
+		const code = await run(["serve"], {
+			S3_BUCKET: "test-bucket",
+			// An endpoint that refuses at once, so the startup read fails fast.
+			S3_ENDPOINT_URL: `http://127.0.0.1:${deadS3}`,
+			LISTEN_ADDR: `127.0.0.1:${port}`,
+			// A path that cannot be a directory on any POSIX host (mkdir: ENOTDIR).
+			DATA_DIR: "/dev/null/not-a-directory",
+			MOVIN_DOCS: "off",
+		});
+		expect(code).toBe(1);
+		// serve() stopped the server before the error: nothing answers on its port.
+		await expect(connects(port)).rejects.toThrow();
+	});
+
+	it("exits 1 when the harness's storage failed, and leaves the code alone on a close", () => {
+		const codes: number[] = [];
+		const exit = (code: number): void => {
+			codes.push(code);
+		};
+		exitIfFailed({ kind: "closed" }, exit);
+		exitIfFailed({ kind: "failed", error: new Error("the volume went away") }, exit);
+		expect(codes).toEqual([1]);
 	});
 });
 

@@ -133,7 +133,7 @@ async function errorText(resp: Response): Promise<string> {
 	let msg = goTrimSpace(new TextDecoder().decode(raw));
 	const fromJson = jsonErrorMessage(raw);
 	if (fromJson !== "") msg = fromJson;
-	return cut(msg);
+	return cutErrorText(msg);
 }
 
 /** Go prefers an OpenAI-shaped `{"error":{"message":…}}` over the raw body. */
@@ -151,8 +151,11 @@ function jsonErrorMessage(raw: Uint8Array): string {
 	return typeof msg === "string" ? msg : "";
 }
 
-/** cut is Go's `len(msg) > 300 → msg[:300] + "…"`, counted in bytes. */
-function cut(msg: string): string {
+/**
+ * cutErrorText is Go's `len(msg) > 300 → msg[:300] + "…"`, counted in bytes
+ * (openai.go:86-88). src/llm/errors.ts reuses it for pi-ai's failure texts.
+ */
+export function cutErrorText(msg: string): string {
 	const bytes = Buffer.from(msg, "utf8");
 	if (bytes.length <= ERROR_TEXT_LIMIT) return msg;
 	return `${new TextDecoder().decode(bytes.subarray(0, ERROR_TEXT_LIMIT))}…`;
