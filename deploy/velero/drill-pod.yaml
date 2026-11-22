@@ -1,0 +1,33 @@
+# The restore drill's throwaway pod (docs/movin-v3/velero.md §3): mounts the
+# restored PVC read-only in movin-drill and has sqlite3. The app never runs there.
+#
+#   kubectl apply -f deploy/velero/drill-pod.yaml --kubeconfig kubeconfigs/zy-all-in-one.conf
+apiVersion: v1
+kind: Pod
+metadata:
+  name: drill
+  namespace: movin-drill
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: drill
+      image: keinos/sqlite3@sha256:9064091a943982e2a90f095219d0d6adec03472f9042529563e3e66c9632af66   # sqlite 3.54.1
+      command: ["sleep", "3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: { drop: [ALL] }
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { memory: 64Mi }
+      volumeMounts:
+        - { name: data, mountPath: /data, readOnly: true }
+  volumes:
+    - name: data
+      persistentVolumeClaim: { claimName: movin-data, readOnly: true }

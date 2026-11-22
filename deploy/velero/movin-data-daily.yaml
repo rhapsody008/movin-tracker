@@ -1,0 +1,22 @@
+# Daily Velero backup of the chat-history volume (docs/movin-v3/velero.md §2).
+# Not in any Flux kustomization: Velero only reads Schedules from its own
+# namespace (zy-all-in-one-workspace, an NKP workspace app), and the movin
+# Flux service account can't write there. Applied once by hand:
+#
+#   kubectl apply -f deploy/velero/movin-data-daily.yaml --kubeconfig kubeconfigs/zy-all-in-one.conf
+#
+# From then on Velero runs it daily on its own. Keeps 7 days.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: movin-data-daily
+  namespace: zy-all-in-one-workspace
+spec:
+  schedule: "30 2 * * *"          # 02:30 cluster time: after velero-default (00:00), before the 03:00 docs sync
+  template:
+    includedNamespaces: [movin-tracker]
+    includedResources: [persistentvolumeclaims, persistentvolumes]
+    labelSelector:
+      matchLabels: { app.kubernetes.io/component: data }   # deploy/k8s/base/pvc.yaml
+    snapshotVolumes: true
+    ttl: 168h0m0s

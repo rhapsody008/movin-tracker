@@ -4,7 +4,7 @@ What this file covers: the SQLite database on PVC `movin-data` (mounted at `/dat
 
 What it doesn't cover: `entries.json`, `settings.json`, `checkin.json` and the documents. They live in the S3 bucket `movintrackerbackend`, with object versioning; see the admin guide, "Recover older data". A volume restore never rolls them back.
 
-Status: **written in T5.3b; nothing here has been applied yet.** The Schedule and the drill are T6.7. Until the drill is recorded in `progress.md`, the volume's data counts as not backed up.
+Status: **written in T5.3b; v2 is live since 2026-11-22 and the PVC exists, but the Schedule and drill below are not applied yet.** The Schedule and the drill pod are files: `deploy/velero/movin-data-daily.yaml`, `deploy/velero/drill-pod.yaml` (paths relative to the movin-tracker repo). The Schedule and the drill are T6.7. Until the drill is recorded in `progress.md`, the volume's data counts as not backed up.
 
 Every command below:
 - runs from the `zy-ops` repo root;
