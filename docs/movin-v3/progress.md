@@ -128,3 +128,10 @@ Tick a step only after its verification passes; put the evidence (command + resu
 ## T7
 - [ ] T7.1 Delete Go
 - [ ] T7.2 Move `app/` to the root
+
+- **2026-11-22, after the push:**
+  - **T6.3** done: Flux pinned to `semver: "1.0.x"` (`1a08ced`, pushed). Cluster, read-only: OCIRepository `movin` ref `1.0.x`, artifact `1.0.1@sha256:e1a8…`, Kustomization `movin` Ready on it.
+  - **T6.4** folded into T6.6: the PVC is in the Flux artifact (`aa5a832`, ZY's call). Read-only check: the Flux SA can create/delete PVCs in `movin-tracker`; none exists yet.
+  - **T6.5** passes: `settings.json` `llm.kind` `openai`, base URL the NAI gateway, model `movin-backend`. Secret `movin-secrets` has `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SETTINGS_SECRET` and `TELEGRAM_BOT_TOKEN` (names only).
+  - **Admin guide** de-Clauded before v2.0.0 (ZY, item 7): the LLM section, the drawing note, the env table, plus a Data volume row and the rollback-deletes-the-volume line.
+  - **CI fix:** `ts-test` failed on both pushes (3 tests, `NoSuchBucket`): four files use the MinIO bucket without creating it, and a fresh MinIO has none. New vitest global setup `app/test/s3-setup.ts` creates it, versioned. Reproduced on a fresh bucket locally: without it, `crash.test.ts` gives 3 failed (CI's 3); with it, the four files 44/44.
