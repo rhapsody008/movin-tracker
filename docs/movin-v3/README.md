@@ -2,15 +2,16 @@
 
 The tracking folder for the v3 work: a TypeScript rewrite of the app on the pi-durable agent harness. Read this page first, then the files it points to. v2 history stays in `docs/movin-v2/`.
 
-## Where things stand (2026-11-20)
-T0 done (gate passed); T1.1, T1.2 done. Next: T1.3 entries.
+## Where things stand (2026-11-22)
+**v2.0.1 is live on prod** (TypeScript, pi-durable, SQLite on PVC `movin-data`); Go is deleted and the app is the repo root. The volume is backed up daily by Velero, and a restore drill passed. Open work is tracked as GitHub issues (final review, UI, demo write-up, feature ideas, NKP test plan).
 
 | Part | Status |
 |---|---|
-| T0 spikes (deps, crash/replay/memory, prompt layout) | done 2026-11-20 |
-| T1–T5 build (domain, web, agent, Telegram, scheduled work) | T1.1, T1.2 done |
-| T6 cutover to `v2.0.0` on zy-all-in-one | not started |
-| T7 delete Go (T7.1 done), move `app/` to the root (T7.2) | T7.2 in progress; see `progress.md` |
+| T0 spikes | done 2026-11-20 |
+| T1–T5 build (domain, web, agent, Telegram, scheduled work) | done, each phase approved by `ts-reviewer` |
+| T6 cutover | `v2.0.0` live 2026-11-22; Velero Schedule plus drill done (T6.7) |
+| T7 delete Go, move `app/` to the root | done; `v2.0.1` live 2026-11-22 |
+| Final strict review of all code | open (GitHub issue) |
 
 ## Layout
 Since T7.2 the app is the repo root, not `app/`: `src/`, `static/`, `eval/`, `test/`, `tools/`, `package.json`, `package-lock.json`, `tsconfig.json`, `biome.json`, `vitest.config.ts`, `Dockerfile` and the root `.dockerignore` (the image's allowlist). The goldens stay next to their tests as `src/**/testdata`, frozen (Go v1, tag `v1.0.1`). `fixtures/`, `reference/`, `unitmaterial/` and `tmp/` stay where they were; the root `Makefile` runs everything in Docker.
@@ -21,7 +22,8 @@ Since T7.2 the app is the repo root, not `app/`: `src/`, `static/`, `eval/`, `te
 | `plan.md` | Design and steps |
 | `progress.md` | Each step with its verification evidence; facts gathered before T0 |
 | `decisions.md` | What ZY decided and why. Don't reopen these without asking |
-| `velero.md` | Backup and restore of the chat-history volume (written in T5.3b; the Schedule and the drill are T6.7, not applied yet) |
+| `history.md` | Per-session log |
+| `velero.md` | Backup and restore of the chat-history volume (Schedule applied and restore drill done on 2026-11-22, T6.7) |
 
 ## How work is done here
 - **Planning:** non-trivial work goes to the `planner` agent first; ZY sees the plan before code starts.
@@ -29,11 +31,11 @@ Since T7.2 the app is the repo root, not `app/`: `src/`, `static/`, `eval/`, `te
 - **Steps:** one plan step at a time; `make lint test` after each (one app, one Makefile, in Docker); evidence into `progress.md`; commit per step on main only when ZY asks, never push (ZY pushes).
 - **Tests prove something:** for each fix, a test that fails without it (revert the line, see it fail, restore).
 - **Review (from 2026-11-20, ZY):** the main session verifies every step (reruns lint/test, reads the diff, runs targeted mutations on compatibility-critical code). `ts-reviewer` (Opus, read-only, stricter mode for `coder` output: brief item by item, coder's checks rerun, dependency calls against `.d.ts`, ported code against the Go source, the code line each test protects) reviews once per phase over the whole phase, plus separate reviews for T3.2 and T3.3. A phase is ticked only on **APPROVE**; fixes go back to `coder`, then a re-review. T1.1 and T1.2 were reviewed per step.
-- **The Go code is frozen** until T7, so a `v1.0.x` hotfix stays possible.
+- **Go is gone** (T7.1). v1 is tag `v1.0.1`; a hotfix would need a `release/1.0` branch cut from it.
 
 ## Environment notes
-- **One bucket** (`movintrackerbackend`) serves dev and prod; the TS dev app runs beside the Go one on it during T2–T5. No new entry or settings fields until Go is gone.
+- **One bucket** (`movintrackerbackend`) serves dev and prod; `make dev` uses it with the prod bot token, so it competes with the prod bot while running.
 - **LLM:** the saved connection is the NAI gateway (`https://nai.yolocal.cloud/enterpriseai/gateway/v1`, model `movin-backend`), OpenAI-compatible. Claude native is being removed.
 - **Harness state** (SQLite) lives on PVC `movin-data` at `/data` in prod, and in a local directory in dev; never shared between dev and prod.
-- **Velero** runs on zy-all-in-one (namespace `zy-all-in-one-workspace`) and the snapshot class is labelled (2026-11-22), but no movin Schedule exists and no drill has run, so the volume's data is not backed up yet (see `velero.md`).
+- **Velero** runs on zy-all-in-one (namespace `zy-all-in-one-workspace`) with `EnableCSI`; Schedule `movin-data-daily` (02:30, 7 days) backs up the volume; drill passed 2026-11-22 (see `velero.md`).
 - **Safety:** never print the Telegram token, API keys or AWS credentials; ZY creates secrets and runs any `kubectl apply`; never commit `/unitmaterial/` or `.env`.
