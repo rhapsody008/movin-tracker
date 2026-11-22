@@ -7,5 +7,6 @@ deploy
 *.md
 !docs/admin-guide.md
 unitmaterial
-.claude
+docs/movin-v2
 tmp
+app/node_modules

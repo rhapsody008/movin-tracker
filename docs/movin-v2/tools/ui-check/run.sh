@@ -3,7 +3,7 @@
 # MinIO (never the real bucket: the check edits entries and settings).
 #   app on 127.0.0.1:8090 (bot off), fake LLM on :18090, screenshots and the
 #   result in tmp/ui-check/. Run from the repo root:
-#   .claude/work/movin-v2/tools/ui-check/run.sh
+#   docs/movin-v2/tools/ui-check/run.sh
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p tmp/ui-check

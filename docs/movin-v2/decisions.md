@@ -44,7 +44,7 @@ Superseded on 2026-11-11 by "Connections + documents plan answers" (no stored pa
 ## Housekeeping
 - Baseline committed on main: 155d264 (2026-11-11).
 - Delete `build-plan.md` in step 1.11; keep `reference/condo-board.html` for now.
-- Track work in `.claude/work/movin-v2/` (committed).
+- Track work in `docs/movin-v2/` (committed).
 
 ## Planner delta answers (2026-11-11)
 - Storage test connection deletes its probe object: grant `s3:DeleteObject` on `prod/_probe/*` (step 1.10).

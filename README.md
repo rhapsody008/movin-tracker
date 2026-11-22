@@ -45,7 +45,7 @@ If port 8080, 9000 or 9001 is taken, set `APP_PORT=8088` (and likewise `MINIO_PO
 
 Code map: [cmd/movin](cmd/movin) (server, `healthcheck`, `init-bucket`, `seed`), [cmd/chateval](cmd/chateval) (agent eval against a real model), [internal/entries](internal/entries) (model, rules, search, journal, ETag write path), [internal/agent](internal/agent) (tool loop, prompt, change lines), [internal/telegram](internal/telegram) (Bot API client and bot), [internal/llm](internal/llm), [internal/settings](internal/settings), [internal/objstore](internal/objstore), [internal/server](internal/server) (HTTP and admin API), [static/index.html](static/index.html) and [static/guide.html](static/guide.html) (frontend, no build step; the guide page renders the embedded [docs/admin-guide.md](docs/admin-guide.md)).
 
-Plan, progress and decisions for the current work: [.claude/work/movin-v2](.claude/work/movin-v2).
+Plan, progress and decisions for the current work: [docs/movin-v2](docs/movin-v2).
 
 ## Deployment, in short
 
