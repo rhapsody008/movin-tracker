@@ -25,7 +25,7 @@ import {
 /** Go's client_test.go token: shaped like a real one, worth nothing. */
 const TOKEN = "123456789:AAFakeTokenForTestsOnly-abcdefghijk";
 
-/** The request bodies the real Go client sent, by app/golden/t41/main.go. */
+/** The request bodies the real Go client sent, by the Go v1 code (tag v1.0.1, golden t41). */
 const GOLDEN = JSON.parse(readFileSync(join(import.meta.dirname, "testdata", "requests.go.json"), "utf8")) as Record<
 	string,
 	string

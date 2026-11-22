@@ -41,7 +41,7 @@ import {
 
 const dir = join(import.meta.dirname, "testdata");
 
-/** The stamp app/golden/t15/main.go passes to Encode. */
+/** The stamp the Go v1 code (tag v1.0.1, golden t15) passes to Encode. */
 const GOLDEN_STAMP = "2026-11-11T03:00:00Z";
 
 function fixture(name: string): string {
@@ -282,7 +282,7 @@ describe("sizes", () => {
 });
 
 describe("golden files: Go's own bytes are the judge", () => {
-	// The files are written by app/golden/t15/main.go from the Go package's own
+	// The files are Go's own bytes, written at tag v1.0.1 (golden t15) from the Go package's own
 	// Decode and Encode, never by hand: <input>.json is the input, and
 	// <input>.go.json is what Go stores for it. pages.* is the PageText blob
 	// (compact) and is checked separately, so it is skipped here.

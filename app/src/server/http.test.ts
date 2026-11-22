@@ -7,7 +7,7 @@ import { fieldOf, jsonBool, jsonString, jsonStrings, MAX_BODY_BYTES } from "./ht
 import { startServer, ZY } from "./rig.ts";
 
 describe("a struct field's case-insensitive lookup (F15)", () => {
-	// Go's own answers for these bodies are in app/golden/t2x/main.go: encoding/json
+	// Go's own answers for these bodies are from tag v1.0.1 (golden t2x): encoding/json
 	// folds the case, and the LAST matching key in the document wins.
 	it("matches a folded key and lets the last one win", () => {
 		expect(jsonString({ apikey: "a", APIKEY: "b" }, "apiKey")).toBe("b");

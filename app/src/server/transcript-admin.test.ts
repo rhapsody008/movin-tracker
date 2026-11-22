@@ -1,5 +1,5 @@
 // The byte contract of the admin, settings and document routes, replayed:
-// every request of app/golden/t22/main.go against this port, compared with what
+// every request of the Go v1 code (tag v1.0.1, golden t22) against this port, compared with what
 // Go answered — status, the three headers that carry the contract, and the body
 // bytes — and every request each fake endpoint received, compared with Go's.
 //

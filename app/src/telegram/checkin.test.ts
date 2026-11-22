@@ -1,5 +1,5 @@
 // The morning check-in's texts, buttons and `ci:` callbacks (src/telegram/checkin.ts):
-// Go's own answers (app/golden/t51 wrote testdata/checkin.go.json with the real
+// Go's own answers (the Go v1 code, tag v1.0.1, golden t51 wrote testdata/checkin.go.json with the real
 // functions), the text half of TestCheckinCapsAskMessages, the callback data of
 // TestCheckinButtonAfterTheTaskMoved, and Telegram's 64-byte button limit.
 //
@@ -28,7 +28,7 @@ import {
 } from "./checkin.ts";
 import type { InlineKeyboardMarkup } from "./client.ts";
 
-/** Go's answers for T5.1a, by app/golden/t51/main.go. */
+/** Go's answers for T5.1a, by the Go v1 code (tag v1.0.1, golden t51). */
 interface Golden {
 	constants: { max_ask_messages: number; max_overdue_titles: number; prefix: string; max_message: number };
 	toasts: { archived: string; already_done: string; moved_dated: string; moved_undated: string };

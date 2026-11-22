@@ -1,3 +1,7 @@
+# app/Dockerfile.test builds this context (compose `app-test` and `app-ts`),
+# which is the repo root. app/Dockerfile has its own allowlist
+# (app/Dockerfile.dockerignore), which BuildKit prefers for that Dockerfile.
+# The Go v1 image this file was written for is gone (T7.1).
 .git
 .env
 .env.*

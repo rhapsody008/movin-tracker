@@ -1,5 +1,5 @@
-// The bot's command answers against Go's own bytes: `app/golden/t44/main.go`
-// wrote `testdata/commands.go.json` from Go's unexported `helpText`, the
+// The bot's command answers against Go's own bytes: the Go v1 code (tag v1.0.1,
+// golden t44) wrote `testdata/commands.go.json` from Go's unexported `helpText`, the
 // `/recent` line assembly and the two document formatters `/sync` uses, so the
 // help text, the zone formatting and every state suffix are Go's and not a
 // guess. The cases the golden cannot carry (a journal record Go would panic on,
@@ -33,7 +33,7 @@ import {
 	unknownCommand,
 } from "./commands.ts";
 
-/** Go's answers for T4.4, by app/golden/t44/main.go. */
+/** Go's answers for T4.4, by the Go v1 code (tag v1.0.1, golden t44). */
 interface Golden {
 	help_text: string;
 	recent: { at: string; by: string; channel: string; title: string; loc: string; out: string }[];

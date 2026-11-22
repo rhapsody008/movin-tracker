@@ -2,7 +2,7 @@
 // internal/telegram/checkin.go, the part that touches no I/O. T5.1b schedules it
 // and T5.1c sends and answers it.
 //
-// Every byte here is Go's, and app/golden/t51 wrote the fixture it is compared
+// Every byte here is Go's, and the Go v1 code, tag v1.0.1, golden t51 wrote the fixture it is compared
 // with. The rules worth knowing:
 // - the summary counts the asks it has (ag.ask), not the eight it asks about
 //   (checkin.go:103), so "Not marked done yet (10)" can head eight messages;

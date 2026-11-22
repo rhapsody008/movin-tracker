@@ -1,9 +1,6 @@
 .env
 .env.bak
 /tmp/
-*.test
-!app/Dockerfile.test
-/movin
 
 # macOS
 .DS_Store

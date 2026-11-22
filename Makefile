@@ -1,14 +1,13 @@
-# Everything runs in Docker; the only prerequisites are Docker and make.
-# Host ports: APP_PORT (8080, on 127.0.0.1), MINIO_PORT (9000) and
-# MINIO_CONSOLE_PORT (9001) for the test MinIO.
+# The app is the TypeScript service under app/ (see app/README.md): Biome, tsc
+# and vitest run in Docker (app/Makefile), and this file forwards to it. The Go
+# v1 tree these targets used to build was deleted in T7.1; Go line cites in the
+# comments of app/src refer to that code, tag v1.0.1.
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
 COMPOSE := docker compose
-TOOLS   := $(COMPOSE) --profile tools run --rm test
-IMAGE   ?= movin:local
 
-.PHONY: help dev down test conflict-test chat-eval chat-eval-claude chat-eval-docs lint build run clean
+.PHONY: help dev down lint test chat-eval chat-eval-docs build run ui-check clean
 
 help: ## List the targets
 	@awk 'BEGIN{FS=":.*## "} /^[a-z-]+:.*## /{printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -19,40 +18,34 @@ help: ## List the targets
 	  sed -i.bak "s|^SETTINGS_SECRET=.*|SETTINGS_SECRET=$$secret|" .env && rm -f .env.bak
 	@echo "Created .env with a new SETTINGS_SECRET. Add your LLM_* values there."
 
-dev: .env ## Run the app with live reload at http://localhost:8080, on the real S3 bucket from .env
-	$(COMPOSE) up --build -d app
-	@echo "Web page: http://localhost:$${APP_PORT:-8080}"
-	@echo "Logs:     docker compose logs -f app"
+dev: .env ## Run the TypeScript app at http://127.0.0.1:8081, on the real S3 bucket from .env
+	$(COMPOSE) --profile ts up -d app-ts
+	@echo "Web page: http://127.0.0.1:$${APP_TS_PORT:-8081}"
+	@echo "Logs:     docker compose logs -f app-ts"
 
 down: ## Stop the stack
-	$(COMPOSE) --profile tools --profile prod down
+	$(COMPOSE) --profile tools --profile ts --profile image down
 
-test: ## Unit + API tests in the container, against MinIO, with a stubbed LLM; then the PDF converter tests on the production image's poppler
-	$(TOOLS) go test -race -count=1 ./...
-	docker build -q --target poppler-test . >/dev/null && echo "poppler tests on the production runtime: ok"
+lint: ## Biome check + tsc, in the app container
+	$(MAKE) -C app lint
 
-conflict-test: ## Two concurrent writers on one ETag; both changes must survive
-	$(TOOLS) go test -count=1 -v -run 'TestConditionalWrites|TestConflictBothChangesSurvive|TestConcurrentWriters|TestConflictReturns409' ./internal/...
+test: ## Vitest (the S3 half against MinIO), then the poppler tests on the production runtime
+	$(MAKE) -C app test
 
-chat-eval: .env ## Run the agent eval messages against the real endpoint from .env; print the entry diff per message
-	$(COMPOSE) --profile tools run --rm --no-deps test go run ./cmd/chateval
+chat-eval: ## Run the eval messages on the saved connection (NAI; read only; billed)
+	$(MAKE) -C app chat-eval
 
-chat-eval-claude: ## Run the eval on Claude native with the key saved on the web page (inside the running dev app; billed to that key)
-	$(COMPOSE) exec app go run ./cmd/chateval -saved -kind claude -model $${MODEL:-claude-opus-5-5}
+chat-eval-docs: ## The eval plus the document questions (read only; billed)
+	$(MAKE) -C app chat-eval-docs
 
-chat-eval-docs: ## The eval plus questions about the real documents, on the saved connection (inside the dev app; read only; billed)
-	$(COMPOSE) exec app go run ./cmd/chateval -saved -docs
+build: ## Build the production image, movin-app:local (app/Dockerfile)
+	$(MAKE) -C app image
 
-lint: ## gofmt + go vet
-	$(TOOLS) sh -c 'out=$$(gofmt -l $$(find . -name "*.go" -not -path "./vendor/*")); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi; go vet ./... && echo "lint ok"'
+run: ## Run the production image locally at http://127.0.0.1:8091, as in k8s
+	$(MAKE) -C app run
 
-build: ## Build the production image
-	docker build -t $(IMAGE) .
-
-run: build .env ## Run the production image locally on the real bucket from .env, read-only rootfs, as in k8s
-	-$(COMPOSE) stop app
-	$(COMPOSE) --profile prod up -d prod
-	@echo "Production image on http://localhost:$${APP_PORT:-8080} (read-only rootfs, uid 65532). Stop with: make down"
+ui-check: ## Headless Chrome against the TypeScript app on MinIO
+	$(MAKE) -C app ui-check
 
 clean: ## Remove containers and volumes (the test MinIO's data; never the real bucket)
-	$(COMPOSE) --profile tools --profile prod down -v --remove-orphans
+	$(COMPOSE) --profile tools --profile ts --profile image down -v --remove-orphans

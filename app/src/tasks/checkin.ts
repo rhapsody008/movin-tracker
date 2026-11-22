@@ -12,7 +12,7 @@
 // day for STALE_CLAIM_MS and is then taken over with the same window. Deleting
 // the file means "not sent today".
 //
-// The bytes are Go's (app/golden/t51 pins them): the field order of
+// The bytes are Go's (the Go v1 code, tag v1.0.1, golden t51 pins them): the field order of
 // CheckinRecord (checkin_state.go:31-41), `schema` always 1, an RFC 3339 `at`
 // to the second, and `since`/`chat` left out when empty.
 //

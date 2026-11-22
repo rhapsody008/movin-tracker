@@ -1,7 +1,7 @@
 // Port of internal/docs/search_test.go: the ranking, the filters, the plural
 // folding, the snippet and the page lookup. The scoring itself is pinned
 // against Go's own answers for the fixture in testdata/ (search-hits.go.json,
-// written by app/golden/t15c/main.go), which covers stemming edge cases, CJK
+// written by the Go v1 code, tag v1.0.1, golden t15c), which covers stemming edge cases, CJK
 // text, the limit cap and the ellipses of a cut snippet.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

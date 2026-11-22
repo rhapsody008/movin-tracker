@@ -1,4 +1,4 @@
-// The byte contract, replayed: every request of app/golden/t21/main.go's script
+// The byte contract, replayed: every request of the script in the Go v1 code (tag v1.0.1, golden t21)
 // against this port, compared with what Go answered — status, the five headers
 // that carry the contract, and the body bytes.
 //

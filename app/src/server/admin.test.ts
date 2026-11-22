@@ -911,7 +911,7 @@ describe("the key-leak and case-folding contracts", () => {
 	it("matches body keys case-insensitively, the last match winning (F15)", async () => {
 		const rig = await startServer();
 		try {
-			// Go's encoding/json folds a struct's field names; app/golden/t2x/main.go
+			// Go's encoding/json folds a struct's field names; the Go v1 code, tag v1.0.1, golden t2x,
 			// holds Go's own answers for these bodies.
 			const checkin = await rig.do("PUT", "/api/settings/checkin", `{"SCHEDULE":"8:05","CHAT":"","USEENV":false}`);
 			expect([checkin.status, settingOf(checkin).schedule]).toEqual([200, "08:05"]);
@@ -924,7 +924,7 @@ describe("the key-leak and case-folding contracts", () => {
 			expect([telegram.status, users.length, users[0]?.id, users[0]?.name]).toEqual([200, 1, "7", "Ada"]);
 
 			// A struct's key folding does not reach the entries routes: Go decodes
-			// those into a map, so "Title" is still an unknown field (app/golden/t2x/main.go).
+			// those into a map, so "Title" is still an unknown field (golden t2x at tag v1.0.1).
 			const entry = await rig.do("POST", "/api/entries", `{"title":"x","TITLE":"y"}`);
 			expect([entry.status, entry.json.error]).toEqual([400, 'unknown field "TITLE"']);
 		} finally {

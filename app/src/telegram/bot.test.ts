@@ -989,7 +989,7 @@ describe("the status", () => {
 
 		// bot.go:74-83: tokenSet, running, botUsername, lastPollAt, lastUpdateAt,
 		// lastError, lastErrorAt, rejected — omitted while empty, the two ids as
-		// strings, and `at` as Go's time.Time JSON (app/golden/t42 is the same shape
+		// strings, and `at` as Go's time.Time JSON (the Go v1 code's golden t42 is the same shape
 		// from Go's own json.Marshal).
 		expect(goMarshal(rig.bot.status())).toBe(
 			'{"tokenSet":true,"running":true,"botUsername":"movin_test_bot",' +

@@ -149,7 +149,7 @@ export function promptHooks(options: PromptOptions): AgentHooks {
 /**
  * rulesText is Go's prompt.go:89-110 raw string with the two %s filled and the
  * one recorded v3 replacement (`when the snapshot is not enough`). The bytes
- * are pinned against app/golden/t34/main.go.
+ * are pinned against the Go v1 code (tag v1.0.1, golden t34).
  */
 export function rulesText(): string {
 	return `You are the renovation assistant for a couple in Singapore fitting out their new condo (unit type C5: 3 bedrooms + flex). You keep their record of ideas, decisions, tasks, notes and questions, and answer questions from it.

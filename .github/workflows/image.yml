@@ -1,9 +1,10 @@
 # Test, then build the production image and push it to GHCR; on a release
-# tag, also publish the rendered manifests that Flux deploys. Since T6 the
-# image is the v3 TypeScript app (app/Dockerfile); the Go tree is still tested
-# here while it is in the repo.
+# tag, also publish the rendered manifests that Flux deploys. The app is the
+# TypeScript service under app/ (app/Dockerfile) and its tests run in
+# app/Makefile's containers; the Go v1 tree was deleted in T7.1, so the job
+# that used to run `go test` now only checks the manifests.
 #
-#   pull request     -> test + build (no push)
+#   pull request     -> manifests + ts-test + build (no push)
 #   push to main     -> ghcr.io/<owner>/<repo>:main, :sha-<short>, :latest
 #   tag v2.0.0       -> ghcr.io/<owner>/<repo>:2.0.0, :2.0, :sha-<short>
 #                       + ghcr.io/<owner>/<repo>-deploy:2.0.0 (deploy/render.sh,
@@ -11,9 +12,8 @@
 #   tag v2.0.0-rc.1  -> the same, but Flux ignores prereleases (a rehearsal)
 #
 # A v1.* tag is refused here: a tag builds from its own tree, so a v1 tag on
-# main would publish the v2 manifests (PVC mount, exec probe twice the timeout)
-# to the v1 prod (Flux follows >=1.0.0 until T6.3 pins 1.0.x). Hotfix 1.0.x
-# from a release/1.0 branch cut at v1.0.1, which keeps the v1 tree.
+# main would publish the v2 manifests to a v1 deployment. v1 is tag `v1.0.1`;
+# hotfix 1.0.x from a release/1.0 branch cut at it, which keeps the v1 tree.
 name: image
 
 on:
@@ -36,7 +36,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  # The first job, so a v1 tag is refused before anything is built. It also
+  # renders both kustomizations: broken manifests fail here, not at release.
+  manifests:
     runs-on: ubuntu-latest
     steps:
       - name: Refuse a v1 tag on the v2 tree
@@ -47,65 +49,37 @@ jobs:
 
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false # modules are vendored
-
-      - name: Start MinIO (conditional-write tests run against it)
-        run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
-          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
-
-      - name: Lint
-        run: |
-          out=$(gofmt -l $(find . -name '*.go' -not -path './vendor/*'))
-          if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
-          go vet ./...
-
-      - name: Test
-        env:
-          S3_ENDPOINT_URL: http://localhost:9000
-          S3_BUCKET: movin-test
-          AWS_REGION: ap-southeast-1
-          AWS_ACCESS_KEY_ID: minioadmin
-          AWS_SECRET_ACCESS_KEY: minioadmin
-        run: go test -race -count=1 ./...
-
       - name: Install kustomize
         run: &kustomize |
           curl -fsSLo /tmp/kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
           echo "${KUSTOMIZE_SHA256}  /tmp/kustomize.tgz" | sha256sum -c -
           tar -xzf /tmp/kustomize.tgz -C /usr/local/bin kustomize
 
-      # Broken manifests fail here, not at release time.
       - name: Render the manifests
         run: |
           kustomize build deploy/k8s/overlays/prod > /dev/null
           kustomize build deploy/flux > /dev/null
 
-  # The v3 app under app/. Everything runs in Docker (app/Makefile: Biome,
-  # tsc, vitest with the S3 half against the compose MinIO), so the runner
-  # needs nothing installed but make and Docker.
+  # The app under app/. Everything runs in Docker (app/Makefile: Biome, tsc,
+  # vitest with the S3 half against the compose MinIO), so the runner needs
+  # nothing installed but make and Docker.
   ts-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
-      # The compose MinIO has no healthcheck: start it first and wait, as the Go
-      # job does, so the S3 tests never race its startup on a fresh runner.
+      # The compose MinIO has no healthcheck: start it first and wait, so the
+      # S3 tests never race its startup on a fresh runner.
       - name: Start MinIO
         run: |
           docker compose --profile tools up -d minio
-          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
+          for _ in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
 
       - name: Lint and test the TypeScript app
         run: make -C app lint test
 
   image:
-    needs: [test, ts-test]
+    needs: [manifests, ts-test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -121,16 +95,18 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # The converter tests on the exact poppler the image ships, per platform.
+      # The converter tests on the exact poppler the image ships. linux/amd64
+      # only: prod is amd64 (all 7 nodes, checked for T7.1).
       - name: Poppler tests on the production runtime
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: app/Dockerfile
           target: poppler-test
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: false
-          cache-from: type=gha,scope=go-poppler
-          cache-to: type=gha,mode=max,scope=go-poppler
+          cache-from: type=gha,scope=app-poppler
+          cache-to: type=gha,mode=max,scope=app-poppler
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'

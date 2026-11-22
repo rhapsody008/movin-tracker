@@ -24,7 +24,7 @@ const VISION_QUESTION = "Reply with one word: what colour is this square?";
 /**
  * probePNG is Go's 1×1 red pixel literal (server.go:558-559), base64 as the
  * data URL carries it. Copied from what the Go server sent the harness's fake
- * endpoint (app/golden/t22/main.go), never retyped from the Go escape sequence.
+ * endpoint (the Go v1 code, tag v1.0.1, golden t22), never retyped from the Go escape sequence.
  */
 export const PROBE_PNG_BASE64 =
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";

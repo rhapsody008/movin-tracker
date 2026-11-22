@@ -1,18 +1,19 @@
 # The allowlist for app/Dockerfile's build context, which is the repo root.
 # BuildKit reads this file instead of the root .dockerignore when the
-# Dockerfile is app/Dockerfile; the root .dockerignore keeps serving the Go
-# image (`make test`, `make lint`). Everything else in the repo (the Go tree,
-# reference/, unitmaterial/, tmp/, app/node_modules, the tests) stays out: the
-# image holds the app's sources, its static page and the admin guide.
+# Dockerfile is app/Dockerfile; the root .dockerignore keeps serving
+# app/Dockerfile.test (the app-test image). Everything else in the repo
+# (reference/, unitmaterial/, tmp/, app/node_modules, app/tools) stays out.
 *
 !app/package.json
 !app/package-lock.json
+!app/tsconfig.json
+!app/vitest.config.ts
 !app/src
+!app/test
 !app/static
 !docs/admin-guide.md
 
-# The tests are not needed at runtime, and nothing imports them.
-app/src/*.test.ts
-app/src/**/*.test.ts
-# Test fixtures (Go goldens, sample PDFs) live under testdata/.
-app/src/**/testdata
+# app/src carries the tests and the testdata (Go goldens, sample PDFs) because
+# the poppler-test stage runs src/docs/convert/poppler.test.ts and
+# src/render.test.ts; the app-src stage strips both before the production stage
+# copies the tree, so the image itself ships neither.

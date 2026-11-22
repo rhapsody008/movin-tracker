@@ -1,5 +1,5 @@
 // The morning check-in's state (src/tasks/checkin.ts): Go's checkin.json bytes
-// (app/golden/t51 wrote the fixture), the claim protocol under its Go test
+// (the Go v1 code, tag v1.0.1, golden t51 wrote the fixture), the claim protocol under its Go test
 // names, the due window, and where the check-in goes. Every store case runs on
 // the memory store and on MinIO when S3_ENDPOINT_URL and S3_BUCKET are set (as
 // they are inside `make test`), because the claim is a conditional put on an
@@ -42,7 +42,7 @@ import {
 	taken,
 } from "./checkin.ts";
 
-/** Go's answers for T5.1a, by app/golden/t51/main.go. */
+/** Go's answers for T5.1a, by the Go v1 code (tag v1.0.1, golden t51). */
 interface Golden {
 	constants: { stale_claim_seconds: number; checkin_cutoff: number };
 	records: { name: string; steps: GoldenStep[]; json: string }[];

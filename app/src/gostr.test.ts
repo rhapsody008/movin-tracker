@@ -92,7 +92,7 @@ describe("goStamp", () => {
 });
 
 describe("compareBytes", () => {
-	// The order Go's sort.Strings gives these keys (app/golden/t14/main.go
+	// The order Go's sort.Strings gives these keys (the Go v1 code, tag v1.0.1, golden t14
 	// sortkeys), not one worked out here. JS's UTF-16 order differs: it puts a
 	// surrogate pair (a non-BMP character) before U+E000.
 	it("sorts in Go's byte order, not JavaScript's UTF-16 order", () => {

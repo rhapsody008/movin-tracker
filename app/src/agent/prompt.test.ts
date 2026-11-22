@@ -1,5 +1,5 @@
 // The prompt (T3.4): Go's texts and v3's layout. The rules, documents section,
-// date and group line are compared with app/golden/t34/main.go's bytes; the snapshot
+// date and group line are compared with the Go v1 code's bytes (tag v1.0.1, golden t34); the snapshot
 // selection and the deltas are Go's prompt.go rules moved into the user
 // message. Port of internal/agent/prompt_test.go's cases (which no longer has
 // its own file in Go: the rules and snapshot live in milestone_test.go and
@@ -53,7 +53,7 @@ function entry(over: Partial<Entry>): Entry {
 	};
 }
 
-/** goldenDoc is app/golden/t34/main.go's fixture: 173 live entries and three archived. */
+/** goldenDoc is the Go v1 code's fixture (tag v1.0.1, golden t34): 173 live entries and three archived. */
 function goldenDoc(): Doc {
 	const doc = emptyDoc();
 	const start = Date.UTC(2026, 0, 1, 0, 0, 0);

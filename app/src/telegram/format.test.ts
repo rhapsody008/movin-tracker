@@ -1,7 +1,7 @@
 // Telegram's reply formatting (src/telegram/format.ts): Go's split, truncate,
 // changeText and undoKeyboard under their Go test names (bot_internal_test.go),
 // the answer and failure messages Go's bot.go assembles, and every one of them
-// against the bytes Go itself sent — app/golden/t43 wrote
+// against the bytes Go itself sent — the Go v1 code, tag v1.0.1, golden t43 wrote
 // src/telegram/testdata/format.go.json with Go's own functions and the real
 // Go client, so the golden pins the text, the split, the thread and the
 // keyboard placement together.
@@ -39,7 +39,7 @@ import {
 	undoKeyboard,
 } from "./format.ts";
 
-/** Go's answers for T4.3a, by app/golden/t43/main.go. */
+/** Go's answers for T4.3a, by the Go v1 code (tag v1.0.1, golden t43). */
 interface Golden {
 	max_message: number;
 	split: { text: string; n: number; parts: string[] }[];

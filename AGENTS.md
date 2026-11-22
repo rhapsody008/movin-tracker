@@ -12,6 +12,7 @@ Before doing anything on the v2 reorg, read `docs/movin-v2/`, starting with `REA
 Work one plan step at a time. Run `make lint && make test` after each step and record the result in `progress.md`.
 
 ## Rules
-- Tests and lint run in Docker (`make test`, `make lint`); modules are vendored, so new dependencies need `go mod tidy && go mod vendor`.
+- Tests and lint run in Docker: `make lint` and `make test` at the root forward to `app/Makefile` (Biome, tsc, vitest). The app is TypeScript under `app/`; its dependencies are the pinned packages in `app/package-lock.json`, so a new dependency needs a pinned install, not a vendored copy.
+- The Go v1 code is gone (deleted in T7.1). Line cites in comments such as `internal/…`, `cmd/…` or `*.go` refer to tag `v1.0.1`.
 - Never commit real unit drawings or secrets. `/unitmaterial/` and `.env` are git-ignored.
 - ZY creates secrets and runs any `kubectl apply` or IAM change.
