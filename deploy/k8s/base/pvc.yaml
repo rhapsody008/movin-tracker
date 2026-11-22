@@ -1,0 +1,22 @@
+# The chat-history volume: the durable harness's SQLite file, mounted at /data
+# (deployment.yaml). Part of the Flux artifact (ZY, 2026-11-22: everything
+# through Flux). The cost is accepted: nutanix-volume's reclaim policy is
+# Delete, so whenever this object leaves the artifact (a rollback to a 1.0.x
+# release, which has no PVC, or removing it here), Flux's prune deletes the PVC
+# and the chat history with it. Entries, settings and documents are in S3 and
+# are not affected.
+#
+# It stays Pending (WaitForFirstConsumer) until the pod mounts it. The
+# component label is what the Velero Schedule selects on (docs/movin-v3/
+# velero.md); app.kubernetes.io/name is overwritten to `movin` by the base
+# kustomization's labels, so it cannot be the selector.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: movin-data
+  labels: { app.kubernetes.io/component: data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+  storageClassName: nutanix-volume

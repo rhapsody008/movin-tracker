@@ -37,7 +37,7 @@ T7: T7.1 → T7.2
 ### Storage
 - S3, formats unchanged: `entries.json`, `settings.json`, `checkin.json`, `docs/**`. No migration either way. No new entry or settings fields in v2.0.0 (a Go rollback would drop them on save).
 - SQLite on the volume: transcripts, durable tasks, request-ID dedupe, chat → conversation directory, Telegram polling offset. Losing it loses chat history only.
-- Volume: PVC `movin-data`, 1Gi RWO, `nutanix-volume`, mounted at `/data`; root filesystem stays read-only; fsGroup 65532 already set. The class has reclaimPolicy **Delete** (deleting the PVC destroys the volume), WaitForFirstConsumer (the PVC stays Pending until the v2 pod is scheduled) and allows expansion. The PVC is applied by hand from `deploy/manual/pvc.yaml` and is never in the Flux artifact, so `prune: true` cannot remove it.
+- Volume: PVC `movin-data`, 1Gi RWO, `nutanix-volume`, mounted at `/data`; root filesystem stays read-only; fsGroup 65532 already set. The class has reclaimPolicy **Delete** (deleting the PVC destroys the volume), WaitForFirstConsumer (the PVC stays Pending until the v2 pod is scheduled) and allows expansion. The PVC is in the Flux artifact (`deploy/k8s/base/pvc.yaml`; ZY changed this 2026-11-22: everything through Flux). Accepted: `prune: true` deletes it (and the chat history) whenever a deployed release lacks it, e.g. a rollback to 1.0.x.
 
 ### Backup and restore (Velero; no in-app backup)
 - Velero runs on zy-all-in-one (NKP workspace app, namespace `zy-all-in-one-workspace`, checked 2026-11-20): BSL `default` = AWS S3 `zyallinonebackups` (ap-southeast-1), Available; Schedule `velero-default` daily 00:00, whole cluster, TTL 720h; uploader kopia but **no node-agent** DaemonSet; `nutanix-snapshot-class` has **no** `velero.io/csi-volumesnapshot-class` label; no backup has run yet. As it stands, Velero would back up the PVC object but **not its data**.
@@ -136,11 +136,11 @@ T7: T7.1 → T7.2
 
 **T6.1 Image + CI** — Dockerfile (Node 24 alpine + poppler, by digest), `.github/workflows/image.yml` builds from `app/`. Verify: `make run` on a read-only rootfs with a `/data` volume; image size and RSS recorded.
 
-**T6.2 Manifests (files only)** — deployment: `/data` mount, resources, `NODE_OPTIONS`, exec liveness, optional `movin-restore` envFrom, `/tmp` 32Mi; `deploy/manual/pvc.yaml` outside every kustomization; `.env.example` and configmap lose the Claude variables. Verify: `kubectl kustomize deploy/k8s/overlays/prod` renders; the rendered artifact contains no PVC.
+**T6.2 Manifests (files only)** — deployment: `/data` mount, resources, `NODE_OPTIONS`, exec liveness, optional `movin-restore` envFrom, `/tmp` 32Mi; `deploy/k8s/base/pvc.yaml` in the base (was `deploy/manual/`, changed by ZY 2026-11-22); `.env.example` and configmap lose the Claude variables. Verify: `kubectl kustomize deploy/k8s/overlays/prod` renders; the rendered artifact contains exactly one PVC and no PV.
 
 **T6.3 Flux pin [approval]** — `deploy/flux/ocirepository.yaml`: `semver: "1.0.x"` (today `">=1.0.0"`, which would roll out any v2 tag at once). Verify (read-only): `kubectl get ocirepository movin -n movin-tracker` still shows the current 1.0.x revision. Rollback: restore `">=1.0.0"`.
 
-**T6.4 Volume [ZY applies]** — `kubectl apply -f deploy/manual/pvc.yaml -n movin-tracker`. Verify (read-only): `kubectl get pvc movin-data -n movin-tracker` → Pending (WaitForFirstConsumer) until T6.6, then Bound. Rollback: none needed; deleting the PVC destroys the volume and needs approval.
+**T6.4 Volume** — no separate step any more: Flux creates PVC `movin-data` with the v2 release at T6.6 (ZY, 2026-11-22). Verify at T6.6 (read-only): `kubectl get pvc movin-data -n movin-tracker` → Bound once the pod is scheduled. Rollback: pinning back to 1.0.x prunes it (accepted).
 
 **T6.5 LLM connection check** — the saved connection is already OpenAI-compatible (NAI gateway, `movin-backend`; read 2026-11-20). Verify: `settings.json` still shows `kind:"openai"` just before cutover; one Telegram and one web message answer on v1 through it. If it was switched back to Claude meanwhile, ZY re-saves it in the v1 page.
 

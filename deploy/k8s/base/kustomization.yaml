@@ -4,6 +4,7 @@ labels:
   - pairs: { app.kubernetes.io/name: movin }
 resources:
   - deployment.yaml
+  - pvc.yaml
   - service.yaml
   - ../../auth
   - ../../tunnel

@@ -66,8 +66,8 @@ spec:
             capabilities: { drop: [ALL] }
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
-            # Chat history, durable tasks and the start counter. Outside
-            # Flux's render: deploy/manual/pvc.yaml, applied by hand (T6.4).
+            # Chat history, durable tasks and the start counter: the PVC in
+            # pvc.yaml, deployed by Flux with the rest.
             - { name: data, mountPath: /data }
 
         - name: oauth2-proxy

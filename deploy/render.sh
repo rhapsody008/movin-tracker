@@ -37,7 +37,10 @@ ${KUSTOMIZE:-kustomize build} "$work/release" > "$f"
 fail() { echo "render: $1" >&2; exit 1; }
 [ "$(grep -c "image: $image@$digest\$" "$f")" -eq 1 ] || fail "expected exactly one app image pinned to $digest"
 ! grep -Eq "image: ($image:|movin:|movin\$)" "$f" || fail "an app image is not pinned by digest"
-! grep -Eq '^kind: (Namespace|Secret|PersistentVolumeClaim|PersistentVolume)$' "$f" || fail "a Namespace, Secret or volume object would be published"
+! grep -Eq '^kind: (Namespace|Secret|PersistentVolume)$' "$f" || fail "a Namespace, Secret or PersistentVolume would be published"
+# The chat-history PVC must be in every release: a release without it makes
+# Flux prune (delete) the volume and its data.
+[ "$(grep -c '^kind: PersistentVolumeClaim$' "$f")" -eq 1 ] || fail "expected exactly one PersistentVolumeClaim (movin-data)"
 ! grep -Eq '^  namespace:' "$f" || fail "an object names a namespace (Flux sets it)"
 ! grep -q 'example\.com' "$f" || fail "placeholder example.com left (host or emails in deploy/)"
 n=$(grep -c '^kind:' "$f")

@@ -981,3 +981,13 @@ fixes all seven in `app/src/durable/**`, `app/src/tasks/docsync.ts` and `app/src
 - **Checks.** `make -C app lint`: 161 files, no fixes, `tsc` silent. `crash.test.ts` 12 passed; the 10× loop
   10/10. `adapter.test.ts` 118 passed, `startguard.test.ts` + `imports.test.ts` + `docsync.test.ts` 37 passed.
   Full suite `--maxWorkers=3`: 64 files, **1285 passed, 1 skipped**. Root `make lint`: `lint ok`.
+
+## ZY's answers after T6.2 (2026-11-22)
+- **Pushed:** `main` pushed to `origin` (`b4af3b4..9ec18da`) on ZY's instruction; the staged AGENTS.md/README/docs-v2 changes were not part of it.
+- **Hourly start-counter bump: no.** The manual `HARNESS_RESTORE_ID` (mandatory in `velero.md`) stays the only cover for a restore with no start in between.
+- **Admin guide before v2.0.0: yes.** The Claude-connection text in `docs/admin-guide.md` is fixed before the v2.0.0 tag, not left to T7.2.
+- **Credential rotation:** dropped by ZY.
+- **Live bot check:** ZY said to reuse `.env`'s token. Checked (getMe, token not printed): it is the production bot `@zy_movin_bot`, the same one the v1 pod polls (its log: `telegram bot started` `zy_movin_bot`). Running v2 with it while v1 runs makes the two fight over `getUpdates` (409) and act on real chats and the shared bucket, so this waits for ZY's choice.
+- **Live bot check: option b (ZY).** No separate dev bot; the check is done on the real `@zy_movin_bot` right after the T6.6 cutover. A short bot outage is acceptable (home use). Rollback stays the 1.0.x pin.
+- **T6.3 Flux pin: approved and done.** `deploy/flux/ocirepository.yaml` `semver: "1.0.x"`.
+- **The PVC goes through Flux (ZY, reverses `plan.md` Design "never in the Flux artifact").** ZY wants everything automated and accepts Flux deleting it. `deploy/manual/pvc.yaml` → `deploy/k8s/base/pvc.yaml`, listed in the base kustomization; T6.4 is no longer a hand step. Consequences written down: a rollback to 1.0.x prunes the PVC and the chat history (reclaim Delete); a Velero restore must keep Flux suspended throughout. `render.sh` now requires exactly one PVC (a release without it would prune the volume) and still refuses PV/Namespace/Secret. The base `labels` overwrite `app.kubernetes.io/name` to `movin`, so the PVC carries `app.kubernetes.io/component: data` and the Velero Schedule selects on that. Checked read-only: the Flux service account `movin-tracker:movin-tracker` can create and delete PVCs in `movin-tracker`; no PVC exists there yet; `nutanix-volume` is WaitForFirstConsumer/Delete.

@@ -51,7 +51,7 @@ spec:
     includedNamespaces: [movin-tracker]
     includedResources: [persistentvolumeclaims, persistentvolumes]
     labelSelector:
-      matchLabels: { app.kubernetes.io/name: movin-data }   # set on the PVC in deploy/manual/pvc.yaml (T6.2)
+      matchLabels: { app.kubernetes.io/component: data }   # set on the PVC in deploy/k8s/base/pvc.yaml
     snapshotVolumes: true
     ttl: 168h0m0s
 ```
@@ -141,4 +141,5 @@ Chat history made after the snapshot is lost. Entries, settings and documents ar
 ## 5. Traps
 - **`MOVIN_INSTANCE` must be right.** Each deployment keeps its own counter (`harness/dev/…`, `harness/prod/…`). A laptop run with `MOVIN_INSTANCE=prod` on the real bucket bumps prod's counter, and prod's next start then takes itself for a restored database and drops its pending replies. Dev runs use `dev`.
 - **S3 unreachable at start:** the app waits and retries (`harness start counter unreadable`). It never starts as if nothing happened.
-- **The PVC is not in the Flux artifact** (`deploy/manual/pvc.yaml`, T6.2), so Flux's `prune` can't delete it, and a restore doesn't fight Flux over it.
+- **The PVC is in the Flux artifact** (`deploy/k8s/base/pvc.yaml`, ZY 2026-11-22). Keep Flux suspended for the whole restore, or it recreates an empty PVC the moment the damaged one is deleted. A rollback to a 1.0.x release (which has no PVC) makes Flux prune the PVC and its data; restore from a backup if v2 comes back.
+- **Was:** the PVC was not in the Flux artifact (`deploy/manual/pvc.yaml`, T6.2), so Flux's `prune` can't delete it, and a restore doesn't fight Flux over it.
