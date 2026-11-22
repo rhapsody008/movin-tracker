@@ -10,8 +10,9 @@ spec:
   interval: 5m
   url: oci://ghcr.io/rhapsody008/movin-tracker-deploy
   ref:
-    # Pinned to the v1 line (T6.3): a v2 tag must not deploy by itself. The
-    # cutover (T6.6) changes this to the v2 release. Prereleases like
-    # 1.0.0-rc.1 don't match. Roll back: an exact version, e.g. "1.0.1".
-    # (semver wins over tag, so don't add a tag: here.)
-    semver: "1.0.x"
+    # The newest v2 release (T6.6 cutover). Prereleases like 2.0.1-rc.1 don't
+    # match. Roll back: an exact version, e.g. "2.0.0"; restore ">=2.0.0"
+    # after a fixed release. Back to v1 ("1.0.1") deletes the chat-history
+    # PVC (v1's release has none, and Flux prunes it). (semver wins over tag,
+    # so don't add a tag: here.)
+    semver: ">=2.0.0"
