@@ -10,7 +10,8 @@ spec:
   interval: 5m
   url: oci://ghcr.io/rhapsody008/movin-tracker-deploy
   ref:
-    # The newest release (prereleases like 1.0.0-rc.1 don't match).
-    # Roll back: an exact version, e.g. "1.0.2"; restore ">=1.0.0" after a
-    # fixed release. (semver wins over tag, so don't add a tag: here.)
-    semver: ">=1.0.0"
+    # Pinned to the v1 line (T6.3): a v2 tag must not deploy by itself. The
+    # cutover (T6.6) changes this to the v2 release. Prereleases like
+    # 1.0.0-rc.1 don't match. Roll back: an exact version, e.g. "1.0.1".
+    # (semver wins over tag, so don't add a tag: here.)
+    semver: "1.0.x"
