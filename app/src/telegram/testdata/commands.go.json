@@ -1,0 +1,304 @@
+{
+  "help_text": "Tell me what's happening with the renovation and I'll keep the record: ideas, decisions, quotes, payments, dates, open questions. Ask me anything about it too.\n\nExamples:\n• Thinking of fluted glass for the dry kitchen sliding door\n• Lim quoted 18k for carpentry, paid 30% today\n• Electrician coming Friday 2pm to check the DB\n• What did we decide for the kitchen and what did it cost?\n\nEvery change comes back with an Undo button.\n/think   start a message with it when I should think it through first (slower), e.g. /think compare the two zip blind quotes\n/recent  the last 10 changes\n/undo    undo your last change\n/sync    re-read the documents now (they also sync every night)\n/checkin today's tasks and yesterday's open ones, with Done buttons (also sent every morning)\n/help    this message",
+  "recent": [
+    {
+      "at": "2026-11-12T14:00:00Z",
+      "by": "Partner",
+      "channel": "telegram",
+      "title": "Theirs",
+      "loc": "Asia/Singapore",
+      "out": "• Saved: note · Theirs — Partner, Thu 12 Nov 22:00"
+    },
+    {
+      "at": "2026-11-12T14:00:00Z",
+      "by": "zy@example.com",
+      "channel": "web",
+      "title": "From web",
+      "loc": "Asia/Singapore",
+      "out": "• Saved: note · From web — zy@example.com (web), Thu 12 Nov 22:00"
+    },
+    {
+      "at": "2026-11-12T02:00:00Z",
+      "by": "ZY",
+      "channel": "telegram",
+      "title": "Late",
+      "loc": "America/New_York",
+      "out": "• Saved: note · Late — ZY, Wed 11 Nov 21:00"
+    },
+    {
+      "at": "2026-11-12T23:30:00+08:00",
+      "by": "ZY",
+      "channel": "telegram",
+      "title": "Offset",
+      "loc": "UTC",
+      "out": "• Saved: note · Offset — ZY, Thu 12 Nov 15:30"
+    },
+    {
+      "at": "2026-11-12T23:30:00.250-05:00",
+      "by": "ZY",
+      "channel": "telegram",
+      "title": "Fraction",
+      "loc": "Asia/Singapore",
+      "out": "• Saved: note · Fraction — ZY, Fri 13 Nov 12:30"
+    },
+    {
+      "at": "2026-11-11T16:00:00Z",
+      "by": "ZY",
+      "channel": "telegram",
+      "title": "Midnight",
+      "loc": "Asia/Singapore",
+      "out": "• Saved: note · Midnight — ZY, Thu 12 Nov 00:00"
+    },
+    {
+      "at": "2026-12-05T09:05:00Z",
+      "by": "ZY",
+      "channel": "telegram",
+      "title": "Early",
+      "loc": "UTC",
+      "out": "• Saved: note · Early — ZY, Sat 5 Dec 09:05"
+    },
+    {
+      "at": "2026-11-12 14:00",
+      "by": "ZY",
+      "channel": "telegram",
+      "title": "Broken",
+      "loc": "UTC",
+      "out": "• Saved: note · Broken — ZY, 2026-11-12 14:00"
+    },
+    {
+      "at": "2026-02-30T14:00:00Z",
+      "by": "ZY",
+      "channel": "telegram",
+      "title": "No such day",
+      "loc": "UTC",
+      "out": "• Saved: note · No such day — ZY, 2026-02-30T14:00:00Z"
+    }
+  ],
+  "counts": [
+    {
+      "added": 0,
+      "changed": 0,
+      "removed": 0,
+      "failed": 0,
+      "out": "nothing changed"
+    },
+    {
+      "added": 1,
+      "changed": 0,
+      "removed": 0,
+      "failed": 0,
+      "out": "1 added"
+    },
+    {
+      "added": 0,
+      "changed": 2,
+      "removed": 0,
+      "failed": 0,
+      "out": "2 changed"
+    },
+    {
+      "added": 0,
+      "changed": 0,
+      "removed": 3,
+      "failed": 0,
+      "out": "3 removed"
+    },
+    {
+      "added": 0,
+      "changed": 0,
+      "removed": 0,
+      "failed": 4,
+      "out": "4 failed"
+    },
+    {
+      "added": 2,
+      "changed": 1,
+      "removed": 1,
+      "failed": 1,
+      "out": "2 added, 1 changed, 1 removed, 1 failed"
+    },
+    {
+      "added": 1,
+      "changed": 2,
+      "removed": 3,
+      "failed": 4,
+      "out": "1 added, 2 changed, 3 removed, 4 failed"
+    },
+    {
+      "added": 0,
+      "changed": 5,
+      "removed": 0,
+      "failed": 1,
+      "out": "5 changed, 1 failed"
+    }
+  ],
+  "doc_list": [
+    {
+      "docs": null,
+      "max": 10,
+      "out": ""
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/Fridge.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        }
+      ],
+      "max": 10,
+      "out": "• Fridge.pdf"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/kitchen/Fridge manual.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        }
+      ],
+      "max": 10,
+      "out": "• Fridge manual.pdf"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/Fridge.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "key": "docs/raw/Oven.pdf",
+          "class": "text",
+          "status": "failed",
+          "error": "conversion failed"
+        },
+        {
+          "key": "docs/raw/Old quote.pdf",
+          "class": "text",
+          "status": "removed",
+          "error": ""
+        }
+      ],
+      "max": 10,
+      "out": "• Fridge.pdf\n• Oven.pdf (couldn't be read)\n• Old quote.pdf (removed)"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/Leaflet.pdf",
+          "class": "scanned",
+          "status": "ok",
+          "error": ""
+        }
+      ],
+      "max": 10,
+      "out": "• Leaflet.pdf (pictures only: not searchable yet)"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/Fridge.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": "the last read failed"
+        }
+      ],
+      "max": 10,
+      "out": "• Fridge.pdf (the new version couldn't be read; the previous one is still used)"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/A.pdf",
+          "class": "scanned",
+          "status": "failed",
+          "error": "x"
+        },
+        {
+          "key": "docs/raw/B.pdf",
+          "class": "scanned",
+          "status": "removed",
+          "error": "x"
+        }
+      ],
+      "max": 10,
+      "out": "• A.pdf (couldn't be read)\n• B.pdf (removed)"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/A.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "key": "docs/raw/B.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "key": "docs/raw/C.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "key": "docs/raw/D.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "key": "docs/raw/E.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        }
+      ],
+      "max": 2,
+      "out": "• A.pdf\n• B.pdf\n…and 3 more"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/A.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "key": "docs/raw/B.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        }
+      ],
+      "max": 15,
+      "out": "• A.pdf\n• B.pdf"
+    },
+    {
+      "docs": [
+        {
+          "key": "docs/raw/A.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "key": "docs/raw/B.pdf",
+          "class": "text",
+          "status": "ok",
+          "error": ""
+        }
+      ],
+      "max": 2,
+      "out": "• A.pdf\n• B.pdf"
+    }
+  ]
+}

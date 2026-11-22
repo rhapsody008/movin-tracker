@@ -49,10 +49,10 @@ All decided by ZY on 2026-11-20 unless noted. Newest at the bottom of each secti
 
 ## T2 review round 1
 - **Errors from `src/llm` never include a body parser's message.** V8's `JSON.parse` quotes its input, so a body that *is* the API key would print it in a 502's `error` and in the log. Decode failures carry fixed tails (`decode models list: invalid JSON`, `decode completion: invalid JSON` — Go's prefixes from `openai.go:126`/`:171`, with a stable tail of our own), and every error that leaves `src/llm` passes through the key scrub as a backstop. Go's own `encoding/json` tails are not reproduced; nothing asserts them.
-- **A network error's verb is Go's `urlErrorOp`**: the method's first byte plus the lower-cased rest, so `Get "…"` or `Post "…"` (verified in `tmp/t2x-golden`). Only what follows the URL still differs from Go (`dial tcp …` vs Node's cause text).
+- **A network error's verb is Go's `urlErrorOp`**: the method's first byte plus the lower-cased rest, so `Get "…"` or `Post "…"` (verified in `app/golden/t2x/main.go`). Only what follows the URL still differs from Go (`dial tcp …` vs Node's cause text).
 - **A missing or null `data` in a models answer is an empty list**, as Go's nil slice is; a non-array is a decode error.
 - **`testResult` follows Go's `omitempty`**: no `models` when the list is empty, no `modelsError`/`error` when the text is empty. The page distinguishes "not probed" from "probed and empty" by the key's presence, as Go does.
-- **Every struct body is matched case-insensitively, as Go's `encoding/json` folds struct field names**, and when two keys match one field the last in the document wins — position, not exactness (`{"apiKey":"exact","APIKEY":"folded"}` is `"folded"`). Go's answers are in `tmp/t2x-golden`. The entries routes decode into Go *maps*, so they keep exact keys and `"Title"` stays an unknown field; the rule is implemented only in the struct helpers.
+- **Every struct body is matched case-insensitively, as Go's `encoding/json` folds struct field names**, and when two keys match one field the last in the document wins — position, not exactness (`{"apiKey":"exact","APIKEY":"folded"}` is `"folded"`). Go's answers are in `app/golden/t2x/main.go`. The entries routes decode into Go *maps*, so they keep exact keys and `"Title"` stays an unknown field; the rule is implemented only in the struct helpers.
 - **`closeStreams` is permanent**, like Go's closed `s.closing` channel: a stream that starts after a shutdown sends its first snapshot and then ends. A docs signal that arrives before the SSE handshake is remembered and sent after the first `entries` event, so no frame can ever be written before the headers.
 - **The two LLM routes abort their endpoint call when the browser goes away** (`POST /api/settings/llm/models` and `/test`: `res.on("close")` → `AbortSignal` next to the call's own timeout — 15 s for the models list, the connection's `timeoutSec` for the probe). Reason: a closed drawer must not keep a call carrying the key running. The admin storage probe is deliberately *not* wired to it: it has its own 30 s budget and must finish its cleanup, or a cancelled probe would leave `_probe/<ULID>.json` behind.
 - **An oversize body is answered, not drained**: 400 with `Connection: close` and no further reads, as `MaxBytesReader` makes Go hang up (F18).
@@ -62,7 +62,7 @@ All decided by ZY on 2026-11-20 unless noted. Newest at the bottom of each secti
 ## T2 review round 2
 - **A failed docs view at stream start is dropped, not fatal** (G1). Go's select re-reads the index and drops the event when it cannot be read (`server.go:415-419`); a stream that has already answered must not die of it. The queue-then-send path now reuses the same `sendDocs()` as later signals, with one `.catch`, so there is exactly one place that decides.
 - **The struct-field lookup accepts two gaps against Go's `encoding/json`** (G2), both recorded in `fieldOf`:
-  - a repeated *exact* key. `JSON.parse` keeps the first key's position with the last value, so `{"SCHEDULE":"8:05","schedule":"7:00","SCHEDULE":"9:00"}` resolves to `"7:00"` here and to `"9:00"` in Go, which assigns every occurrence in document order (confirmed: `tmp/t2x-golden` prints `schedule="9:00"`). Closing it needs a positional scanner over the raw body; not done.
+  - a repeated *exact* key. `JSON.parse` keeps the first key's position with the last value, so `{"SCHEDULE":"8:05","schedule":"7:00","SCHEDULE":"9:00"}` resolves to `"7:00"` here and to `"9:00"` in Go, which assigns every occurrence in document order (confirmed: `app/golden/t2x/main.go` prints `schedule="9:00"`). Closing it needs a positional scanner over the raw body; not done.
   - folding is JavaScript lower-casing, not Go's `strings.EqualFold`/`unicode.SimpleFold`: `{"\u017fchedule":"x"}` matches `schedule` in Go (the long s folds to s; the probe prints `schedule="long-s"`) and does not match here.
 - **A top-level `null` models answer is an empty list** (G3): Go's decode of `null` into the struct is a no-op, leaving the nil slice that `Models` turns into `[]`.
 - **`scanJsonValue`'s `from` is required** (G4): a defaulted offset is one more place a caller can silently scan from the wrong byte.
@@ -130,7 +130,7 @@ All decided by ZY on 2026-11-20 unless noted. Newest at the bottom of each secti
 
 ## T3.3
 - **Files and wiring.** `src/agent/tools.ts` holds the five entry tools and `buildTools({entries, docs, viewer, vision})`; `src/agent/doctools.ts` holds the two document tools and the view tool. `buildTools` returns Go's order — 5 entry tools, then `search_documents`/`read_document_page` when docs are on, then `view_document_page` when a viewer is there and `vision` is set. Neither file imports pi-durable (they take `ToolSpec` as a type), so T3.5 wires them with no adapter change.
-- **The golden lives at `src/agent/testdata/tools.go.json`** (4336 bytes, the `tools` array of `internal/agent/testdata/openai_requests.golden:2`), written by `tmp/t33-golden/main.go` in the Go tools container. `app/src/testdata` was outside T3.3's allowed paths.
+- **The golden lives at `src/agent/testdata/tools.go.json`** (4336 bytes, the `tools` array of `internal/agent/testdata/openai_requests.golden:2`), written by `app/golden/t33/main.go` in the Go tools container. `app/src/testdata` was outside T3.3's allowed paths.
 - **The tools array is byte-identical to Go's.** `adapter.test.ts` compares `goMarshal(stub body.tools)` with the golden and finds **no** extra key: pi-ai adds `strict:false` only when `compat.supportsStrictMode !== false` (`api/openai-completions.js:1151`), and its default compat for an OpenAI-compatible endpoint is `supportsStrictMode: false` (`:1293`), which our synthesised model entry inherits. If a model entry ever turns strict sampling on, the comparison must drop `strict` and compare `{type, function:{name,description,parameters}}` instead.
 - **Map key order: Go's real bytes win.** `search_entries` answers `{"entries":[…],"total":N}` — agent-spec §2.3 writes those keys the other way round, and `encoding/json` sorts a map's keys, so §2.3 is wrong there. The other map results are alphabetical too (`update_entry` `{"entry":…,"ok":true}`, `undo_change` `{"ok":true,"undone":"…"}`, `read_document_page` `class,doc,folder,name,note,page,pages,text,truncated`), except `view_document_page`'s `region`, which Go marshals from the `docs.Region` struct as `x0,y0,x1,y1`. `tools.test.ts`/`doctools.test.ts` pin each of these, and the golden pins the declarations.
 - **The actor.** `Actor = {by, channel}` (Go's `entries.Actor`). `submit(key, text, {actor})` stores it in the input entry's `data.actor`, and the adapter reads it back in `beforeTool` from the newest `movin.user` entry — a run places one input entry and none of its rounds places another, so the first hit is this run's, and an earlier turn's person is never borrowed. The hook memoises it on the tool task (`HookApi.memo`, a durable task-record write, `scheduler.js:2556-2566`) because the recovery after a crash starts a `replay:"safe"` tool at its **execute** phase, where `beforeTool` does not run again (`dist/harness/tool.js`, `execute:`); `ToolContext.actor` is read from that memo. The crash test proves both processes see it.
@@ -148,7 +148,7 @@ All decided by ZY on 2026-11-20 unless noted. Newest at the bottom of each secti
 
 ## T3.4
 - **Files and wiring.** `src/agent/prompt.ts` builds every byte the model reads; the adapter gained the `{group}` argument for `instructions`, `{fresh, group, state}` and `{content, state}` for `userContent`, and `afterRun`. T3.5 calls `promptHooks({entries, docs, viewer, vision, timeZone, now, log})` and passes the result as `openAgent({hooks})`; no other wiring is needed. Nothing in `prompt.ts` imports pi-durable.
-- **The Go golden lives at `src/agent/testdata/prompt.go.json`**, written by `tmp/t34-golden/main.go` in the Go tools container. The rules, snapshot selection and date line come from the real `agent.Runner.SystemSections`; the documents section is the verbatim body of the unexported `docsSection` (copied, because Go was not to be edited). Regenerate with `docker compose --profile tools run --rm --no-deps test sh -c 'cd /src && go run ./tmp/t34-golden'`; `prompt.test.ts` compares the rules (with the one v3 replacement), both documents sections, the date line, the group line and a 173-live-entry snapshot byte for byte.
+- **The Go golden lives at `src/agent/testdata/prompt.go.json`**, written by `app/golden/t34/main.go` in the Go tools container. The rules, snapshot selection and date line come from the real `agent.Runner.SystemSections`; the documents section is the verbatim body of the unexported `docsSection` (copied, because Go was not to be edited). Regenerate with `docker compose --profile tools run --rm --no-deps test sh -c 'cd /src && go run ./app/golden/t34/main.go'`; `prompt.test.ts` compares the rules (with the one v3 replacement), both documents sections, the date line, the group line and a 173-live-entry snapshot byte for byte.
 - **The layout is v3's, not Go's section order.** System = rules (`prompt.go:89-110` with `when the snapshot is not enough`) + the documents section when there is a readable document + the group line for a group chat. First user message = entries snapshot, date line, typed text; later = delta block (absent when nothing changed), date line, typed text. The parts are joined by `\n\n`. The spike used one `\n` between its snapshot and date; the brief decides `\n\n`, so this is a recorded difference from the spike, not from Go (Go had no user-message prompt at all).
 - **The snapshot header is v3's:** `Entries snapshot (<n> most recently updated of <m>; use search_entries for the rest): <json>` above 150 live entries, `Entries snapshot: <json>` otherwise. Go's header said `Current entries (the 150 …)`; the v3 wording was recorded in T0.3. The selection itself is Go's unchanged: drop archived, stable-sort `updated` descending, keep 150, stable-sort `created` ascending, `compactEntry(entry, 0)`, `goMarshal` (so `&` is `\u0026`). `compactEntry` now omits notes when `notesLen <= 0`, which is what Go's `omitempty` does for the prompt's all-empty notes string; the tools' 300-rune cut is unchanged.
 - **`seen` is `Record<id, compact-line>`.** On a fresh context it is set from every live entry's current line, not only the 150 the snapshot prints: the older entries were never shown, but they did not change either, so the next turn must not call them `added`. The next turn diffs all live entries against `seen`; an archived or deleted line becomes `removed <id> "<title>"` (Go `%q` quoting, creation time recovered from the journal's `before` when the entry is gone). The block is `Changed since your last message:\n- …` in `created` order, and absent when empty.
@@ -238,3 +238,746 @@ Round 3 found one blocker (a regression from round 2's Q5), one more reload/live
 ## T3 phase review round 4
 - **Finding 1 (R2 premise), option (b):** the `turn_limit` known difference stays; its reason in the two R2 bullets is corrected (the reason is durable via the submission record and `storage.scanSubmissions`; not scanned on history reads by choice). Revisit at T4 if Telegram history needs it.
 - **T3.3 finding 1 closed (2026-11-22):** ZY chose not to journal `set_dates`; ts-reviewer APPROVE. T3.1–T3.6 all approved.
+
+## ZY's answers on the open items (2026-11-22)
+- **Leaked transcript:** the T2.3 coder transcript (`tasks/7093f60d-eaff-447.output`) held the values of `AWS_SECRET_ACCESS_KEY`, `SETTINGS_SECRET` and `TELEGRAM_BOT_TOKEN`. Deleted 2026-11-22. A scan of the other subagent transcripts and `/tmp/*.txt` found no other copy. Rotation is ZY's call.
+- **Velero snapshot class labelled (T6.7 cluster part):** on ZY's instruction, the main session ran `kubectl label volumesnapshotclass nutanix-snapshot-class velero.io/csi-volumesnapshot-class=true` on zy-all-in-one. Velero is v1.18.0, where CSI is built in, so no `EnableCSI` flag is needed. The class is owned by the `nutanix-csi` Helm release (`ntnx-system`); a chart upgrade could drop the extra label, so recheck it after NKP or CSI upgrades. Still to do in T6.7: the movin Schedule and the restore drill.
+- **Documents on in the TS app:** `MOVIN_DOCS=off` is no longer required on the real bucket. The summariser passed live (T3.5 `llm-check`), and the TS app may write summaries into the shared `docs/index.json`.
+- **`make -C app chat-eval` uses the saved NAI connection** (`-saved`). The recipe loads the repo's `.env` into its own shell. `chat-eval-env` keeps the `LLM_*` route for a local model server. `.env` itself is unchanged.
+- **Go golden generators move into the repo now** (main session's call): `app/golden/<step>/main.go`, `//go:build ignore`.
+- **Real-bucket test records in the journal stay** (main session's call). They age out of the 200-record history; no pruning.
+- **Dropped:** the "reviewer container rule" and the zy-ops `models.json` question.
+
+## T4.1
+- **Files.** `app/src/telegram/client.ts` is Go's `internal/telegram/client.go` on the global `fetch`, with no new dependency; `app/src/telegram/client.test.ts` carries every `client_test.go` test under its Go name; `app/src/telegram/testdata/requests.go.json` is the request-byte golden, written by `app/golden/t41/main.go`.
+- **The request bodies are Go's, and taken from Go.** The generator does not re-type the bodies: it runs the real `telegram.Client` against an `httptest` server and prints the raw body of each call, so the file pins what Go actually sent. It shows the two orders in one place. `sendMessage` and the keyboards are structs, so their fields come in declaration order with `reply_to_message_id`/`reply_markup` omitted when zero; the rest go through a `map[string]any`, so Go sorts their keys — `{"allowed_updates":["message","callback_query"],"offset":10,"timeout":1}`, `{"action":"typing","chat_id":-1001}` — which is not the order spec §1.2's table lists. `editMessageReplyMarkup(…, null)` is the empty keyboard `{"inline_keyboard":[]}` and the field is always sent; `answerCallbackQuery` leaves `text` out when it is empty; `getMe` is `{}`; Go's HTML escaping applies (`&` → `\u0026`, `<` → `\u003c`). Regenerate with `docker compose --profile tools run --rm --no-deps test sh -c 'cd /src && go run ./app/golden/t41/main.go' | cmp - app/src/telegram/testdata/requests.go.json` (byte-stable on a second run). The `t41` row in `app/golden/README.md` was added by the main session.
+- **Types are spec §1.1's tables as interfaces with the JSON names.** A decoded value always carries Go's zero value for a field the answer left out (`text: ""`, `photo: []`, `chat` as a zero `Chat`), pointer fields are optional (`from?`, `document?`, `voice?`, `message?`, `reply_markup?`), and `migrate_to_chat_id: 0` means absent, because Go's check is `!= 0`. `Chat.IsGroup()` is `isGroupChat(chat)` and excludes `channel`, as Go's does.
+- **The token never escapes, and the error texts are twice-pinned.** `TelegramApiError` is `telegram <method>: <code> <description>` with `code` from `error_code` falling back to the HTTP status (0 included) and `retryAfter` from `parameters.retry_after`; `isConflict` is that class with code 409. Everything else is a `TelegramError` whose message is the detail with the token replaced by `<token>` and Go's `telegram <method>: ` in front — `HTTP <status>, unreadable answer: …`, `decode result: json: cannot unmarshal … into Go value of type telegram.User`, `telegram download: HTTP 404` — and `TooLargeError` ("file is larger than the download limit", Go's `ErrTooLarge`) is returned as it is, unprefixed and unscrubbed, for both the Content-Length check and the read check. **No error carries a `cause`**: the original fetch error is dropped, not wrapped, and `TestTokenNeverInErrors` asserts the chain is empty rather than only checking it for the token.
+- **An abort or a deadline keeps Node's name across the scrub.** `AbortSignal.any([caller, AbortSignal.timeout(ms)])` ends with the reason of whichever fired, so the rebuilt error is named `AbortError` or `TimeoutError` instead of `TelegramError`, and `isAborted`/`isTimeout` read it; a deadline that fires while the body is being read keeps the name too (the `unreadable answer` detail is built from the original error, as Go's `%w` keeps `DeadlineExceeded`). Timeouts are Go's: `pollSeconds + 15 s`, 2 min for a download, 30 s for everything else, and the answer body is read through 8 MiB.
+- **No retries and no URL state.** `call` makes one attempt; backoff is the poll loop's (T4.2), which gets `isConflict` (409 → `ConflictWait`), `TelegramApiError.retryAfter` (429), and `isTimeout`/`isAborted` for everything else. `createClient` closes over the token, so it cannot appear in `status()`, a log line or an error: there is no accessor, and the only token-shaped text the client ever builds is the request URL.
+- **Known differences from Go, none visible to Telegram.** A transport failure reads `telegram <method>: fetch failed`, where Go's quotes the URL and the dial error — measured, not assumed: Node's own error for the same URL (`TypeError: fetch failed`, cause `connect ECONNREFUSED 127.0.0.1:<port>`) carries no path, which is why `TestScrubControl` shows the two Node errors that *do* quote the token in full (a `fetch()` of an unparseable URL: `Failed to parse URL from <url>`, and a `URL` constructor's `input`, which `util.inspect` prints) and records that the transport error does not. The detail after `unreadable answer:` is this port's (`not a JSON value at byte 0`) where Go's is its json scanner's; its *prefix* is Go's. A field of a result (or of the envelope) with the wrong type is read as its zero value instead of failing the whole decode — a wrong top-level shape still fails with Go's `json: cannot unmarshal` text.
+- **Tests.** `client.test.ts` runs on a fake Bot API on `node:http` (Go's `client_test.go:30-80`: paths `/bot<token>/<method>` and `/file/bot<token>/<path>`, raw and decoded bodies recorded, per-method answers, a 401 for any other path) with a closed ephemeral port standing in for Go's `net.Listen`-then-`Close`, so nothing touches the network and no test waits out a real timeout. `TestGetUpdatesDecodesAndSendsOffset` also pins the `+15 s` headroom with an injected `fetch` that follows its signal: at `pollSeconds: 0` the call is still open after 50 ms (without the headroom it has already timed out). `TestTokenNeverInErrors` drives refused, timeout, 502 HTML, undecodable result, both download failures and an `ok:false` answer that echoes the token back, then looks for the token or any 8-character substring of it in `message`, `stack`, `String(err)` and `util.inspect(err, {depth: 10})` at every level of the cause chain. `TestScrubControl` is the control described above. Two tests are this step's own: the request bytes against the golden (11 calls, one request each — no retries) and the answer body (one JSON value, only 8 MiB of it).
+- **Mutations run on copies** (`/tmp`, mounted over `/app/src/telegram`), each failing a named test: the transport message rebuilt with the request URL → `TestTokenNeverInErrors` (both of its tests); the original error kept as `cause` → `TestTokenNeverInErrors` (the empty-cause assertion); `error_code` without the HTTP-status fallback → `TestAPIErrors` "falls back to the HTTP status…"; `answerCallbackQuery` always sending `text` → request bodies "sends Go's exact bytes for every method"; a null markup sent as JSON `null` → `TestSendMessageAndButtons` and the golden; the poll deadline without `+15 s` → "gives the long poll pollSeconds plus 15 s, not pollSeconds"; the `ok:false` description left unscrubbed → `TestTokenNeverInErrors`; `allowed_updates` dropped → `TestGetUpdatesDecodesAndSendsOffset` and the golden.
+- **For T4.2–T5.1.** `sendChatAction` has no action parameter: `"typing"` is the only action the bot ever sends (Go's `bot.go:479-494`), so it is fixed inside the client. `download` takes Go's limit from the client (`maxDownload`), not from the call. Nothing else in the client is stateful.
+
+## T4.3a
+- **Files.** `app/src/telegram/format.ts` is the pure half of Go's `internal/telegram/bot.go` reply path — `split` (:615-636), `truncate` (:638-644), `changeText` (:496-503), `undoKeyboard` (:505-534) and `reply` (:596-613) with converse's two text shapes (:440-456) — with no I/O, so T4.3b's delivery task is the only thing that calls Telegram. `app/src/telegram/format.test.ts` carries `TestSplit` and `TestUndoKeyboard` under their Go names plus the message table, and `app/src/telegram/testdata/format.go.json` is Go's answer to every case, written by `app/golden/t43/main.go`. The generator copies the four unexported functions verbatim from the lines above and, for the messages, does not re-type anything: it runs Go's own `reply` loop through the real `telegram.Client` against an `httptest` server and prints the bodies Go marshalled, so the fixture pins text, split, thread and keyboard placement together — the shape of T4.1's `requests.go.json` (a name per case, the raw bodies it sent).
+- **`MAX_MESSAGE` is 4000, Go's, not the plan's 4096** (bot.go:88, spec §5.2's v3 note). `split` is Go's algorithm exactly, on code points (`[...s]`, never `.length`/`split("")`): parts of at most n runes, cut at the last `\n` in `(n/2, n]` (Go's `for i := n; i > n/2; i--`, integer division), the chunk's trailing newlines trimmed and the rest's leading ones consumed, and `split("", n)` is one empty part. The golden pins both ends of the window (a break exactly at n/2 is ignored, one at n/2+1 is taken) and the newline run at a cut, so a later "fix" to the algorithm cannot drift silently. Trap 3 stays as in Go: 4000 code points of emoji are 8000 UTF-16 units and Telegram would refuse them — a test says so rather than pretending otherwise.
+- **`truncate` is inclusive of the ellipsis** (`n-1` of the input plus `…`, spec §11 trap 8), at 300 for the failure line — and at 190 in the golden too, because that is `/undo`'s toast (bot.go:567, T4.4); the function is the same one.
+- **`undoKeyboard`.** One button per change with a non-empty id (the key dates get none), at most 8, four per row, `Undo` when exactly one id survives the cut and `Undo 1`…`Undo 8` otherwise, `callback_data` = `undo:<id>`. The one thing Go does not do: it **throws** when a `callback_data` would exceed Telegram's 64 **bytes**, because there Go would build a message Telegram answers 400 to (spec §11 trap 9). `undo:` plus v3's 26-character change id is 31 bytes, so nothing reachable throws; the tests pin 64 accepted, 65 refused, and the count being bytes rather than characters.
+- **`replyMessages(reply, address, options)`** returns `SendMessage[]` or `null`, and `null` only for `silent` — no message, no failure line, no keyboard (spec §5.5, trap 17). The answer's text is `reply` plus `"\n\n" + changeText(changes)` when there are changes; the failure's is `FAILURE_PREFIX + truncate(detail, 300)` plus `"\n\nSome changes were saved before it failed:\n"` and the change lines when there are changes. The text is split at `MAX_MESSAGE`; the first part carries `reply_to_message_id` **only** in a group, the last part carries the keyboard when there is one (trap 10). Optional fields are only set when Go would set them, so `goMarshal` of each message is Go's request body byte for byte — which the golden test asserts for every case, the group/2-part one included.
+- **The detail is `channelReply`'s error** (already scrubbed), so `Stopped.` stays the detail of a person's abort and pi-durable's reasons pass through. With `options.timedOut` it is `TIMED_OUT_DETAIL` = `the turn took longer than 15 minutes and was stopped` instead of Go's `context deadline exceeded` — the recorded difference `plan.md:125`/T4-plan Q6 asked for; the test shows both sides of the option.
+- **`NOT_CONFIGURED_DETAIL` does not exist, and is not added.** Go's bot path has no fixed "no LLM" line: `agent.Run` returns an `InputError` (`internal/agent/agent.go:153`, `no LLM endpoint or model is configured; set one in Settings → LLM`) and converse prints it through the failure line like any other error (bot.go:440-447). That text is already `NO_CONNECTION_MESSAGE` in `app/src/server/chat.ts:30` for the web route — not a module `format.ts` may import — and it reaches the bot as `outcome.error`, so nothing is copied and nothing is fixed here.
+- **Leading blank lines are trimmed, and unreachable from `channelReply`.** The trim (v3's one byte change, spec §5.7: blank lines at the start, a line that holds only spaces or carriage returns, go) is applied to the assembled text before the split. Every `ok` answer comes from `replyText` → `shownText`, which is Go's `TrimSpace`, and the failure text starts with `FAILURE_PREFIX`, so no `channelReply` output can start with a blank line — pinned by a test that walks the answered, silent, `Done.`, refusal, cut-off and failed shapes in both a private chat and a group; the trim itself is pinned against a hand-built `ChannelReply`, and the golden's texts all start with a character so the difference never shows there.
+- **`NON_TEXT_REPLY`, `THINK_HINT`, `FAILURE_PREFIX` are Go's texts, byte for byte**: `bot.go:395-397`, the bare `/think` answer at `commands.go:54-57` (which nothing in the web shares, so it lives here), and `bot.go:441` with its trailing space. `DONE_REPLY`, `REFUSAL_REPLY`, `CUT_OFF_ERROR`, `STOPPED_REPLY` are imported from `reply.ts` by the tests, never re-typed.
+- **Golden.** `app/golden/t43/main.go` (`//go:build ignore`) prints `app/src/telegram/testdata/format.go.json`: 12 `split` cases (short, empty, Go's line-break and `é` cases, emoji, CJK, a mixed emoji line, 9000 runes without a break and broken every 100, a break at n/2, one at n/2+1, a newline run at a cut), 6 `truncate` cases (300 kept, 301 cut, 301 emoji, 200 at 190, n=1), 4 `changeText` sets, 7 `undoKeyboard` sets (none, no id, one, one of two, 8, 9, 10 ids, a 26-character id) and 7 message cases (group answer with changes, group 2 parts, private answer, answer without changes, failure with changes, a 301-rune detail, silent). Byte-stable on a second run: `docker compose --profile tools run --rm --no-deps test sh -c 'cd /src && go run ./app/golden/t43/main.go' | cmp - app/src/telegram/testdata/format.go.json` is silent. The `t43` row was added to `app/golden/README.md`.
+- **Tests.** 33 in `format.test.ts`: `TestSplit` and `TestUndoKeyboard` (Go's assertions, under Go's names), the golden (limit, split, truncate, changeText, keyboard as `goMarshal` text, and the requests), and one test per message row — answered, `Done.`, refusal, cut-off with its note, cut-off before text as a failure with its changes, a failed turn's change block and buttons, `Stopped.`, `timedOut` both ways, silent (twice), private vs group threading, 2 parts with the keyboard on the last, the key-dates-only change with no keyboard, the leading-blank-line trim and its unreachability, and Go's fixed lines. Every message case goes through `channelReply` first, so the text and the shape are tested as the bot will produce them. `make -C app test` went from 980 to 1013 passed, 1 skipped; `make -C app lint` and root `make lint` are clean.
+- **Mutations on copies** (`/tmp`, mounted over `/app/src/telegram/format.ts`), each failing a named test: keyboard on the first part → `replyMessages` "puts the Undo keyboard on the last part and threads only the first" and the golden's request bytes; `split` on UTF-16 units (`text.split("")`) → the golden's split and "never cuts inside a code point, even at the limit"; the window opened at `i >= n/2` → the golden's split; the rest's leading newlines not consumed → `TestSplit` "prefers a line break in the second half of the window", the golden's split and requests, and 3 more; `reply_to_message_id` in every chat → 12 tests including "sends an answered turn's reply as one message with no keyboard"; `truncate` keeping `n` runes plus the ellipsis → the golden's truncate, the golden's requests and "keeps n-1 runes and the ellipsis"; `Undo 1` for a single id → `TestUndoKeyboard` "labels a single change's button Undo…", the golden's keyboard and 6 more.
+- **For T4.3b and T4.4.** `replyMessages` is the whole message plan; the delivery task only has to send the array in order and record which part it reached. `/help`, `/recent`, a document notice and the undo confirmation are not turn outcomes, so T4.4 needs the text-to-messages step (`split` plus the same threading rule) that `replyMessages` does internally — no new text constants are needed for it here. The undo toast is `truncate(line, 190)`, already pinned by the golden.
+
+## T4 plan change (ZY approved 2026-11-22)
+- **Durable intake inbox instead of offset-with-submit.** `adapter.submit` holds the per-chat `serial` chain until the run settles, so a second message's commit waits up to 15 minutes; the offset riding with it would stall polling for every chat. Each `getUpdates` batch is accepted in one commit (inbox items + cursor + a `recent` id list for dedupe); per-chat workers submit with `requestId tg:<update_id>`, moving the item queue → open in the submit commit. Plan: `briefs/T4-plan.md` (planner), research `briefs/durable-delivery.md`.
+- **The host creates the delivery task when it settles a turn**, in one commit with dropping the ledger item — one path for answered, failed, refused and recovered turns. `afterRun` is not used (it never fires on failure, and run-end tasks die with a conversation abort).
+- **Commands and callbacks run in the chat's queue order**, take-then-act (at-most-once).
+- **Order:** T4.1 → T4.3a → T4.3b → T4.2a → T4.2b → T4.4. **T5.3** must also clear the inbox and abort pending deliveries.
+- **Main session's calls (no objection from ZY):** the watchdog failure detail is `the turn took longer than 15 minutes and was stopped`; send retry = 429 sleeps `retry_after`+1 s, transport/5xx 1,2,4,8,16 s, at most 6 attempts per part, other 4xx fail at once; `/checkin` answers `The check-in isn't available yet.` until T5.1; `lastError` is never cleared, as in Go.
+
+## T4.3b
+- **The three Step 0 questions.** (1) Ownership: a conversation-owned, non-background task created from `harness.commit(tx => tx.createTask(...))` needs `TaskOptions = { ownership: { kind: "conversation" }, conversationId }` and no `background` (`app/node_modules/@earendil-works/pi-durable/dist/types.d.ts:365-380`: `ownership` is required, `conversationId` is "required for conversation-owned tasks created by Session commits that are not bound to a conversation", `background` defaults to ordinary). It is enforced at runtime: without `conversationId` the commit throws `Tx.createTask() requires options.conversationId` (`dist/session/transaction.js:226-227`). Our `deliver()` passes exactly that, from `harness.commit`. (2) `conversation.waitForIdle()` does wait for such a task while it is running **and** while it is sleeping: `#idle()` counts every live record that is not `background` (`dist/harness/scheduler.js:2447-2469`) and `LIVE_STATUSES` includes `"sleeping"` (`:13`), with `#live` mirroring every non-terminal record (`:46`). Both halves are pinned by `the outbox` → "is conversation-owned and not background: the idle wait covers it running and sleeping". (3) **The plan's third question does not apply to this repo:** `app/tsconfig.json` sets `"exactOptionalPropertyTypes": false`, so there is no such strictness to check. What was worth checking, and holds under our real `tsconfig` (`strict`, `noUncheckedIndexedAccess`, `erasableSyntaxOnly`), is that `defineExtension({ tasks: [delivery] })` type-checks at all: `Extension.tasks?: readonly AnyTask[]` (`dist/harness/types.d.ts:360`) accepts a `Task<…>` (`:84-94`). No fallback to a `background` task was needed.
+- **Files.** `app/src/durable/adapter.ts` gains `OutboxJson`, `Outbox`, `OutboxError`, `OpenAgentOptions.outbox`, `OpenAgentOptions.setTimer`, `Agent.deliver`, the `movin.outbox.delivery` task (registered in the existing `movin.agent` extension through `tasks:`), `DeliveryTail`, `createDelivery` (the one place a task is created, so T4.2a's settle commit can call it inside its own commit) and a third test helper `abortDeliveries`. `adapter.test.ts` gains 11 cases, `crash.test.ts` two, and `crash-outbox-child.ts` is the new fixture.
+- **`setTimer` is a test seam, and the tests own time.** pi-durable stores a sleep on the Harness clock but arms it in **real** milliseconds: `#armTimer` calls `setTimer(cb, at - now())` (`dist/harness/scheduler.js:1650-1656`, `types.d.ts:194-196`), so an injected `now` alone makes a 1 s backoff cost a real second. `OpenAgentOptions.setTimer` is the host's own structural type (`Timer`), passed straight to `Harness.open` when set and documented "tests only"; pi-durable's `SetTimer` never leaves `adapter.ts`. The tests use one `manualClock()`: `now()` answers a variable, `setTimer` records `{at: clock + delayMs, background}` and `advance(ms)` walks the armed timers in order, firing each as its time comes and settling between. pi-durable arms a **background** timer at open (memory expiry, 10 minutes), so the tests count only foreground timers to know a backoff is stored — counting all of them never reaches 1. The 429/backoff/cap cases run in a few milliseconds and pin exact waits: `[1000, 1000, 2000, 4000, 8000, 16000]`.
+- **`DeliveryTail` (`movin.outbox`, conversation-scoped) orders a chat's deliveries.** A delivery's input carries `after`, the newest delivery task of the conversation at creation time, and its `send` phase parks in a `waiting` state until that task is terminal. Commits are serialised, so two creators read each other's write. Without it, two deliveries for one chat run concurrently and their parts interleave. The task is *not* `serial`-wrapped, which is the consequence to know: two `deliver()` calls made **concurrently** are not order-guaranteed, only the ones created in sequence (which is how T4.2a's settle commit and T4.4's per-chat worker call it — awaited, one after the other, per chat).
+- **The abort handler settles `aborted` with no reason** (not `"restore"`): the same handler serves T5.3's restore path and an ordinary conversation abort, and it cannot tell them apart.
+- **A delivery with no outbox parks for 30 s and logs**, it does not fault: the kind is registered, so a database with pending deliveries opens in a process that cannot send (the web server), and the reply stays queued for a process that can. The cost is that such a database wakes every 30 s while it waits.
+- **The backoff is `OUTBOX_BACKOFF_MS[attempt - 1]`, with `undefined` folded into the terminal branch** (`attempt >= OUTBOX_MAX_ATTEMPTS || wait === undefined`). That keeps `noUncheckedIndexedAccess` honest without a cast, at one cost worth recording: the cap and the list length are the same decision twice, so `>=` → `>` is an **equivalent mutant** (all 11 cases pass) — the sixth attempt has no wait and ends the delivery either way. A cap that is really off by one (`OUTBOX_MAX_ATTEMPTS - 1`, five attempts) is caught.
+- **Tests, `adapter.test.ts` (11).** Parts in order, each once, same address, no model request; the 429 waits `retry_after` + 1 s and nothing earlier (`advance(3999)` sends nothing, `advance(1)` sends); a `permanent` failure drops the rest and logs `outbox delivery failed` with `part`/`of`/`attempts`; six transient failures end it and the next part is never sent, with the waits `[1000, 2000, 4000, 8000, 16000]`; the attempts count per part, not per delivery (a successful part resets it, so the next part gets its own six); an aborted delivery sends nothing more; two sequential `deliver` calls keep their order; `deliver` with no outbox throws `no outbox configured` and an empty reply is a no-op; the idle wait covers running and sleeping; a send does not hold the store (another chat's delivery commits while one send is in flight — this is the "never send from a commit callback" rule as a test); and a database reopened a minute later without an outbox opens, parks the delivery with a warning and faults nothing.
+- **Crash tests, `crash.test.ts` (2).** The parent hosts the channel as a `node:http` recorder; `crash-outbox-child.ts` dies inside a `send`. It keeps itself alive with a referenced interval, because a phase hanging in its send arms no referenced timer and Node would otherwise exit by itself instead of being killed. (a) the send writes a marker and hangs **before** the POST: after SIGKILL the reopened process sends `a, b, c`, each once (the checkpoint never moved). (b) the send POSTs `a`, POSTs `b` and hangs **after** it: the recorder then reads `a, b, b, c` — n+1, the duplicate being the part in flight, and `a` never repeats.
+- **Mutations, on container copies of `adapter.ts`** (`/tmp/mut`, one file mounted over `/app/src/durable/adapter.ts`), each failing a named test: checkpoint moved before the send → crash (a) `[ 'b', 'c' ]` vs `[ 'a', 'b', 'c' ]`; `attempts` not reset after a successful part → "counts a part's attempts on its own" `[ 'a','a','b','b','b','b','b' ]` vs six `b`s; `retryAfterMs` ignored → "waits out a 429" (2 sends where 1 was expected after 3999 ms); the abort handler sending → "sends nothing more once a delivery is aborted" `[ 'a', 'a' ]` vs `[ 'a' ]`; cap at five attempts → "ends failed after six attempts" `[ 'a' ×5 ]` vs `[ 'a' ×6 ]`; the send inside the commit callback → "does not hold the store while a send is in flight" times out (the second chat's commit queues behind the held line), and the teardown's `close()` times out behind it too. The `>` variant of the cap is the equivalent mutant described above.
+- **For T4.2a and T4.4.** `createDelivery(tx, conversationId, address, parts)` is the only creator: the settle commit calls it in its own commit, and `deliver()` is a commit around it. `deliver` resolves when the task is stored, so it may be awaited without waiting for the channel.
+
+## T4.2a
+- **The ledger is one session document, `movin.intake`** (`INTAKE_DOC`, exported for T5.3's restore path): `{cursor, recent[≤256], queue[], open[]}`. `accept` is one commit (skip ids in `recent`/`queue`/`open`, append the rest, trim `recent` from the front, `cursor` never lowered); `state()` is a read; `take` is one commit and true only for its first caller; `settle` drops the item and creates the delivery in the same commit. An item the cap drops (64 queued per key, `log.warn("intake queue full, dropping update", {key, id})`, Go's `telegram chat queue full, dropping update`) still enters `recent` and the cursor still moves, so a redelivery is not queued late. A queued item is copied field by field into the doc: the caller's object outlives the commit and a document value must not.
+- **`settle` reads before it commits, on purpose.** The removal is what makes exactly one task (`dropLedgered` returning false means a second settle creates nothing), but a no-op settle must not create a conversation for a reply it will not send — e.g. an id already settled, or an id it never held. So it checks `harness.snapshot(Intake)` first and only then `conversationFor(key)`; a concurrent settle between the two loses nothing, because the commit's own drop decides.
+- **The duplicate `requestId` pre-check is `tx.submissionByRequest(conversationId, requestId)`** (`app/node_modules/@earendil-works/pi-durable/dist/types.d.ts:913`, the `Tx` form; the committed-read form is `:1174` — confirmed, not assumed). It runs inside `serial(key)` after `conversationFor` and `refresh` and before the idle wait, the idle reset, `configure`, the prompt-state read and `submitted()`. On a hit the turn is attached to (`attachTo`), which runs `resultOf` and no `settlePrompt`: the first submit already advanced the state, and `afterRun` is idempotent anyway. `ended()` and `resultOf` scrub with the current connection (`cfg`) instead of a local `next`, so `attach` and the duplicate path scrub identically.
+- **Both adapter gaps are one call each.** Gap 1 is `await conversation.waitForIdle(background)` inside `serial`, after the duplicate check and before the idle reset: after a restart `tails` is empty, so nothing else orders a recovered run (or a delivery) before the next turn. Consequence to know: a delivery parked with no outbox (`OUTBOX_UNCONFIGURED_MS`, 30 s) is a live conversation-owned task, so a `submit` for that chat waits for it — accepted, because the outbox is Telegram's and a web conversation never has one. Gap 2 is the pre-check above. Gap 3 is `isUnsettled(result)`: `failed/closed` and `failed/faulted` mean "not settled", so T4.2b leaves the item `open` and the restart's `attach` reports the real outcome.
+- **`isUnsettled` is only what `ended()` returned** (main session, on review of the coder's open point): the session closing (`closed`) or failing (`faulted`) under the turn, tracked with a module `WeakSet` of the results `ended()` built. The coder's version keyed on the reason, so `resultOf`'s own `faulted` (no answer message committed, not an input) also counted as unsettled, and its intake item would have stayed `open` forever. Those are outcomes now: the channel renders the failure line and settles. Test: a `faulted` result not built by `ended()` is not unsettled.
+- **`attach` is not wrapped in `serial(key)`.** It waits a turn out; holding the chat's chain for its whole deadline would keep the queue behind a run the watchdog is already handling. `attach` takes the submission id as the `string` the ledger stores (`OpenTurn.submission`) and converts; an id it cannot reacquire is `failed/faulted`.
+- **The submit commit moves the item `queue → open`** (`commitSubmitted`'s fourth parameter, after `conversation.submit`, because a commit's table writes must not follow a document write). An item not in `queue` leaves the submit standing: the requestId pre-check is what makes the duplicate case a no-op.
+- **Tests, `adapter.test.ts` (13 + 2).** Accept twice is one item; a settled item's id stays known; the 65th item of one chat is dropped and logged by key/id while another chat and the cursor move on; the cursor never goes back; `take` is true for exactly one of two concurrent callers; two concurrent settles make one send; `settle(null)` drops silently and an unknown id makes no conversation (no `movin.conversations` change); the intake move is in the turn's admission commit; a duplicate `requestId` makes no request, no `userContent`, no `movin.prompt`, no `pi.agent`, no `pi.reset` and no submission; run 2 starts only after run 1 and its delivery (the send blocks until the test releases it) and sees run 1's answer; `attach` equals `submit`'s result for an answered and a failed run; `idle` is instant for an unknown key and waits for a delivery; and `isUnsettled` is true for a close cut short and false for an answered run and for `model_error`.
+- **`observeCommits` is a second commit-level test helper, and why.** A submission record is published in **several** commits (admitted, placed, done), so counting "commits with a submission" cannot identify the admission. The `movin.intake` document change can: the test proves one commit holds both the intake change and a submission record. `observeDocuments` (document kinds only) cannot see a `pi.reset` entry at all — it is a table entry, hence the entry kind in the new helper.
+- **Crash tests, `crash.test.ts` (3) and `crash-intake-child.ts`** (one fixture, `MOVIN_CRASH_MODE=accept|tool|settled`, keeping itself alive with a referenced interval). W3: accepted and nothing submitted; the reopened worker submits the queued item with `requestId tg:<id>` — one submission, one run. W4: killed inside run 1's `add_entry` (MinIO, as T3.3) with item 2 queued; the recovery finishes the run, `attach` reports its answer, `settle(null)` drops it, and item 2's request carries run 1's answer with one entry and one journal record. W5: the run settled and the settle never ran; `attach` answers at once and the settle sends exactly one part, after which the ledger is empty.
+- **Mutations, on container copies of `adapter.ts`** (`/tmp/mut`, one file mounted over `/app/src/durable/adapter.ts`), each failing a named test: the idle wait removed → "starts a chat's next turn only after the earlier turn and its reply are done" (the submit does not wait: `false` vs `true`); the prompt state written on a duplicate → "attaches to the turn a repeated requestId already admitted, and writes nothing" (`[movin.prompt]` vs `[]`); `accept` without the `recent` check → "accepts a batch once…" and "keeps the id of an item it settled…"; `settle` ignoring the drop → "settles a turn once…" `['the reply','the reply']` vs `['the reply']`; `take` returning true twice → "takes an item exactly once…" `[true,true]` vs `[true]`; the cap `>=` → `>` → "drops the 65th queued item…"; `accept` keeping the higher cursor → "keeps the batch's own offset, forwards or back, so a stale poll can come back" (`20` vs `5`).
+
+## T4.2b
+- **Files.** `app/src/telegram/bot.ts` is Go's `Run`/`start`/`pollRetry`/`dispatch`/`work`/`handle`/`converse`/`typing`/`Status` on the v3 pieces (the T4.2a ledger, the T4.3b outbox, the T4.3a reply plan); `auth.ts` is `authorise`, `reject`, `displayName` and the migration row; `outbox.ts` is the `Outbox` the delivery task calls; `fake-api.ts` is the test Bot API; `crash-bot-child.ts` and `crash.test.ts` are the two crash windows; `bot.test.ts`, `auth.test.ts` and `outbox.test.ts` are the tests; `main.ts` wires it; `format.ts` gains `textMessages`. Nothing of pi-durable is imported outside `adapter.ts`.
+- **`checkinStatus()` is `{"on":false}`, and `telegram-spec.md` §9.1 is wrong.** Go's `CheckinStatus` with no `Checkin` returns `&CheckinView{}` (`internal/telegram/checkin.go:450-453`), which is `{"on":false}` — `until` is only set once there is check-in state in the file (`:456`), and `sched.CheckinCutoff = 20` has nothing to do with the nil case. The server appends the editable `setting` after those fields (`app/src/server/admin.ts:147`), as Go's `checkinView` does (`internal/server/admin.go:177-184`). T5.1 supplies the rest.
+- **The status JSON is a pinned literal, not a golden.** `statusJSON` is Go's `Status` in Go's field order with Go's `omitempty`/`omitzero` rules (`bot.go:74-83`): `tokenSet`, `running`, `botUsername`, `lastPollAt`, `lastUpdateAt`, `lastError`, `lastErrorAt`, `rejected` (always an array, `chatId`/`fromId` as strings, `at` as Go's `time.Time` JSON). `bot.test.ts` pins one full object byte for byte against a fixed clock, plus `{"tokenSet":true,"running":false,"rejected":[]}` for a bot that has not started and `{"on":false}` for the check-in. A `t42` generator was not needed for four objects, and is not written.
+- **Auth check 2 is Go's, for a message, a command and a callback.** A message or a command queued before an allowlist change is `take` + Go's row + Go's `telegram message ignored` line + no reply; a callback is only answered `You're not on this bot's list.` after the take, with **no row and no log line**, as Go's `handleCallback` does (`bot.go:536-541`) — a pressed button must not keep spinning (trap 16). T4 fixes M7 corrected this: the first version recorded a row for the callback too, which Go does not.
+- **The reset guard polls at offset 0 *while* nothing has been accepted for six days** (`UPDATE_ID_RESET_MS`), not once. A poll at 0 that returns nothing must not use up the one chance, or a random `update_id` arriving a moment later stays hidden for ever. It cannot loop: a non-empty batch is accepted, which stamps `acceptedAt` and lets the next poll at the stored cursor confirm those ids, so each update is handed out at most twice. `intake.acceptedAt` is the one adapter change this step makes — `movin.intake` gains `acceptedAt`, `accept` stamps `now()` on every batch (even one that added nothing: a batch of known ids is not silence), and `state()` returns it; `adapter.test.ts` pins 0 before the first accept and the clock after one. The duplicate update in a second batch is dropped by `recent`, which `bot.test.ts` pins with `redeliver`.
+- **The cursor advances locally after every accept, to the batch's own last id + 1.** `pollLoop` keeps `cursor` in memory and `accept` sets `cursor = last + 1` after the commit — without it the next `getUpdates` asks from the old offset, Telegram hands the same batch out again, and a busy loop follows. It is deliberately not `max`: the reset guard polls at 0, and holding the old high cursor would hide every id between the two for ever. T4 fixes B1 corrected the first version, which had `max` on both sides.
+- **The crash windows: inside the tool, and inside the model request.** `crash.test.ts` kills `crash-bot-child.ts` (a real bot polling `fake-api.ts`) twice. `tool`: the write lands in the bucket, the tool hangs, SIGKILL; reopens with the same bucket and a model that answers → one reply `Run one answered.\n\n• Saved: note · Quartz`, one entry (the replayed write is deduplicated by its change id), ledger empty. `model`: the model never answers, so the kill lands inside the request; reopens with the **same connection settings** (kind, base URL, model) and the same endpoint, which answers this time → one reply, `llm.requests` goes 1 → 2 (a re-issued request, not a cached failure), ledger empty. Two findings recorded for the record: (1) a reopen with a *different* wiring answers `no_model` (`dist/harness/generation.js:433-442`, `failNoModel`: the model reference is kind + model id, and the checkpoint's ref is looked up in the new process's `models` collection), which is why the second case keeps the child's settings; (2) the first attempt at that case hung, and the cause was the **frozen clock** the tests inject: pi-durable ends a request cut off by a restart with `interrupted()`, which retries under `settings.retry` by sleeping until `now() + retryDelayMs` (`generation.js:341-370`), and the `retry` phase sleeps again whenever `until > now()` — with a clock that never moves the retry never comes due. The child and the reopened process therefore run on the real clock (`openAgent`'s default), which is what production has; nothing in `adapter.ts` had to change.
+- **The fake Bot API must not let a dead long poll confirm anything.** A `getUpdates` whose client went away (an aborted poll, which is how `stop()` ends one) returns nothing and leaves `pending` alone (`res.on("close")` sets the flag); only a request that is actually answered consumes or confirms. Without it, an aborted poll from the previous process ate the update the next poll needed. It also records every call in order, keeps an update deliverable until a higher offset confirms it, and `close()` cuts keep-alive connections so a teardown never waits out Node's idle timeout.
+- **`TestShutdownFinishesTakenTurns` restated.** Close mid-turn with a model that never answers (so the close provably cuts the turn off), then reopen the same database: both updates answered once, both entries saved, nothing sent before the restart, and the chat's worker stops at the unsettled result instead of pushing the next item into a closed session.
+- **`serve()`'s bot start is not covered by a test.** `serve()` is not exported and the Bot API's base URL is not a `Config` field, so a test would have to reach `api.telegram.org` — out of bounds. What is covered: the status source and the `TelegramStatusSource` contract (`admin.test.ts`, `bot.test.ts`), the bot itself on a fake API, and `startServe`'s `telegram` dependency (`main.test.ts` unchanged). The wiring is type-checked and follows Go's `main.go:124-138`: client and outbox before the agent, the bot after `openDurableAgent`, `bot.stop()` before `agent.close()` on shutdown.
+- **Tests.** `bot.test.ts` (21): the eleven ported cases under Go's names (`TestPrivateMessageSavesEntryAndUndoButtonWorks`'s message half, `TestAuthorisation` with the extra "only the allowed update was accepted" assertion, `TestConflictBacksOffThenRecovers` with the wait measured, `TestBotWritesReachSubscribers`, `TestOneChatIsSerialisedTwoChatsRunInParallel` with `ZY: first thought | Partner: second thought`, `TestGroupChatterGetsNoReply`, `TestAllowlistChangeAppliesWithoutRestart`, `TestNonTextAndStatusHasNoToken`, `TestThinkCommand` with `enable_thinking` false/true, `TestShutdownFinishesTakenTurns`) plus the duplicate update, the watchdog twice (live and after a reopen at the stored deadline), the 429 wait, the migration row, the status bytes, the second auth check (message and callback), `/cmd@otherbot` and the unknown command with the menu, and the reset guard both ways. `auth.test.ts` (8) is the decision table, the bounded list and the migration row. `outbox.test.ts` (4) is the error mapping: 429 → `retryAfterMs`, 400/403 → `permanent`, 502 and a closed port → transient, with `lastError` set and the token in nothing. `crash.test.ts` (2). `format.test.ts` gains `textMessages`. The suite is 1081 passed, 1 skipped.
+- **Mutations, on container copies** (`/tmp/mut`, one file mounted over `/app/src/telegram/bot.ts` or `format.ts`), each failing a named test: auth check 1 skipped (`if (false && !verdict.ok)`) → `TestAuthorisation` `expected [1,2,3,4] to have a length of 1`; the batch committed empty and handled anyway → `TestPrivateMessageSavesEntryAndUndoButtonWorks` (no reply: the settle has nothing to drop); auth check 2 skipped → "the second auth check" (`1` vs `2` rows); the recovery's watchdog given a fresh `turnTimeoutMs` instead of `turn.deadlineAt` → "the watchdog fires at the stored deadline after a reopen" (timeout); a 409 returning 0 instead of `ConflictWait` → `TestConflictBacksOffThenRecovers` (`expected 110 to be greater than or equal to 550`); `reply_to_message_id` in every chat → `TestPrivateMessageSavesEntryAndUndoButtonWorks` (`expected 1 to be +0`) and 13 others; the `isUnsettled` guard removed → `TestShutdownFinishesTakenTurns` (`telegram handler panicked` in the log); `commandAllowed` always true → "a command for another bot is dropped before any side effect" (one reply, expected none).
+
+## T4.4
+- **Files.** `app/src/telegram/commands.ts` is Go's `command`/`recent`/`undoLast` (`internal/telegram/commands.go`), `syncCommand`/`counts`/`docList` (`docs.go:40-119`) and `handleCallback`'s undo half (`bot.go:536-592`) with no I/O of its own; `bot.ts` keeps what must be at-most-once and durable (the `take` before acting, the delivery, the two ephemeral client calls) and gained `BotOptions.entries`, `.syncer`, `.timeZone`; `main.ts` wires the three from `running.agentDeps`; `commands.test.ts` is the golden; `bot.test.ts` gains 13 cases and one `todo`; `app/golden/t44/main.go` writes `app/src/telegram/testdata/commands.go.json`. `bot.ts` was 764 lines before the step and is 825 after it, so it never reached the brief's ~900: the commands went to their own file because Go has them in one (`commands.go`, `docs.go`), not because of the length.
+- **`/recent` skips a record it cannot describe.** Go's `ChangeText` has no branch for the old journaled `op:"meta"` record and panics, which costs the whole reply (`bot.go:377-381`, spec §6.3). Here the op switch in `recentLine` returns `null` for anything but `create`/`update`/`delete`/`undo` and the line is skipped, so the nine other records still arrive; if every record were skipped the answer is Go's `Nothing has been recorded yet.` A record whose op *is* known but whose sides are missing still throws — that is a corrupt record, not an old one, and it stays visible as `telegram handler panicked`. The test injects exactly that record and proves the next command in the same chat still answers.
+- **What the callback's payload carries.** `IntakePayload.callback` grew `markup`, filled from `callback.message.reply_markup` at accept time, because Go reads the keyboard back off the callback's message (`bot.go:570`) and the ledger is the only place it survives a restart. It is optional in the type: an item accepted before this step has none, and `?? null` is the same as "no keyboard", which skips the edit exactly as Go's `if m.ReplyMarkup != nil` does.
+- **Order inside a callback.** Everything but the confirmation is ephemeral: the toast and the keyboard edit go to the client, both awaited, both logged and ignored on failure (Go's `_ =`). The confirmation is a separate `agent.deliver`, so it is durable and ordered behind the chat's earlier replies; in a group it is threaded under the pressed message and prefixed `<name>: `, in a private chat it has no prefix — Go's asymmetry in §7.2, pinned by two tests.
+- **`/sync` answers twice.** "Syncing the documents…" (or "A sync is already running; …") is sent *before* the run, as Go's `reply` did, so a slow sync is not a silent chat; the result follows as a second delivery. The reason is `telegram:<chat id>` (`SYNC_REASON_PREFIX`), which is what T5.2's `DocsChanged` skips on. `DocsChanged` itself is not in this step: `bot.test.ts` marks its half `it.todo` with the T5.2 note.
+- **`/checkin` answers "The check-in isn't available yet."** (main session, `plan.md` T4 plan change). It stays in the menu; `ci:` callback data is routed and answered empty, which is what T5.1 replaces.
+- **The `/recent` timestamp is Intl over Go's layout.** `recentAt` parses Go's RFC3339 strictly (a day the month does not have is not a time, and an unparseable `at` is shown as it is, as Go's parse-error fallback does) and formats `Mon 2 Jan 15:04` in `config.timeZone` with one `Intl.DateTimeFormat` per zone. The golden covers a zone west of UTC, an `at` carrying its own offset, a fractional second, midnight (`00:00`, not `24:00`), a single-digit day, and both parse failures.
+- **`commands.test.ts` is the golden, `bot.test.ts` the rig.** `app/golden/t44/main.go` copies `helpText`, `/recent`'s line assembly, `counts` and `docList` verbatim from Go with their line cites and prints `testdata/commands.go.json`, so the help text, every document state suffix, the `…and n more` cut and the time formatting are Go's bytes. The end-to-end cases stay in `bot.test.ts` under Go's test names because they need the fake Bot API and the durable rig.
+- **Tests.** `bot.test.ts` (34 + 1 todo): `TestCommands` (help, `/recent` with a web line, `/undo` on the caller's own change, `/cmd@otherbot` ignored, `/sync@movin_test_bot` answered and threaded), `TestUndoButtonRefusedForStrangerInGroup`, the Undo-button half of `TestPrivateMessageSavesEntryAndUndoButtonWorks`, the group confirmation, `/undo` twice in one batch (`removed Second`, then `restored Second` — different records, never the same one), a redelivered `/undo`, a redelivered callback, a second press on the same button (the stale toast, nothing written), the 190-rune toast against a 200-rune title, `/HELP` and a bare `/`, `/recent` over a Go-shaped `meta` record, an injected corrupt record, and `TestDocumentSyncAndNotices`' `/sync` halves on the real syncer. `commands.test.ts` (10) is the golden. The suite is 1104 passed, 1 skipped, 1 todo.
+- **Mutations, on container copies** (`/tmp/mut44`, one file mounted over `/app/src/telegram/bot.ts` or `commands.ts`), each failing a named test: the command's `take` removed → "a command that throws" (`expected [ { id: 1, key: 'tg:111' … } ] to deeply equal []`); `/undo` matching anyone (`recent(1)` without the name) → `TestCommands` (`expected '↩ Undone: removed Theirs' to be '↩ Undone: removed Mine'`); the toast not truncated → "the undo toast" (`expected [Array(216)] to have a length of 190`); the pressed button kept → the Undo-button case (`expected { inline_keyboard: [ [ { … } ] ] } to deeply equal { inline_keyboard: [] }`); the speaker prefix in private chats → the Undo-button case and the toast case; `counts` in removed/changed/added order → "joins the non-zero counts in Go's order"; the callback's markup ignored → three Undo-button cases (no edit at all).
+
+## T4 fixes
+Answers `briefs/T4-review1.md` (ts-reviewer, REQUEST CHANGES) through `briefs/T4-fixes.md`. Every fix below has a test that fails without it, and the mutation that reverts it is named in the table at the end.
+
+- **B1: the cursor can go back, and both sides agree on it.** `accept` now sets `doc.cursor = batch.cursor` unconditionally, and `bot.ts` sets `cursor = last + 1` (not `max`). `bot.go:174-178` does not `max` either: `if u.UpdateID >= offset { offset = u.UpdateID + 1 }` starts from the offset it polled with, so a poll at 0 sets the offset from the batch alone. Without this the reset guard could never work: a stale poll accepted id 3, the cursor stayed at 51, and the next `getUpdates(51)` made Telegram drop 4 … 50 for good — the bot then stayed deaf until six more silent days. The ledger's own test for the old behaviour ("never takes the cursor back") is replaced by "keeps the batch's own offset, forwards or back, so a stale poll can come back", and the T4.2b reset-guard case now pushes ids 4 and 5 after the reset batch and asserts both are answered and the next poll is at 6.
+- **B2: the request id is `tg:<chat_id>:<message_id>`, and a stale batch is not deduped.** A Telegram `message_id` is unique inside a chat for ever; an `update_id` is re-randomised after a week of silence. With `tg:<update_id>` the dedupe (which is per conversation and never expires) could attach a *new* message to an *old* settled reply: the user would get a stale answer and the message would never run. `plan.md:76` is amended. `OpenTurn.submission` and `address.messageId` already carried the message, so nothing new is stored.
+  - **Why `accept({fresh: true})`.** The other half of the same reset: after six quiet days the bot polls at 0 and gets ids Telegram re-assigned, but `recent` is full of ids from the old sequence — and Telegram keeps an update for at most 24 h, so every id `recent` remembers is one Telegram dropped long ago. Deduping the first non-empty batch of a stale poll against `recent` would drop real messages. `accept` therefore clears `recent` (only `recent`: what is queued or open is work this ledger is holding and stays deduped), the bot passes `fresh` for exactly that first batch, and `state()`/the doc shape do not change. The bot only sets it when the stale poll really goes back (`offset < cursor`), so a fresh database's first polls are ordinary.
+- **B3: `/think@botname` is `/think`.** The command branch now uses `commandOf(text)`'s `rest` with `think: true`, which is what Go's `command` does (`commands.go:41-58`: cut the word at `@`, then `strings.TrimSpace(text[len(word):])`). `parseThink` is the web's rule and sees `@` as ordinary text, so `/think@movin_bot …` used to reach the model as plain text and a bare `/think@movin_bot` used to reach it at all. Both now behave as `/think`, and `display` stays what was typed (P4).
+- **M1: no LLM configured is Go's failure line, with no submit.** `NO_CONNECTION_MESSAGE` moved from `server/chat.ts` to `agent/reply.ts` (the web route imports it, and `chat.test.ts` imports it from there too, so no re-export was needed). `bot.ts`'s `message()` resolves the connection the way `chat.ts` does and, when `baseUrl` or `model` is empty, logs Go's failed-turn line and settles `FAILURE_PREFIX + NO_CONNECTION_MESSAGE` — Go's `prepare` refuses that connection before any request (`agent.go:152-154`) and `converse` prints the error through the failure line (`bot.go:440-447`). No model call, no submission, no ledger item left open.
+- **M2: `take`'s result is honoured at all three sites.** `handleItem`'s second-check branch, `command` and `callback` all do `if (!(await agent.intake.take(item.id))) return true;` — a job whose item another worker already took acts on nothing: no row, no toast, no command, no reply. `take`'s contract is "true only for the first caller", and at-most-once should not rest on the assumption that no job is ever woken twice (T5.3's restore path will).
+- **M3: workers and `stop()`.** `drain` checks `stopping.signal.aborted` before each job and returns, so nothing new starts after a stop and what is left stays in the ledger for the next start. After a throw from a **turn** job (message, non-text, recover) the chat's worker stops instead of running the next item, so a failed settle can no longer let the next reply overtake it; for a **command** or a **callback** the item was taken before it acted, so the worker logs and carries on (Go's `recover()` around `handle`, `bot.go:377-381`). A throw while stopping is not logged as `telegram handler panicked`: the item is still durable and the next start reports its real outcome.
+  - **`stop()` does not wait for an in-flight job, and why that is safe.** Go's `Wait(15s)` covers turns held in memory (`cmd/movin/main.go:187-189`); here a turn's item is in the ledger, so `main.ts`'s `opened.close()` after `bot.stop()` ends an in-flight turn as `isUnsettled` — the worker then stops at the safe point with the item `open`, and the next start attaches to it. Waiting instead would block a shutdown for up to a turn's 15 minutes to gain nothing.
+- **M4: `run()` never rejects unhandled.** `poll()`'s recovery is now `recovered()`: a ledger read that throws is logged (`telegram recovery failed`, with `retryIn`) and retried with the same doubling backoff, so `poll()` resolves rather than rejecting; `main.ts` also catches `bot.run()` and logs Go's `telegram bot stopped` (`main.go:132-133`). `recover()` was the one await in `poll()` with no handler.
+- **M5: the fake Bot API records an offset only for a poll it answered.** `offsets` was pushed when the request arrived, so a long poll whose client went away (the previous process's `getUpdates(51)`, aborted by `stop()`) could be recorded after the test's `before` marker and make `offsets[before]` the old process's 51 — the `expected 51 to be +0` flake. The offset is now recorded in the branch that answers, and only when the client is still there. The stale comment at that assertion is corrected too ("the ledger says 51", not 6). `bot.test.ts` was run five times in a row to check the flake is gone.
+- **M6: the debug block is gone.** The 6 s sleep and the `DEBUG2` `console.log` in `telegram/crash.test.ts` are deleted; `waitFor` with its 25 s deadline already covers the retry.
+- **M7: the rejected list is Go's.** `reject` (the log line + the bounded row) and `refuse` (Go's `from == nil || !from.IsBot` condition, `bot.go:309`) are now separate: an update with no `from` at all is recorded with `fromId 0` and no `fromName`, a bot's update is neither recorded nor logged, and the group-upgrade row goes through `reject` too, so it writes Go's `telegram message ignored` line as `bot.go:302-304` does (`migrationRejection` became `migratedChat`, because the row and the line are one function now). Auth check 2 for a callback sends only the toast. The file header and the T4.2b entry describe this, not the old deviation.
+- **M8: the log lines are Go's.** Added `telegram agent turn failed` (`bot.go:440`) with Go's fields and order (`by`, `chatId`, `err`) for a failed run and for the missing connection; the migration now writes `telegram message ignored`; `telegram getMe failed, retrying` uses Go's field name `in` instead of `retryIn` (`bot.go:196`). Every other `log.` call in `src/telegram` was checked against Go: `telegram setMyCommands failed` (`err`), `telegram bot token rejected; the bot is off` (`err`), `another poller is using this bot token (409); …` (`retryIn`, Go's name), `telegram getUpdates failed` (`err`, `retryIn`), `telegram message ignored` (`reason`, `chatId`, `chatType`, `chatTitle`, `fromId`, `from`), the migration warning (`oldChatId`, `newChatId`), `telegram handler panicked` (`panic`) and `telegram undo failed` (`by`, `err`) are unchanged and already Go's. The two that have no Go counterpart stay, and are deliberate: `telegram answerCallbackQuery failed` and `telegram editMessageReplyMarkup failed` log an error Go swallows with `_ =` (the port keeps the diagnostic; the header says so), and `telegram intake failed` / `telegram recovery failed` are v3-only paths Go has no equivalent of.
+- **Minor 1:** the doubled `/**` above `commitSubmitted` is one.
+- **Minor 2:** `OpenTurn.submission` is a `number` end to end — the commit stores the submission id itself and `attach` takes the number, so the `String()` on the way in and the `Number()` on the way out (and its `NaN` path) are gone. Nothing is in production, so no ledger migration.
+- **Minor 4:** the idle wait honours the caller's signal. `submit`'s `waitForIdle` gets `withAbortSignal(signal, background)` (`@earendil-works/chord/context`, listed for contexts at `briefs/durable-api.md:350`); pi-durable's waiters reject with the signal's reason (`dist/harness/util.js`, `Waiters.add`), so a Stop or a watchdog during the wait returns `aborted()` without submitting. A close or a fault during the wait is still raised, not turned into `aborted`, because that is not the caller's signal.
+- **Minor 3 is unchanged**, as the brief says: the duplicate `requestId` pre-check spends a write commit on a read, consistent with `promptState`.
+- **A test-helper change B1/B2 force.** `bot.test.ts`'s `privateMessage` used to send `message_id: 1` always, as Go's helper does — harmless in Go, which has no request id, and fatal here once the id is per message. It now gives each private message the next id for its chat, as Telegram does.
+- **Tests.** `bot.test.ts` (42 + 1 todo) gains "answers a new message whose update_id an older one already used" (B2, a reopen across the reset), "treats /think@botname as /think, and a bare one as the hint" (B3), "no LLM configured" (M1 + the failed-turn line), "a take another worker made first" (M2, command and callback), "stop" (M3: no job starts, no panic, the reopen answers both), "startup recovery" (M4), the from-less and bot rows of `TestAuthorisation` and the second check's silent callback (M7), the failed-turn line in the watchdog case (M8); its reset-guard case is extended for B1. `adapter.test.ts` (89) gains "forgets the ids a stale poll brings back, but not what is still queued" (B2's `fresh`) and "returns aborted when the caller's signal fires during the idle wait" (minor 4), and its cursor case is the B1 one.
+- **Mutations, on container copies** (`/tmp/mut-t4fix`, one file mounted over `/app/src/durable/adapter.ts` or `/app/src/telegram/bot.ts`), each failing the named test:
+  - **B1, the adapter:** `accept` keeping the higher cursor (`if (batch.cursor > doc.cursor)`) → "keeps the batch's own offset, forwards or back, so a stale poll can come back" (`expected 20 to be 5`).
+  - **B1, the bot:** `cursor = Math.max(cursor, last + 1)` → "polls from 0 while nothing has been accepted for six days" (`waited for the cursor back after the accept`).
+  - **B2, the request id:** the requestId built from the update id alone again (the old `tg:` form) → "answers a new message whose update_id an older one already used" (`expected [ …(2) ] to have a length of 4 but got 2` — the second message attached to the first turn's reply).
+  - **B2, `fresh`:** `accept` ignoring `batch.fresh` → "forgets the ids a stale poll brings back, but not what is still queued" (`expected [] to deeply equal [ { id: 10, … } ]`).
+  - **B3:** the command branch taking `parseThink(text)`'s text and `think` again → "treats /think@botname as /think, and a bare one as the hint" (`expected 'ok' to be 'Put your question after /think, …'`).
+  - **M1:** the connection check removed from `message()` → "answers Go's failure line without a model call, and logs the failed turn" (`expected 'Saved.…' to be 'Sorry, that didn't go through: …'`).
+  - **M2:** the command site ignoring `take`'s result → "acts on nothing, for a command and for a callback" (`expected [ { chatId: 111, … } ] to have a length of +0 but got 1` — `/help` was answered).
+  - **M3, the stop:** `drain`'s `if (stopping.signal.aborted) break;` removed → "starts no further job, and the reopen answers both queued updates" (`expected [ …(4) ] to have a length of 2 but got 4` — the second item's turn ran after the stop). Worth recording: the first version of that case held the turn open with a hanging model, and the mutation **passed** — a close ends such a turn as `isUnsettled`, which stops the worker on its own, so the check was invisible. The case now lets the stopped turn finish normally, which is the only shape where the next job would start.
+  - **M3, the throw:** `if (!taken(job)) break;` removed → "logs it, stops that chat's worker, and leaves the item durable" (`expected [ { chatId: 222, … }, …(1) ] to have a length of 1 but got 2` — the next item ran).
+  - **M4:** `recovered()` rethrowing instead of logging and answering false → "logs a failed ledger read and retries it instead of rejecting run()" (`TestTimeoutError: Test timed out in 5000ms` — `run()` rejected, so the bot never started).
+  - **M5:** the fake Bot API recording an offset when the request arrives instead of when it answers → **not caught, and that is honest**: the reset-guard case passed on three runs. The old flake needed the aborted poll's socket close to be observed on the wrong side of the test's `before` marker, which this machine did not reproduce; the fix removes the race by construction (a poll that was not answered records nothing), and the fixed code passed `bot.test.ts` five times in a row.
+  - **M7, the from-less row:** `refuse`'s `from?.is_bot === true` back to `from === undefined || from.is_bot` → "records an update with no sender as fromId 0, and a bot's not at all" (`TestTimeoutError` — no row was ever recorded).
+  - **M7, the callback's row:** the second check refusing a callback first → "refuses a message queued before the allowlist changed, and answers a callback's toast" (`expected [ { …(9) }, { …(9) } ] to have a length of 1 but got 2` — two `telegram message ignored` lines).
+  - **M8, the failed turn:** `if (result.status === "failed") turnFailed(…)` removed → "stops a turn at its deadline and sends Go's failure line instead" (`expected [] to deeply equal [ ObjectContaining{…} ]`).
+  - **M8, the `in` field:** `in: wait` back to `retryIn: wait` → "retries with Go's field name `in`, as bot.go:196 writes it" (`expected { …(5) } to match object { level: 'WARN', in: 1000 }`).
+  - **Minor 4:** `waitForIdle(background)` instead of `waitForIdle(withAbortSignal(signal, background))` → "returns aborted when the caller's signal fires during the idle wait" (`TestTimeoutError` — the turn waited for the chat instead of ending).
+  - Every mutation ran on a copy under `/tmp/mut-t4fix`, mounted over `/app/src/durable/adapter.ts`, `/app/src/telegram/bot.ts` or `/app/src/telegram/fake-api.ts`; the tree outside the container was untouched.
+
+## T5 plan (main session, 2026-11-22, ZY away)
+- Adopted `briefs/T5-plan.md` (planner) as written; answers to t5-spec §13/§14 are its §3 table. None changes a ZY decision or the approved step list; no new dependency.
+- Highlights: one generic `movin.schedule` task in `adapter.ts` (background, owned by `sys:schedule`, guarded by a `movin.schedule` doc, 15-min sleep cap, `rearm`); host halves in `src/tasks/{checkin,docsync}.ts`, texts in `src/telegram/checkin.ts`; the check-in reaches the model as a pending note in the next user message (not transcript entries); docs sync keeps its in-process startup/minute/`/sync` paths and gets a durable daily trigger; restore path via a `StartGuard` (S3 `harness/<instance>/epoch.json` = `{"schema":1,"starts":N,"at":…}`), SQLite acknowledged before S3; `MOVIN_INSTANCE` required (`dev`|`prod`, no default); restore keeps `recent`, clears queue/open/cursor, aborts every live task by id before `resume()`.
+- **For ZY on return:** the start counter cannot see a restore when no start happened between snapshot and restore (the normal drill). As approved, the explicit `HARNESS_RESTORE_ID` covers it and `velero.md` makes a new ID mandatory; an hourly counter bump would close it but changes the Design text, so it waits for ZY.
+\n
+## T5.1a: check-in store, texts and keyboard (pure code)
+`src/telegram/checkin.ts` (texts, keyboard, `ci:` parse) and the store half of `src/tasks/checkin.ts`
+(`checkin.json`, the claim protocol, the due window, `checkinChat`), with `app/golden/t51/main.go`
+printing `src/telegram/testdata/checkin.go.json` from Go's own functions.
+
+- **The note's bytes are the one thing Go has no single string for.** Go remembers two turns,
+  `(morning check-in)` and the reply (`checkin.go:172-189`); v3 delivers one note, so `note.text` is
+  `MORNING_CHECKIN` + `"\n\n"` + the reply (the split parts joined, then `\n\nAsked about:\n` and one
+  `• …` line per ask). The literal, the reply and the separator are all pinned by the golden; the choice
+  of a blank line between them is this step's, and T5.1b's `prompt.ts` renders the note as it is.
+- **Every ask is in the note.** Go leaves an ask whose send failed out of `Asked about:`
+  (`checkin.go:163-171`); here the parts are sent or the delivery fails as a whole, so all of them are
+  listed. Go's warning `telegram check-in task message failed` therefore has no v3 counterpart, which is
+  T5-plan §2.2's recorded difference.
+- **`checkinDue` compares the wall clock in the app's zone.** `rfc3339(now, timeZone)`'s first 19
+  characters against the day's `hh:mm` and `CHECKIN_CUTOFF`, so the SGT and UTC halves of
+  `TestCheckinDue` agree with Go. The one difference: a spring-forward can skip the scheduled minute
+  itself, and Go resolves `time.Date` of a time that does not exist into some real instant while this side
+  keeps comparing wall readings — the two can then differ around the gap. The app's zones (Asia/Singapore,
+  `TZ` unset → UTC) never change, and the cutoff (20:00) is inside no real zone's change, so nothing is
+  coded around it; a zone with a gap at the check-in time would need a decision.
+- **`parseStamp` accepts a fractional second.** Go's `time.Parse(time.RFC3339, …)` does even though the
+  layout has none, so `at: …:00.500Z` is a *parsed* claim, not an unparsable one; the golden has one
+  such record and expects it taken. Nothing this app writes carries a fraction (`goStamp`), so this only
+  matters for a file Go or an operator wrote.
+- **A chat ID is a JS number.** Go's `int64` becomes `number` at `checkinChat`, as Telegram's own types
+  already are in `client.ts`; a real chat ID is far below 2^53.
+- **Decode errors are Go's for a type mismatch.** `json: cannot unmarshal string into Go struct field
+  CheckinRecord.schema of type int` is reproduced (the golden pins it, and the port needs it for the admin
+  page's `last`); text that is not JSON at all keeps `JSON.parse`'s message behind Go's `decode
+  checkin.json:` prefix, as `settings.ts` already does for settings.json. Re-spelling Go's scanner errors
+  ("invalid character … looking for beginning of value") would be guesswork.
+- **The golden gained a case the tests needed.** The mutation "a takeover that drops `since`" passed
+  every test: Go's `nextSince` already answers the crashed claim's `since` except when it is empty, so
+  only a crashed **first-ever** claim taken over the same day can see the line (`checkin.go:117-119`).
+  `takeover_of_a_crashed_first_ever` is that case, and `TestCheckinClaim`'s second half names it.
+- **Tests.** `src/telegram/checkin.test.ts` (36): the golden's six agendas (summary, messages with
+  keyboards, note), the keyboards, 18 callback data strings, the toasts; `TestCheckinCapsAskMessages`' text
+  half, `TestCheckinButtonAfterTheTaskMoved`'s data strings, the 64-byte limit, `shortDay`'s fall-through.
+  `src/tasks/checkin.test.ts` (31): the golden's seven record byte cases (replayed step by step), ten
+  record-state cases and the due table; `TestCheckinDue`, `TestCheckinClaim`,
+  `TestCheckinAfterAnUnfinishedDay`, `TestCheckinReleaseOfFirstEver`, `TestCheckinOneWinner` on the memory
+  store and on MinIO, and `checkinChat`'s order and its two texts.
+- **Mutations, on container copies**, each failing a named test: `at: now.toISOString()` → "sending_first:
+  the bytes Go writes"; `since` always written → the same; `at === null ||` in `taken` → the
+  `"at":"yesterday"` record-state case; the takeover line removed → `takeover_of_a_crashed_first_ever`
+  and `TestCheckinClaim`'s takeover case; `release` stamping a new `at` → "released_first_ever: the bytes
+  Go writes"; `wall > at` → `TestCheckinDue` and the golden due table; the count from the capped list →
+  `TestCheckinCapsAskMessages` and the `ten_asks` golden; the button date fixed → every golden agenda with
+  a keyboard.
+
+### T4 fixes, round 2 (re-review)
+The re-review's one major and four minors, all in `app/src/telegram/bot.ts` (plus its tests and the fake API).
+
+- **M-R1: a chat whose worker stopped rebuilds its items from the ledger.** Stopping after a throw (M3) left later items in the ledger's queue while the worker's list was gone, so the chat's next update started a fresh list and ran *ahead* of them — the exact overtaking M3 meant to prevent, one level up. Now the throw marks the key `stale` (in `drain`, before the list is dropped, with no await between the two), and both of these rebuild it through `ledgerJobs(key)` — the open turns as `recover` jobs, then the queue in ledger order, the same order `recover()` gives every chat:
+  - **the next `wake`:** the rebuild happens before anything runs, and the item the wake carries is *not* pushed again, because the accept committed it before the wake, so it is already in the queue. `wake` is now `async`, and `recover()`/`accept()` await it.
+  - **a retry with the same 1 s → 60 s doubling backoff as `recovered()`:** a chat nobody writes to again still gets its stranded items answered without a restart. One retry per chat (`resyncs`), it ends at the first rebuild or when the chat stops being stale, and `sleep` — which listens to `stopping` — cancels it on `stop()` with everything else the poll loop waits on.
+  - A ledger read that fails during either path is logged as `telegram ledger rebuild failed` and leaves the chat stale for the retry; the new item waits behind the stranded ones in the list rather than overtaking them.
+- **m1 (M5): the fake Bot API counts in-flight `getUpdates` and exposes `pollsIdle()`.** The reset-guard and "uses the stored cursor" cases await it before capturing `before`, so the stopped process's last long poll is finished before the offsets are counted. The earlier fix (record an offset only for a poll that answered) is still what makes the count meaningful; this closes the remaining window, where a poll that answered *after* `before` was captured made `offsets[before]` the wrong entry.
+- **m2: the failed-turn line follows the reply, not the run's status.** `message()` now builds `channelReply` first and logs `telegram agent turn failed` on `!reply.outcome.ok`, with `reply.outcome.error` — or `TIMED_OUT_DETAIL` when the watchdog fired, because that is the text the reply carries. The consequences: a `turn_limit` run is an answer in `reply.ts` (Go's forced-answer outcome), so it logs nothing, and the watchdog's case now pins the `err` field to `TIMED_OUT_DETAIL`. The rig can produce a `turn_limit` cheaply: `LlmStub.toolLoop` makes the stub call a tool on every request, ignoring the forced answer, so pi-durable's turn budget (`maxToolRounds + 1`) ends the run with it.
+- **m3: no dead `parseThink` in the `message` branch.** `kindOf` sends every text starting with `/` to the command branch, so a `message` item can never be `/think`; the branch now passes the text with `think: false` and `parseThink` is no longer imported by `bot.ts`.
+- **m4: the reset-guard comment is true again.** It claimed `recent` drops a redelivery of the old ids; with `fresh` clearing `recent`, what actually stops them is that Telegram confirmed them before the reset and cannot hand them out again.
+- **Tests.** `bot.test.ts` (48 + 1 todo): "a chat whose worker stopped" (the stranded turn is answered before the next update, each once; and with no further update, the retry answers it after ~1 s, attaching rather than re-running — `llm.requests` stays at 2), "a turn that hits the tool limit" (`Done.` and no failed-turn line), the watchdog case now asserts `err: TIMED_OUT_DETAIL`, and both reset cases await `pollsIdle()`.
+- **Mutation.** Removing the resync (the `stale` branch in `wake` made unreachable and `scheduleResync` not called) on a `/tmp/mut-t4fix` copy mounted over `/app/src/telegram/bot.ts` fails **both** new cases: "answers its stranded item before the next one, once each" (`TestTimeoutError: Test timed out in 5000ms`) and "answers the stranded item on the retry, with no further update" (`Error: waited for 1 sent messages`).
+- **State of the tree.** `make -C app lint` fails only in `app/src/durable/adapter.test.ts` (organizeImports, a duplicate `noRedeclare`, formatting) and `tsc` only with `adapter.test.ts(2323,10)` / `(2763,10)` "Duplicate function implementation" — the parallel T5.1b coder's file, not touched here; the eleven files this round touched pass `biome check --error-on-warnings` with nothing reported. Full suite: 62 files, 1186 passed, 1 skipped, 1 todo. Root `make lint`: `lint ok`.
+
+## T5.1b: adapter schedule task and pending notes
+`app/src/durable/adapter.ts` gains the one generic scheduled task and the pending note, `app/src/agent/prompt.ts`
+the notes block; tests in `adapter.test.ts`, `crash.test.ts`, `crash-schedule-child.ts` and `prompt.test.ts`.
+
+- **Step 0 (a throwaway `step0.test.ts`, deleted after; direct pi-durable import).** A conversation-owned
+  `background: true` task created from `harness.commit` survives a reopen: `FIRST OPEN: runs 1 armed
+  [[600000,true],[60000,false]]` then `CHECK 1 before resume: [["movin.step0.schedule",true,{"kind":"sleeping","until":1060000}]] armed: 0 runs: 1`
+  — so a *sleeping* task is durable, and before `resume()` nothing is armed and no run happens.
+  `CHECK 2 waitForIdle: {"ownerDone":"idle","otherDone":"idle","harnessDone":"idle","runs":1}` — a background
+  task holds neither its owner's, nor another conversation's, nor the harness's idle. `CHECK 3:
+  {"outcome":"marked","aborts":1,"runs":1,"armedBefore":1,"notCancelledAfter":0,"cancelledAfter":1,"liveTasksAfter":0}`
+  — `abortTask` on a sleeping task disarms its timer and runs the abort handler, which settles it terminal with
+  no further run. (The task is `pending`, not `sleeping`, in `inspect()` until it has run once: `resume()` is
+  what starts scheduling.)
+- **Check 4: pi-durable has no call that wakes a sleeping task early.** `sleepUntil()` only stores one
+  (`types.d.ts:310-315`), and `Harness.resume()` "make[s] sleeping tasks that are **due** runnable"
+  (`harness/scheduler.d.ts:107-109`); `wake()` only reports when the next process is needed. So `rearm()`
+  takes the brief's fallback: abort a sleeping task, then create a new one with the guard document, which
+  starts at once with `target: null`. **That is two commits, not one** (T5 fixes, round 1, corrected this
+  claim): pi-durable's `Tx` has no abort (`types.d.ts:895-960`), so the mark and the creation cannot share a
+  commit. Two are safe because every reader treats an abort-marked task as gone — `ensureSchedules()`
+  replaces one at open, before `resume()` runs its handler, and `rearm()` creates the replacement it is
+  missing — and the creating commit writes only while the guard still holds the id its caller read. A
+  *running* task is never aborted — `rearm` only sets an in-memory flag that the run consumes at its sleep
+  (it sleeps 0, so the rerun reads the new setting). A flag that arrives before the run starts is dropped at
+  the phase's start, because that run already reads it.
+- **`abortSchedules(agent)` is a second test helper** (the main session accepted it): same shape as
+  `abortDeliveries`, because "a terminal task is replaced" needs a terminal task and only `adapter.ts` may
+  touch pi-durable. It awaits `waitForTask`, so the record really is terminal before the test reopens — a task
+  that is only abort-*marked* at the close settles after the next open's `ensureSchedules()` has already
+  decided to keep it, and the replacement is then never created.
+- **`ensureSchedules()` runs before `resume()`,** and its failure closes the harness and rethrows (a process
+  that cannot create its schedules must not start scheduling). A name with no spec in this process — a
+  database another process's spec created — parks for the cap and warns `no schedule spec; the task parks`
+  once per name, because the kind is always registered.
+- **The notes live in a document, not the transcript** (`movin.notes`, conversation scope): the 6 h idle reset
+  would hide an entry, an entry appended mid-run can end a context or split a tool call from its result, and
+  web history reads `data.text` only. `deliver(..., {note})` writes it in the delivery's own commit;
+  `submit` reads it, hands it to `UserContentOptions.notes` and clears it in the admission commit. A duplicate
+  `requestId` takes the attach path before any of that and consumes nothing. `prompt.ts` renders it after the
+  delta block and before the date line under `Sent to this chat since your last message:`, each text verbatim
+  and separated by a blank line — pinned byte for byte, with one note, two, and none.
+- **Load check (`harness.db` + `-wal`, manual clock, one wake per minute):** `122880 db + 4136512 wal` after
+  100 wakes and the *same* after 1000 wakes (runs 1001). pi-durable keeps **no** row per wake: the sleep is
+  the task's own record updated in place, and the 4 MB WAL is checkpointed and reused at SQLite's journal
+  size. The test asserts the total after 1000 wakes stays under twice the figure at 100.
+- **Tests.** `adapter.test.ts` (+17): the run twice (creation with `null`, then the target it answered), the
+  15-minute cap on a 24 h target, a throwing spec (`schedule run failed`, retry in 60 s, task sleeping not
+  faulted), one task across a reopen, a terminal task replaced (`schedule task replaced`), `rearm` on a
+  sleeping task (immediate run, `target: null`), `rearm` mid-run (one rerun, no abort, no replacement), the
+  idle test, the parking warn (once, not per cap), the load check; and the notes: one commit with the delivery
+  (`observeCommits`), carried in the next turn only, same-tag replacement, cleared **in the admission commit**,
+  duplicate `requestId` consuming nothing, a 6 h gap still carrying it in a fresh context, and no note in the
+  web history. `crash.test.ts` (+3, `crash-schedule-child.ts`): killed while sleeping → one task, same `until`
+  and `target`, no run before the target; killed inside `run` → the phase reruns with the target it had and
+  there is still one task; and reopened *after* that target with no timer armed → `resume()` runs it at once with
+  the stored target, and the one task sleeps again at the next one (see the woken-sleep note in §5.3).
+  `prompt.test.ts` (+1): the exact bytes with notes, and the same turn with none.
+- **Mutations, on container copies** (`/tmp/mut`, `movin-app-test:local`, each failing its named test):
+  `ensureSchedules` without the guard check (two tasks) → "creates no second task when the database is opened
+  again"; `background: true` removed → "does not hold a chat's idle, nor its own conversation's"
+  (`TestTimeoutError: Test timed out in 10000ms`); the cap replaced by `next` → "caps a far target at fifteen
+  minutes and keeps the same target"; the notes cleared in a commit of their own after the admission →
+  "clears the notes in the commit that admits the message"; the clear removed → "carries a delivery's note in
+  the next turn only"; `rearm` aborting a running task → "reruns once when rearmed mid-run, and aborts
+  nothing" (`TestTimeoutError: Test timed out in 5000ms`).
+- **State of the tree.** `biome check --write` on the six files, `make -C app lint` green (154 files, no
+  fixes), full suite `--maxWorkers=3`: 62 files, 1206 passed, 1 skipped, 1 todo; root `make lint`: `lint ok`.
+
+### T4 fixes, round 3
+The review of the resync code (M-R1) found two ways it could still lose the order it was added for. The code was fixed by the main session: `rebuild(key)` owns the ledger read, a `rebuilding` map shares one rebuild per chat, `wake` starts no worker when the rebuild fails, and it pushes its own item only when the rebuilt list does not already hold it. This round adds the tests that pin both, and reading the code turned up one cosmetic defect and one invariant worth writing down.
+
+- **R3-1: a failed rebuild leaves the item where it is.** Before, `wake` fell through to the normal path when `rebuild` returned `undefined`, so the new item got a list of its own and ran ahead of the stranded turn — the overtaking M-R1 exists to prevent, one branch further in. Now the failure path calls `scheduleResync` and returns: the item stays in the ledger's queue (the accept committed it before the wake), and the retry rebuilds `[open…, queue…]`, so the stranded turn is answered first. Test: "starts no worker while the rebuild cannot read the ledger, then answers both in order" — the ledger read fails once after the throw, nothing is sent for 300 ms, then the 1 s retry answers "Throws" and then "Second", `settles` is `[81, 82]` (one successful settle per item, recorded by the rig's wrapper), and the ledger ends empty.
+- **R3-2: one rebuild per chat, so one drain.** `rebuild` returns the in-flight promise from `rebuilding` instead of starting a second `ledgerJobs`, so a `wake` that arrives while the retry's rebuild is inside its ledger read joins that rebuild rather than starting a worker of its own; only one `jobs.set` and one `drain` happen, and the woken item is pushed last (or skipped when the rebuild already listed it). Test: "runs one worker when the retry and a new update rebuild at once" — the rig holds `state()` open, the retry's rebuild enters it, a new update's `wake` joins, the test releases the read, and `settles` is `[91, 92]` with two replies in order. A second drain would show the same two ids twice, because `settle` is idempotent and would not otherwise betray it.
+- **The rig's new `LedgerControl`.** `agent.intake.state()` is wrapped next to `failRecover`: `failNext(n)` makes the next n reads throw, and `hold()`/`release()` keep a read open until the test lets go. `settles` records the item ids whose settle succeeded, in order — the "handled once, in order" signal, chosen because neither the reply count nor the model-request count can see a second drain (`settle` is idempotent, and a repeated submit attaches to the settled turn instead of asking the model again).
+- **Mutations** (`/tmp/mut-t4fix` copy of `bot.ts` mounted over `/app/src/telegram/bot.ts`):
+  - **R3-1:** the failure block's `return` removed (`scheduleResync(key)` then fall through, with the membership check made an `else if`) → "starts no worker while the rebuild cannot read the ledger, then answers both in order" fails: `expected [ { chatId: 111, …(4) } ] to have a length of +0 but got 1` — the second update was answered while the stranded turn waited.
+  - **R3-2:** the `rebuilding` lookup removed (every `rebuild` starts its own `ledgerJobs`) → "runs one worker when the retry and a new update rebuild at once" fails: `expected [ 91, 91, 92, 92 ] to deeply equal [ 91, 92 ]` — two drains, each item handled twice.
+- **What a first attempt at the R3-1 mutation showed.** Only removing the `return` also left the membership check running on `undefined`, so `wake` threw a `TypeError`, the accept failed, the poll retried the batch and nothing ran — the test passed for the wrong reason. The mutation has to make the failure path *work* (fall through with the check as an `else if`), which is the behaviour the fix replaced.
+- **A hole I looked for and did not find, and the invariant it rests on.** `rebuild` overwrites `jobs.get(key)` without asking whether a worker is live for that key, and `drain` still ends with `jobs.delete(key)`. That is only safe while **no rebuild starts while a drain for the same key is running**, which holds today because `stale` is set in exactly one place — `drain`'s catch — with no `await` between it and the loop's `break`/`jobs.delete`. It is worth keeping in mind: any future `stale.add` outside that block (on `isUnsettled`, say) would let a rebuild replace a live worker's list, its `jobs.delete` would then drop the newer one, and the next `wake` would start a second drain.
+- **A cosmetic defect left in the code I was asked to read (not changed here).** In `bot.ts` the `ledgerJobs` doc block now sits directly above `rebuild`'s, so `rebuild` has two doc comments and `ledgerJobs` (below it) has none. Biome does not check that; it should be moved down one function.
+- **Checks.** `biome check --write` on `bot.test.ts` and `fake-api.ts`: `Checked 2 files. No fixes applied.`; `src/telegram`: 8 files, `155 passed | 1 todo (156)`; `make -C app lint`: `Checked 154 files in 14s. No fixes applied.` with `tsc` silent (the parallel coder's `adapter*.ts` were settled by then); root `make lint`: `lint ok`.
+
+#### T4 fixes, round 4
+R4-1: a stale chat that got two items in one poll batch queued the second one twice. `wake(A)`'s rebuild held `[A, B]`, and `wake(B)` — no longer stale, so no rebuild — pushed B onto the same list. The code (fixed by the main session) now keeps an `inHand` set of the ledger ids a worker's list holds or is running: `wake` skips an id already in hand, `rebuild` adds its ids, `drain` frees each id when its `handle` settles and frees the leftovers when it drops its list, and `jobId()` names a job's id. The old membership check against one rebuilt array is gone, which is the right shape: it only knew about the list *that* rebuild returned.
+
+- **Test.** "handles each item of one batch once while the chat is stale": with no model configured, every message item answers Go's failure line and settles, so one failed-turn line and one `settles` entry per item count the work without a model turn. The chat goes stale (an injected settle failure), then two updates are pushed in one `push` call: `settles` is `[101, 102, 103]` and the failed-turn lines are four (101 threw once and was rebuilt, 102 and 103 ran once each). The ledger ends empty.
+- **Mutation** (`/tmp/mut-t4fix` copy of `bot.ts` mounted over `/app/src/telegram/bot.ts`, `if (inHand.has(id)) return;` removed): `expected [ 101, 102, 103, 102, 103 ] to deeply equal [ 101, 102, 103 ]` — both items of the batch are queued again, so the guard is what the test pins.
+- **Holes looked for, and what I found.**
+  - *An id removed while it is still queued:* not reachable. `drain`'s `finally` frees an id only after that job's own `handle` settled, and the leftover loop runs in the same synchronous block that drops the list — `rebuild`'s `jobs.set` cannot interleave inside it, which is the invariant now written on `rebuild`.
+  - *A rebuild after a stale break re-adds correctly:* yes. The leftover loop frees the dropped list's ids before `jobs.delete`, and `rebuild` re-adds from the ledger; `Set.add` of a held id is a no-op, and each held id is either in a live list or the job being handled.
+  - *An id stuck in hand for ever:* every `add` has a paired `delete` — `handle(...).finally` for what runs, the leftover loop for what is dropped, including the `stopping` break. The one unpaired case is that `inHand` is keyed by the **bare ledger id**, not by chat, so two chats holding the same id would share one marker: a `wake` for the second chat's item would be skipped (its item then waits for a restart, because that chat is not stale and so has no resync) and a drain could free the marker while the other chat's job is still queued. It is unreachable in practice — a marker lives at most one turn (the 15-minute watchdog is the worst case) and an id can only repeat across chats after a reset, which needs six silent days, so `inHand` is empty by then — but a `Set<string>` of `key:id`, or a `Map<string, Set<number>>`, is cheap insurance if the reset guard ever changes.
+- **Checks.** `biome check --write src/telegram/bot.test.ts`: `Checked 1 file. No fixes applied.`; `src/telegram`: 8 files, `156 passed | 1 todo (157)`; root `make lint`: `lint ok`. `make -C app lint` fails only in the parallel T5.3a coder's `app/src/durable/step0-child.ts` and `step0.test.ts` (`noUnusedImports`, `noUnusedVariables`, `noRestrictedImports` — they import pi-durable in a test child, which only `adapter.ts` may do — and formatting); `tsc` alone reports two errors in `step0.test.ts` (`TaskRuntime` arity at :44, `record.abort` at :154). `biome check --error-on-warnings src/telegram` (17 files) reports nothing.
+
+## T5.3a: restore path, start guard, config
+
+A database restored from a Velero snapshot must start without resending an old reply or replaying a tool, and a
+normal start must behave exactly as before. The design is T5-plan §2.4 and §5.2, implemented as written.
+
+- **The guard** (`app/src/durable/startguard.ts`, no pi-durable import): `harness/<instance>/epoch.json` holds
+  `{"schema":1,"starts":N,"at":"…Z"}` in Go's field order. `check()` reads it (a missing object is 0, and any other
+  failure is retried at 1 s, doubling to 30 s, with `harness start counter unreadable` (`err`, `in` in
+  milliseconds) until it answers or the signal aborts, which throws) and decides in T5-plan §2.4's order:
+  `starts === 0` is never a restore, then a non-empty env id that differs, then `db.starts < s3.starts`. It returns
+  `max(db, s3) + 1` and the id to record (the env's, or the old one when the env has none). `committed()` writes
+  conditionally on the ETag `check()` read; on `PreconditionError` it re-reads and writes the max; any other failure
+  only warns (`harness start counter not saved`), because SQLite ahead of S3 heals through `max()` next start.
+  A **damaged** object is a read failure like any other and is retried, not read as 0: reading it as 0 would skip a
+  restore. Chosen deliberately; the runbook's fix is to delete the object.
+- **The adapter** (`OpenAgentOptions.startGuard`, `movin.start` = `{starts, restoreId}`): between
+  `openedHarness()` and `resume()`, `startUp()` reads `movin.start`, calls `check`, and on a restore aborts every
+  unsettled submission and every live task from `inspect()` (background included; `terminal` is fine; never
+  `conversation.abort()` or `waitForIdle()`, which start scheduling — G7). Then **one** acknowledging commit:
+  `movin.start`, and on a restore the intake's `queue`/`open` cleared and `cursor = 0` (`recent` and `acceptedAt`
+  kept), a new `movin.epoch` (assigned to the closure variable before the `agent` object is built) and
+  `movin.schedule` cleared; then `ensureSchedules()`, then `guard.committed(starts)`, then `resume()`. SQLite is
+  written before S3 on purpose. Every failure in that block closes the harness and fails the open.
+  Without a guard (tests, eval) only `ensureSchedules()` runs, as before.
+- **The line.** One `harness start` info line per start, `{starts, restore}` where `restore` is `none`/`id`/`counter`,
+  plus `{tasksAborted, submissionsAborted, intakeDropped}` on a restore. Counts are ids processed, not "marks
+  committed": `abortSubmission` answers `already_placed` for a placed input (its generation's abort settles it) and
+  those are counted too.
+- **Config.** `instance` ← `MOVIN_INSTANCE`: validated in `loadConfig` when set (exactly `dev`/`prod`, else
+  `MOVIN_INSTANCE must be "dev" or "prod"`) and **required by `serve()`**, which throws the same message on an empty
+  one. This is the "required where `serve()` builds the guard" option: `loadConfig` is also called by `admin.test.ts`
+  and `config.test.ts`, which build only the rest of the config, and prod still fails to start without it
+  (T5-plan §14.6). `restoreId` ← `HARNESS_RESTORE_ID`: optional, trimmed, at most 128 printable ASCII characters
+  (`HARNESS_RESTORE_ID must be at most 128 printable ASCII characters`). `docker-compose.yml` sets
+  `MOVIN_INSTANCE: dev` for `app-ts` and `app-test` only; `main.ts` builds the guard from the store serve() built
+  (`Running.store`) and `config`, and one `AbortController` — registered before the open — aborts a `check()` that is
+  still waiting when the pod is told to stop.
+
+**Step 0 (T5-plan §6, checks 5-7).** A scratch test (since deleted) opened a harness twice around a SIGKILLed child
+that left a delivery whose send hung, a schedule task sleeping, a generation hung in a tool and three inputs (one
+placed, two queued). Pasted output:
+
+```
+inspect before:
+{ "scheduling": "paused",
+  "tasks": [ ["movin.outbox.delivery","pending"], ["pi.tool","pending"], ["pi.generation","waiting"], ["movin.schedule","sleeping"] ],
+  "submissions": [ [15,"input","placed"], [17,"input","queued"], [18,"input","queued"] ] }
+aborts: ["movin.outbox.delivery:marked","movin.schedule:marked","pi.generation:marked","pi.tool:marked"]
+        ["placed:already_placed","queued:aborted","queued:aborted"]
+after the aborts, before resume: scheduling "paused", marker unchanged, same task kinds and states, no abort run
+receipts after resume:
+[["movin.outbox.delivery","terminal","aborted"],["pi.tool","terminal","aborted"],["pi.generation","terminal","aborted"],["movin.schedule","terminal","aborted"]]
+placed {"status":"unanswered","reason":"aborted",…}
+queued {"status":"unanswered","reason":"aborted",…}
+marker after: send / run / tool / ready   (unchanged: the tool ran once, in the child)
+```
+
+- **Check 5** holds: `abortTask` and `abortSubmission` resolve before `resume()`, `scheduling` stays `paused`, and no
+  task code runs (the marker does not grow) — for a delivery and for a sleeping background task. An aborted record
+  reads as it did (`sleeping` stays `sleeping`); only the mark is committed, and the handler runs under `resume()`.
+- **Check 6** holds: after `resume()` the aborted generation settles its submission (`unanswered`, reason `aborted`)
+  and nothing new starts — the input queued behind it is withdrawn too, so `afterFailedRun: "keep"` has nothing to
+  keep (`faux.state.callCount === 0`).
+- **Check 7** holds: the task that was `running` at the kill shows as `pending` (`pi.tool`), the generation shows
+  `waiting` on it, and aborting the generation left the tool unexecuted (one `tool` line, in the child).
+
+**Tests.** `startguard.test.ts` (+17): every decision row, dev/prod separate, the ETag race keeping the max, the
+1/2/4/8/16/30 s table with its cap (fake timers), a damaged object retried, the abort throwing, and on MinIO the real
+`If-None-Match` race and the two `PreconditionError` shapes. `adapter.test.ts` (+8, `startGuard` on the `open` rig):
+counter-ahead restore aborting 3 live tasks and dropping 2 intake items with `recent` kept and the epoch rotated
+**in the commit** (the next open reads the same epoch back), the id restore and its one-shot behaviour (a third id
+restores again), counters equal keeping the queue, the open turn and both deliveries, a new database with S3 ahead
+not a restore, dev/prod apart, SQLite-before-S3 through a guard whose `committed` dies after its write, the counter
+wait (1 s + 2 s of failed reads, nothing sent while it waits, the overdue delivery caught up once it answers, a turn
+then answering), and a failed read failing the open and
+freeing the database again. `config.test.ts` (+5). `main.test.ts` (+2 and `testConfig()` gains `MOVIN_INSTANCE=dev`,
+and the harness-cannot-open case names it so it still fails at the harness): `serve` exits 1 without the instance
+before anything listens, and `openDurableAgent` with the guard logs `{starts: 1, restore: "none"}`.
+`crash.test.ts` (+1) and `crash-restore-child.ts`: T5-plan §5.3.
+
+**§5.3, and how it was split.** One `it`, so the snapshot is captured once and every assertion stays. **Child A** is
+the spawned, SIGKILLed process (`crash-restore-child.ts`): chat 111's intake batch (100 submitted, 101 queued) with
+its turn hung inside `add_entry` after the write, chat 222's two-part delivery whose first send hangs, chat 333's
+delivery sleeping on a 429, and one sleeping `movin.schedule`; its last marker line is `ready <epoch>`. The parent
+copies `harness.db`, `-wal` and `-shm` as the snapshot. **B and C run in the test process**, as every other reopen in
+`crash.test.ts` does (the "second process" of the T0.2 pattern): B finishes directory 1 as the control and does
+resend and re-run the tool; C opens the copy. No child needs Telegram — the new message is accepted, submitted and
+settled by the test with the bot's own actor, so `bot.ts` and `fake-api.ts` stay untouched (another coder is in them).
+Recorded: B → `["222a","222b","Saved it."]`, one entry, one journal record, `starts` 2 on both sides; C →
+`{"starts":3,"restore":"counter","tasksAborted":5,"submissionsAborted":1,"intakeDropped":2}`, no send, no stub
+request, no tool run, no journal write, ledger `{cursor: 0, queue: [], open: []}` with `recent` still dropping ids 100
+and 101, an epoch that differs from A's, one sleeping schedule and no live delivery, then the new message answered
+once with a change id the journal did not have; the variant with `HARNESS_RESTORE_ID=r1` →
+`{"starts":4,"restore":"id",…}`, same assertions; reopening with `r1` again → `{"starts":5,"restore":"none"}` with no
+`tasksAborted`, nothing sent, epoch unchanged. Final recorder `["222a","222b","Saved it.","Saved it again."]`, two
+journal records, counter 5.
+
+**Mutations, on copies of `app/src/durable/{adapter,startguard}.ts`** (each applied, the named test run, the file
+restored):
+
+| # | Mutation | Test that fails | Failure |
+|---|---|---|---|
+| 1 | `harness.resume()` before `startUp()` | crash "a restored database resends nothing and replays no tool" | `expected [ '222a', '222b', 'Saved it.', '222a' ] to have a length of 3 but got 4` |
+| 2 | the intake `queue`/`open`/`cursor` clear removed | adapter "aborts every live task and drops the intake when the S3 counter is ahead" | `expected { cursor: 11, …(3) } to deeply equal { cursor: +0, …(3) }` |
+| 3 | deliveries skipped in `abortLiveWork` | adapter "aborts every live task…" (and the crash test) | live list still holds a `movin.outbox.delivery` |
+| 4 | `recent` cleared with the queue | adapter "aborts every live task…" | `expected [ …(2) ] to deeply equal []` (the redelivered ids were accepted again) |
+| 5 | the epoch not written in the commit | adapter "aborts every live task…" | `expected '3fc7…' to be '1923…'` — the next open read the old epoch back |
+| 6 | `guard.committed()` before the SQLite commit | adapter "records in SQLite before S3, so a crash between the two is no false restore" | the fourth open reports `restore: "counter"` |
+| 7 | `starts === 0` treated as behind | adapter "never treats a new database with S3 ahead as a restore" | `expected […] to deeply equal [ ObjectContaining{…} ]` |
+| 8 | `movin.start.restoreId` never stored | adapter "restores on a new id, and only on a new one" | the reopen with `r1` restores again instead of being `none` |
+
+**What could not be injected, and what covers it.** "A failed abort means no resume and a throw" is not reachable
+through pi-durable's public API: `abortTask` settles a blocked task as `orphaned` rather than throwing, and
+`abortSubmission` answers `not_found`/`settled`. The guarantee is the one the block shares: any throw in `startUp`
+closes the harness and fails the open, which the guard-read test pins (the open rejects and the same database opens
+again immediately).
+
+**Where a due sleep is woken from (corrected).** An earlier revision of this note said the opposite — that a
+`sleeping` task whose `until` passed while the process was closed is **not** woken by `resume()`, and that a 429 whose
+`retry_after` expired while the pod was down waits for something else to arm a timer. That is wrong, and a probe
+against pi-durable 1.5.2 shows it: `resume()` (`dist/harness/scheduler.js`, `resume()` → `#wakeDue()` → `#kick()`)
+makes every sleeping task that is already due a reservation candidate. With a manual clock, a schedule sleeping until
+T+5 s, the process closed, the clock advanced 10 s and the file reopened, runs at once with the target it stored; an
+outbox delivery sleeping on a 429 that expires while the process is closed retries at open. So the check-in catches up
+on a start that missed 09:30, and a `retry_after` that ran out while the pod was down is retried as the pod comes up.
+
+The earlier test was the mistake, not the scheduler. "waits for the counter before it resumes anything" asserted the
+*absence* of a send **after** `await pending`, i.e. after `resume()` had already run — the caught-up send lands a tick
+later, so that assertion raced it — and the reopened rig carried no `outbox` at all, so the resumed delivery parked on
+"no outbox is configured" for 30 s and the absence proved nothing. It now asserts while the guard is still waiting (1.5
+s into 1 s + 2 s of failed reads, long past the delivery's own 1 s backoff), and after the answer waits for the send
+that catch-up makes: `["only","only"]`. `crash.test.ts` pins the schedule half at the adapter level — "runs an
+overdue schedule at once, and sleeps towards the next target": the child SIGKILLed while asleep towards T, reopened at
+T+2 min with no timer armed, so `resume()`'s wake is the only thing that can run it; `run` is called with the stored T
+and the one task sleeps again at the next target. Mutation: skipping `run` when `target !== null && now() > target +
+60_000` fails it with `timed out waiting for the overdue run`.
+
+## T5.1c: the check-in's tick, `/checkin`, the `ci:` buttons and the admin view
+
+The morning check-in is now complete: `src/tasks/checkin.ts` holds `createCheckin` (`spec`, `tick`, `status`,
+`sendNow`), `src/telegram/commands.ts` answers `/checkin` and the `ci:` press, `bot.ts` wires both, `admin.ts`
+awaits the view and re-arms the schedule after a save, and `main.ts` builds it only when a token is set.
+
+- **`createCheckin` is Go's `Checkin` plus the loop around it.** `CheckinTick` is ported step for step
+  (checkin.go:337-415) — settings first and no fallback, then the due window, then the per-process day, then
+  `checkinChat`, then the claim before the entries are read, then quiet/`release`/`sent` — and the per-process
+  `checkinDay` and warn map (bot.go:50-52) live in its closure, so a restart checks the day again and the
+  `checkin.json` claim is still what makes it once-only. It answers the **next target** instead of returning
+  void: now + 60 s for the four things it cannot decide (settings unreadable, chat refused, claim held by
+  another copy, day released), and `nextRun` for the rest (T5-plan §2.2's table, pinned test by test). The
+  60 s is Go's cadence — `CheckinLoop` ticked every minute — and the adapter's 15-minute cap is the outer
+  bound, so a setting saved as `off` or `10:00` is re-read within the quarter hour without a restart.
+  `run` re-checks the window on **every** wake, which is what makes "a sleep armed for 09:30 that fires at
+  21:00 sends nothing and writes no record" true (t5-spec §13.12); the test drives it through the durable task
+  with a manual clock and a `jump()` that moves time without firing the timer.
+- **The tick waits for the agent instead of failing.** `spec` is handed to `openDurableAgent` before it
+  returns, so a check-in that comes due in that instant runs its tick before `serve()` has the `Agent`
+  (main.go:172-182's order). `main.ts` therefore builds the check-in with
+  `const ready = Promise.withResolvers<Agent | null>()`, and its `deliver` is `await ready.promise` first.
+  `ready` is resolved with the agent right after the open, and with `null` in the catch that stops the
+  listener and rethrows — a *resolved* promise on purpose, because a rejection nobody happened to await would
+  be an unhandled one. A tick that waited through the open then delivers normally; one that finds `null` (the
+  open failed) throws, which the send's own catch turns into `release` + a retry in a minute, exactly as a
+  failed send does. So the window costs nothing and hangs nothing. Go has no such window: its loop started
+  after `bot.Run` returned.
+- **`/checkin` never writes `checkin.json`** (checkin.go:191-192, §13.5): `sendNow` reads the entries, widens
+  the window with `NextSince()` when an earlier day was missed, answers Go's two lines, and otherwise delivers
+  with the note — so the scheduled check-in still goes out. A rig with no check-in wired answers T4's
+  `The check-in isn't available yet.`; production cannot reach that, because the bot and the check-in are both
+  built only with a token (main.go:124-138).
+- **The `ci:` press takes, then acts.** `planCallback` routes `ci:` to a new `checkinButton` before the undo
+  branch; the precondition (`archived` / `already done` / `moved since`) runs **inside** `entries.updateIf`, so
+  an edit made meanwhile cannot be overwritten. On success the toast is the line cut to 190 runes, the pressed
+  message loses its keyboard (`null` markup, only when it had one — Go's `closeAsk`), and the `✓ <who>line`
+  with its Undo goes through `agent.deliver` threaded under the pressed message. On failure the stale toasts
+  and `That entry is gone.` close the ask, and `Couldn't save that; try again or tell me in words.` does not —
+  the buttons stay, as Go's last branch does (checkin.go:281-290). A `StaleAskError` carries the toast text.
+- **`checkinStatus()` is async and returns Go's `CheckinView` in Go's field order** (`on, at, until, chat,
+  error, last, noBot`; `setting` appended by the server): two reads, one `checkin.json`, one settings. With no
+  bot the admin page still answers `{on:false, noBot:true}` (unchanged). A settings read that fails returns
+  the view *before* `on/at/chat` are filled, so `error` is what the page shows — Go's early return (:459-463).
+- **A settings save re-arms the schedule.** `AdminOptions.rearmCheckin` is a callback (`null` without a bot),
+  called after a successful `PUT /api/settings/checkin`; the admin routes never import the adapter. It is a
+  new, **v3-only** log line when it fails — `check-in rearm failed` — because Go has no rearm: the change is
+  already saved, and the 15-minute cap re-reads it either way, so a failed rearm must not fail the request.
+- **Known differences from Go, recorded in T5-plan §2.2 and unchanged here.** "sent" means durably queued: a
+  part the outbox gives up on after six attempts leaves the day `sent` (Go released it), and `/checkin` is the
+  manual resend. Every ask is listed in the note (Go left out an ask whose message failed). A crash between
+  the delivery commit and `finish` re-sends after the 10-minute takeover, as Go re-sent after a mid-send crash.
+- **`CheckinOptions.settings` is a two-method interface**, not `SettingsService`: `CheckinSettings` is
+  `{resolveCheckin, resolveTelegram}`. That is what lets a test swap a failing reader under a live check-in,
+  which is the only way to port `TestCheckinSkipsWhenSettingsUnreadable` (Go swapped `r.bot.Settings =
+  broken`, checkin_test.go:534). `tasks/` importing `telegram/outbox.ts`'s `replyPart` and `telegram/checkin.ts`
+  is fine: the one-importer rule is about pi-durable, which only `adapter.ts` imports.
+- **Tests.** `bot.test.ts` (+7): `TestCheckinCommandAndButtons` (summary, three asks with their four `ci:`
+  data each, Done / Done ★ / +1 week with Undo, three keyboard edits, `Already done.`, the stranger's toast,
+  the Undo restoring the task, **no model call**, and `checkin.json` still absent), `TestCheckinCapsAskMessages`
+  (9 messages), `TestCheckinQuietDayAndTypedReply` (the note reaches the model as
+  `Asked about:\n• Yesterday: Book movers`), `TestCheckinButtonAfterTheTaskMoved`, `the buttons are
+  at-most-once` (a redelivered press writes once), `the precondition runs inside the write` (a `raceEntries`
+  seam makes another writer's edit land between the press's read and its write), and the view's field order.
+  `tasks/checkin.test.ts` (+8): `TestCheckinScheduleCatchUpOncePerDay` (two check-ins on one store, the missed
+  days), `TestCheckinTakesOverACrashedClaim`, `TestCheckinTooLateQuietAndFailure`, `TestCheckinChatMustBeAllowed`,
+  `TestCheckinSkipsWhenSettingsUnreadable`, the next-target table (eight cases), `TestCheckinTimeFromSettings`
+  through the durable task **and `rearm`** (09:45 with 10:00 saved sends nothing; 10:00 sends; `off` stops it
+  and the status says so; a save + `rearm` sends at once), and the 21:00 wake. `admin.test.ts` (+1): a save
+  re-arms, a refused save does not, and a server with no bot saves without one. `crash.test.ts` (+1,
+  `crash-checkin-child.ts`): a child claims the day and hangs before the delivery commit; SIGKILLed, the
+  reopened process at +11 min takes the stale claim over, sends **one** check-in, and records `sent` with the
+  crashed claim's `since` (`2026-11-12`).
+- **The manual clock declines zero-delay timers.** pi-durable arms a zero-delay *foreground* timer to pace a run
+  in flight; firing those from a clock that does not move livelocked the test (`advance` spun on the same
+  instant for ever). The test clock hands `delayMs === 0` to a real `setTimeout` and keeps only the wall-clock
+  sleeps, and `advance` yields a real macrotask per firing. `adapter.test.ts`'s specs are too short to pace, so
+  it never needed this.
+- **Mutations, on container copies** (each failing its named test): the window check dropped after a wake → "a
+  sleep armed for 09:30 that fires at 21:00"; a settings failure falling back to the defaults →
+  `TestCheckinSkipsWhenSettingsUnreadable`; a refused chat marked finished → `TestCheckinChatMustBeAllowed`;
+  `/checkin` writing the record → "sends the summary and three asks"; the precondition moved outside the write →
+  "refuses a press whose task was moved while the press was in flight"; the `take` removed from the callback →
+  "acts on nothing, for a command and for a callback"; the note dropped → "says there is nothing to report";
+  `finish` before `deliver` → `TestCheckinTooLateQuietAndFailure`. **8/8.** Two of them needed a better named
+  test than the first guess: a redelivered press is already deduped by the intake ledger (`recent`), so `take`
+  is what stops a *second worker* holding the same item, and Go's own "moved" test cannot see the precondition
+  moved outside the write because nothing changes the entry in between.
+- **Checks.** `biome check` on the thirteen files: clean. `tsc --noEmit`: silent. `src/tasks` + `src/telegram`:
+  9 files, **202 passed, 1 todo**; `src/telegram/crash.test.ts`: 3 passed (MinIO). The full suite and root
+  `make lint` are the main session's (the T5.3a coder is still editing `src/durable`'s tests).
+
+## T5.2: the "Documents updated" notice and the durable daily sync
+
+The two document behaviours outside the sync engine: Go's `DocsChanged` (docs.go:18-37) and the daily run of
+`Background` (schedule.go:16-61). Both live in **`src/tasks/docsync.ts`** — `createDocsNotifier` returns
+`{notify, attach}`, `docsyncSpec` returns the `ScheduleSpec` — so the adapter stays generic and `docs/` stays
+free of Telegram (the import direction `tasks → telegram/commands.ts + format.ts` is the one `tasks/checkin.ts`
+already uses).
+
+- **The notice is one durable delivery per configured group.** `agent.deliver("tg:<group>", {chat,
+  messageId: 0, group: true}, textMessages(text, address).map(replyPart))`: `messageId: 0` is Go's plain
+  `SendMessage` (the client omits a zero `reply_to_message_id`, client.ts:418), `group: true` is the address
+  the brief decided, and there is **no note**, so a notice never enters a chat's model context — Go's notice
+  was not history either. The text is Go's byte for byte:
+  `"Documents updated: " + counts(res) + "\n" + docList(changed, 10)`, reusing the two formatters `/sync`
+  already exported from `commands.ts` (`commands.ts` was not edited).
+- **Who hears it is Go's rule, and only the syncer decides *whether*.** The syncer calls `docsChanged` only
+  after `changes(res) && !first` (sync.ts:271), so "nothing for the first import, nothing for a no-op, nothing
+  for `refreshed`" is proven through the notifier rather than re-implemented in it. The notifier skips the
+  chat named by a `telegram:<id>` reason, skips a group string that is not an int64 (`strconv.ParseInt`'s
+  behaviour), and a rejected `deliver` logs `telegram documents notice failed` with `chatId` and `err` while
+  the remaining groups still get theirs.
+- **A notice raised before the agent opens is held, at most eight, newest kept, flushed in order on
+  `attach`.** The startup sync runs in `startServe` before `db`/agent (main.go:172-182's order); production
+  can raise at most that one, so the bound is a guard, not a queue. Sends are serialised through one promise
+  chain, as Go's were serialised by running inside the sync.
+- **A failed allowlist read has no Go equivalent.** Go's `ResolveTelegram` cannot fail; v3's can (a
+  `settings.json` read). `docsChanged` is called inside the sync run and must not throw (a throw would fail
+  an already-written run), so the failure is logged as `telegram documents notice failed` with `err` only —
+  **accepted deviation**: no `chatId`, because no chat was chosen.
+- **`docsyncSpec` syncs once the stored target has passed.** `run({target})` compares `now()` with the target
+  the task stored (Go's armed timer), syncs with reason `daily` only if `target !== null && now >= target`, and
+  answers `nextRun` **from the clock after the run** — never from the old target, or a target two days old
+  would answer a time in the past and wake the task at once for a second sync. A throw is logged as
+  `daily document sync failed` and the next target is still answered (Go logged and re-armed); `off` answers
+  now + 24 h and never syncs. The **`next daily document sync` info line moved into the spec**, emitted only
+  when the target changes — the 15-minute cap wakes it four times an hour with the same target, and this keeps
+  Go's one line per armed timer.
+- **The in-process daily timer is off.** `startDocsBackground` gained `daily?: boolean` (default true) and
+  `main.ts` passes `daily: false`: the startup sync and the minute refresh stay, and exactly one daily run
+  happens. `startServe` builds both the notifier (it needs the settings built there) and the spec, returns
+  them on `Running` (`docsNotifier`, `docsync`), and `serve()` puts the docs spec in the **same `schedules`
+  list** as the check-in's and calls `docsNotifier.attach(agent.deliver)` right after the open. With no
+  Telegram token there is no notifier but the spec still runs — Go syncs the documents without a bot.
+- **No `rearm("docsync")`.** The docs schedule comes from `DOCS_SYNC_SCHEDULE` (env, validated in
+  `loadConfig`), not from the admin page, so no save can change it; the spec re-reads its schedule only on a
+  restart, which is Go's behaviour. Only the check-in re-arms.
+- **Crash safety.** `crash-docsync-child.ts` reaches 03:00 with a fake clock and the real durable task, hangs
+  inside the sync and is SIGKILLed; the reopened process runs the day again, does one conversion and **one
+  index write**, and targets the next morning's 03:00. The notice itself is at-least-once: a crash after the
+  index write but before `deliver` loses that announcement, the same window Go has (t5-spec §7.4).
+- **Tests.** `tasks/docsync.test.ts` (+13): the notice half of `TestDocumentSyncAndNotices` (first import
+  silent, one notice with Go's text and the decided address, no-op silent), `/sync`'s chat skipped plus a
+  non-numeric group, one failing group not stopping the next, `TestFailedThenFixedImportStaysSilent` through
+  the notifier, held-8 in order, a settings-read failure logged instead of thrown, the spec's target table
+  (null / early wake / at target), 23:59 → next 03:00, a two-day-old target, month end, `off`, a throwing
+  sync, one log line per new target, and the durable close/reopen run. `docs/schedule.test.ts` (+1):
+  `daily: false` arms the refresh only and logs no next-sync line. `bot.test.ts` (the `it.todo` replaced, +1):
+  the end-to-end notice through `/sync` and the real delivery task, the skip, and the fan-out to a group that
+  never spoke. `crash.test.ts` (+1). The three hangs met while writing `docsync.test.ts` were a test bug — a
+  default allowlist of three groups made one change produce three notices, so `until(length === 1)` could
+  never settle — not the notifier.
+- **Mutations, on container copies** (each failing its named test; every file restored byte-identical): a
+  notice on the first import (`sync.ts`) → "is silent for the first import…"; the `telegram:` skip removed →
+  "skips the chat that asked for the sync"; a sync at creation → "syncs once the stored target has passed";
+  the in-process daily timer left on (`daily` ignored) → "leaves the daily run to the durable schedule";
+  `nextRun` from the old target → "answers the next 03:00 ahead… when the target is two days old". **5/5.**
+- **Checks.** `make -C app lint`: 161 files, clean, `tsc` silent. `src/tasks src/telegram src/docs`: 19 files,
+  **378 passed, 1 skipped** (the pre-existing `it.skipIf` for a real PDF sample in the poppler suite). Root
+  `make lint`: `lint ok`. The full suite is the main session's.
+
+## T6.1/T6.2: the TS production image, compose `app-image`, the v2 manifests
+
+Written by `coder` 2026-11-22 from `briefs/T6-plan.md` with the main session's four answers and two
+corrections (bucket `movin-test`, the v1-tag guard). Nothing pushed, tagged, applied or committed; the only
+`kubectl` invoked was `kubectl kustomize`. Numbers are in `progress.md` · T6.1/T6.2.
+
+- **One image, no build step.** `app/Dockerfile` runs `node src/main.ts` exactly as compose `app-ts` and
+  `make test` already do: Node 24 strips the types at load, `package.json` has no build script and
+  `typescript` is dev-only, so a `tsc` step would add a stage, a `dist/` tree and a second way for the image
+  to differ from what the tests ran. The entrypoint stays `ENTRYPOINT ["node","src/main.ts"]` +
+  `CMD ["serve"]`, so the manifest's `args: ["serve"]` still replaces only the CMD.
+- **The build context is the repo root, and `app/Dockerfile.dockerignore` is an allowlist.** The image needs
+  `app/` *and* `docs/admin-guide.md`, so the context cannot be `app/`. BuildKit reads
+  `app/Dockerfile.dockerignore` in place of the root `.dockerignore` when the Dockerfile is `app/Dockerfile`,
+  which leaves the Go image's ignore file alone (it keeps its pre-existing unstaged line). The allowlist is
+  `*` then `!app`, `!app/package{,-lock}.json`, `!app/src`, `!app/static`, `!docs`, `!docs/admin-guide.md`,
+  minus `app/src/*.test.ts` and `app/src/**/*.test.ts`; checked in the built image: `/srv/app` holds only
+  those four entries and **no** `*.test.ts`.
+- **Layout mirrors the repo, so no new env var.** `/srv/app/{src,static,package.json,node_modules}` +
+  `/srv/docs/admin-guide.md`: `config.ts` resolves the guide at `../../docs` and `static-disk.ts` the page at
+  `../../static` from `import.meta.url`, so `GUIDE_FILE` and `STATIC_DIR` stay unset in production, as in
+  the Go build. `app/package.json` is copied for `"type": "module"` (it is what makes `.ts` files ES
+  modules), not for its scripts.
+- **`deps` is on `$BUILDPLATFORM`, `runtime` on the target, and it is verified for both arches.** Prod deps
+  have no native module (`find /srv/app/node_modules -name '*.node'` → none) and no install script worth
+  running (`--ignore-scripts`; `@google/genai` and `protobufjs` are never loaded), so installing once on the
+  build platform cannot go wrong per target. `docker buildx build --platform linux/amd64,linux/arm64
+  --output type=cacheonly` was run to prove it without pushing.
+- **The OS stage is separate (`runtime`) and the final stage inherits it.** poppler 25.12 + DejaVu +
+  `fc-cache -f`, `adduser -D -H -u 65532 nonroot`, and `mkdir/chown /data` live there; the last stage copies
+  the code over it. `fc-cache -f` plus `XDG_CACHE_HOME=/tmp/.cache` is what keeps a render's stderr empty
+  (checked: 0 bytes), which matters because the converter's error message is the tool's last stderr line.
+- **The healthcheck is the old one, measured, and no `healthcheck.ts` was added.** `node src/main.ts
+  healthcheck` (the same subcommand as `cmd/movin`) takes **0.22 s** from container start and adds **47 MB**
+  of cgroup charge while it runs (Node's RSS high-water is 102 MiB, but this host's RSS reads ~2× the
+  charged number — T0.2 saw 86 MB vs 35 MB). Both are inside the brief's 1 s / 60 MB thresholds, so the
+  plan's "add a standalone `healthcheck.ts` with no imports" branch was not taken. The default 1 s k8s probe
+  timeout is still too short (a cold probe plus the kubelet's own exec overhead), hence
+  `timeoutSeconds: 5` in the manifest.
+- **`app-image` uses the *test* bucket, not `movin-dev`, under `S3_PREFIX=image-check`.** `movin-test` is
+  what compose already defines and what `make -C app test` creates (`CreateBucket` + versioning in
+  `objstore.test.ts`); the prefix keeps a check run's `entries.json`, counter and `docs/raw/` away from the
+  test suite's keys. **Nothing creates the bucket**: a fresh MinIO needs `make -C app test` once first, and
+  the compose comment now says so. No `env_file` on the service (the brief), no bot token (a second poller on
+  the real token would 409), and `MOVIN_INSTANCE: dev` because `serve()` refuses to start without one.
+- **Lockdown in compose is the pod's**: `read_only`, `mem_limit: 384m`, `tmpfs /tmp:size=32m`,
+  `user 65532:65532`, `cap_drop: ALL`, `no-new-privileges`. Verified in the container: `id -u` 65532,
+  `touch /x` "Read-only file system", `/tmp` and `/data` the only writable places.
+- **Memory, measured (cgroup charge, the number the limit enforces).** Idle after a clean start: 57.2 MB
+  (`memory.peak` 57.45 MB), Node RSS 117.7 MB. A probe: peak 104.4 MB. A 3-page A4 render at 1568 px:
+  +1.6 MB sampled. So `requests.memory: 128Mi` (T0.2's drawing peak was 46 MB) and `limits.memory: 384Mi`
+  keep their headroom with `--max-old-space-size=256` under the limit; **`memory.peak` on this Docker
+  Desktop is not a reliable high-water mark for a single burst** (a 200 MB `Buffer.alloc` did not move it),
+  so the render number was taken by sampling `memory.current` every 5 ms, and is recorded as such.
+- **`/data` is proven to survive a restart.** Across `docker compose restart app-image`: `harness.db` keeps
+  its 122,880 bytes, `durable_metadata.next_id=13`, the `movin.epoch` document and the `movin.schedule` task
+  (same `until`, same `startedAt`) are byte-identical; only `next_seq` moves 8 → 9, which is the start
+  itself. `/data` is a named volume `app-data`; the manifest mounts the same path from PVC `movin-data`.
+- **Manifest changes are the v2 app's, nothing else.** `GOMEMLIMIT` → `NODE_OPTIONS=--max-old-space-size=256`,
+  `DATA_DIR=/data`, the `data` volume mount and the `movin-data` PVC volume, `/tmp` 16Mi → 32Mi,
+  `fsGroupChangePolicy: OnRootMismatch` (the volume is chowned once, not on every start),
+  `configMapRef movin-restore` **optional** (the runbook applies it after a restore; normally absent), the
+  exec liveness with `timeoutSeconds: 5`, and the resources comment rewritten with the measured numbers.
+  The container order is untouched because the prod overlay patches `containers/1/env/0`; the `Recreate`
+  comment now also names the ReadWriteOnce volume.
+- **`MOVIN_INSTANCE=prod` goes in the prod overlay**, per the main session's answer 3: it names
+  `harness/prod/epoch.json`, and the base stays deployable anywhere dev-like without silently claiming
+  prod's counter. `newTag: "1.0.0"` was left alone — it only affects local renders, and T6.3 owns the pin.
+- **The PVC is hand-applied and outside every kustomization**, with `app.kubernetes.io/name: movin-data`
+  (the Velero Schedule's selector, `velero.md`), RWO, 1Gi, `storageClassName: nutanix-volume`, no namespace
+  (the command names `movin-tracker`). `deploy/render.sh` now fails on a rendered
+  `PersistentVolumeClaim`/`PersistentVolume` as well as `Namespace`/`Secret`, so an accidental inclusion
+  cannot reach the deploy artifact — proven by adding the PVC to a copy of the prod overlay and watching the
+  render refuse.
+- **CI: a `ts-test` job, `file: app/Dockerfile`, and the v1-tag guard.** `make -C app lint test` runs in
+  Docker (Biome, tsc, vitest on the compose MinIO) and `image` needs `[test, ts-test]`. The guard is a step
+  with `if: startsWith(github.ref, 'refs/tags/v1.')` that exits 1 with "tag v1 hotfixes from release/1.0":
+  a tag builds from its own tree, so a v1 tag on `main` would publish the v2 manifests to a Flux that still
+  pins 1.0.x. **No `release/1.0` branch was created** (the brief); the Go test job and the Go poppler-test
+  step stay until T7.1 removes the Go tree. The header comment now documents the v2 tag flow.
+- **`.env.example`**: the `LLM_KIND` block is gone (OpenAI-compatible only, `LLM_KIND=claude` refuses to
+  start), and `MOVIN_INSTANCE`/`DATA_DIR` are documented, both commented out so dev keeps working.
+- **Kept as is, noted:** `app/src/**/testdata/*.go.json` (about 0.7 MB of Go golden fixtures) still ships in
+  the image because the allowlist only drops `*.test.ts`; harmless at runtime, and trimming it is a T7.2
+  decision. Compose's file header still says "MinIO is only for `make test`" — now also `make -C app run`'s
+  stack; the allowed edit was the `app-image` service only, so it was left for the main session.
+
+## T5 fixes, round 1
+The round-1 review of T5 (`briefs/T5-review1.md`) found two blockers, two majors and three minors; this round
+fixes all seven in `app/src/durable/**`, `app/src/tasks/docsync.ts` and `app/src/server/admin.ts`.
+
+- **B1: two flaky crash cases, fixed at their source.** The restore case's control B now waits
+  `whenIdle(b.agent, CHAT)` after the settle, so chat 111's delivery is sent before the close instead of
+  racing it. `crash-schedule-child.ts` writes a `slept <target>` line only once `inspectSchedules` shows the
+  task `sleeping` at that target, and both sleep cases wait for that line before the SIGKILL: the old
+  `existsSync(marker)` wait could kill the child between `run`'s marker line and the sleep's own commit, so
+  the reopen found `target: null`. The marker assertion now reads `null\nslept <target>\n`, which also proves
+  the run happened once. Main session: `crash.test.ts` 10/10 runs, 12 passed each.
+- **B2: `rearm` is two commits, and the gap is covered from both sides.** pi-durable's `Tx`
+  (`types.d.ts:895-960`) has no abort, so "abort and recreate in one commit" is impossible (Check 4 above is
+  corrected). The abort is its own commit, and every reader tolerates the gap: `ensureSchedules()` and
+  `rearm()` treat `abortRequested` as gone, `rearm` runs inside `serial("sys:schedule:<name>")`, and
+  `createSchedule`'s commit re-reads the guard and writes only while `guard.by[name]` still equals the id its
+  caller read (otherwise it answers the current id and creates nothing, so no second task loops unwatched).
+- **M1: a note delivered during submit now survives.** The admission commit no longer clears the whole list:
+  it removes only the notes this turn read, matched on `tag` and `text`. `deliver` does not wait for the turn,
+  so a check-in committed while `userContent` (the S3-backed hook) was running used to be wiped unshown; it
+  now reaches the next turn, and only that one.
+- **M2: `pause` uses `node:timers/promises`'s `setTimeout(ms, undefined, {signal})`,** and `read` checks
+  `signal.aborted` before warning. A shutdown that aborts during `store.get` now ends the start at once
+  instead of logging a false `harness start counter unreadable` and sleeping up to 30 s in the SIGTERM grace
+  period. **Deviation accepted by the main session:** `StartGuardOptions` gained a `sleep` test seam, because
+  vitest's fake timers do not fake `node:timers/promises`; the two retry-schedule tests now use it instead of
+  `vi.useFakeTimers()`, and the two abort tests drive the real timer.
+- **Minors.** `committed()` does one plain `get` after a `PreconditionError` (no retry: it used to hold
+  `resume()` for ever in an S3 outage) and warns `harness start counter not saved`. The startguard import rule
+  is widened to objstore, gojson, gostr and log — the leaf modules — and pinned in `imports.test.ts` with a
+  probe of the imports it exists to stop. `admin.ts`'s `telegramBody` doc comment is on its own line.
+  `docsync.ts` skips `daily document sync failed` when the run's signal is aborted, as Go does
+  (`internal/docs/schedule.go:55`).
+- **Tests added** (`adapter.test.ts` +4, `startguard.test.ts` +2, `docsync.test.ts` +1, `imports.test.ts` +1,
+  two adapter test helpers `markSchedules` and `scheduleOwners`, one `createScheduleTwice`): overlapping
+  rearms leave one task with the guard on it; an abort-marked task at open is replaced and runs; the creating
+  commit run twice with the same id creates one task; a note landing inside `userContent` reaches the next
+  turn and only it; an abort during `store.get` warns nothing and rejects under 500 ms; a failed read after a
+  lost precondition returns; the aborted daily sync says nothing; `startguard.ts` stays on the leaves.
+- **Mutations, on container copies** (`movin-app-test:local`, each mutant mounted over `/app/src/...`, each
+  failing its named test): the `abortRequested` check removed from `ensureSchedules()` → "replaces a task that
+  was only abort-marked when the database was opened again"; serialisation **and** the compare-and-set
+  removed → "leaves one task when two rearms overlap"; the compare-and-set alone removed → "creates one task
+  when the creating commit runs twice with the same id" (`expected 13 to be 12`); `pending.length = 0`
+  restored → "keeps a note that lands while the message is being prepared for the next turn";
+  the M2 fix reverted (the pre-warning check and the signal-aware timer) → "does not warn, and stops at once,
+  when the start is aborted during the read" (`expected 1006 to be less than 500`); `committed` using
+  `read()` → "warns and returns when the read after a lost precondition fails" (timeout); an
+  `import … from "./adapter.ts"` in `startguard.ts` → "keeps src/durable/startguard.ts on the leaf modules";
+  the aborted-signal check removed from `docsync` → "says nothing about a sync the shutdown aborted".
+  **8/8.** The serialisation alone is not separately observable: with the compare-and-set in place a second
+  rearm skips its create, so one safeguard backs the other and only the pair's removal leaves two tasks.
+- **Checks.** `make -C app lint`: 161 files, no fixes, `tsc` silent. `crash.test.ts` 12 passed; the 10× loop
+  10/10. `adapter.test.ts` 118 passed, `startguard.test.ts` + `imports.test.ts` + `docsync.test.ts` 37 passed.
+  Full suite `--maxWorkers=3`: 64 files, **1285 passed, 1 skipped**. Root `make lint`: `lint ok`.

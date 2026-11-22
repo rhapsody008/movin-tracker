@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type Config, loadConfig } from "./config.ts";
+import { createStartGuard } from "./durable/startguard.ts";
 import { createTestLog } from "./log.ts";
 import { exitIfFailed, harnessDbPath, openDurableAgent, run, startServe } from "./main.ts";
 import { createMemoryStore } from "./objstore/memory.ts";
@@ -16,7 +17,12 @@ import { DEFAULT_STATIC_DIR } from "./server/static-disk.ts";
 
 /** The config a test serves with: the defaults, and port 0 so the OS picks one. */
 function testConfig(): Config {
-	return { ...loadConfig({ S3_BUCKET: "test-bucket" }), listenAddr: "127.0.0.1:0" };
+	// MOVIN_INSTANCE is required by serve() (T5.3a), so every config a test builds
+	// names one; the instance only matters to the S3 start counter.
+	return {
+		...loadConfig({ S3_BUCKET: "test-bucket", MOVIN_INSTANCE: "dev" }),
+		listenAddr: "127.0.0.1:0",
+	};
 }
 
 const indexHtml = readFileSync(join(DEFAULT_STATIC_DIR, "index.html"));
@@ -191,6 +197,7 @@ describe("the durable agent", () => {
 		const deadS3 = await closedPort();
 		const code = await run(["serve"], {
 			S3_BUCKET: "test-bucket",
+			MOVIN_INSTANCE: "dev",
 			// An endpoint that refuses at once, so the startup read fails fast.
 			S3_ENDPOINT_URL: `http://127.0.0.1:${deadS3}`,
 			LISTEN_ADDR: `127.0.0.1:${port}`,
@@ -201,6 +208,50 @@ describe("the durable agent", () => {
 		expect(code).toBe(1);
 		// serve() stopped the server before the error: nothing answers on its port.
 		await expect(connects(port)).rejects.toThrow();
+	});
+
+	// T5.3a: no default for the instance, so prod can never read dev's counter.
+	it("exits 1 without MOVIN_INSTANCE, before anything listens", { timeout: 20_000 }, async () => {
+		const port = await closedPort();
+		const code = await run(["serve"], {
+			S3_BUCKET: "test-bucket",
+			LISTEN_ADDR: `127.0.0.1:${port}`,
+			MOVIN_DOCS: "off",
+		});
+		expect(code).toBe(1);
+		await expect(connects(port)).rejects.toThrow();
+	});
+
+	// T5.3a: serve hands the guard in, and the guard logs the start it decided on.
+	it("opens with the restore guard and logs the start", { timeout: 20_000 }, async () => {
+		const dataDir = await mkdtemp(join(tmpdir(), "movin-main-guard-"));
+		const config = { ...testConfig(), dataDir };
+		const { log, lines } = createTestLog();
+		const store = createMemoryStore();
+		const running = await startServe(config, { store, log });
+		try {
+			const agent = await openDurableAgent(
+				config,
+				running.settings,
+				running.log,
+				running.agentDeps,
+				undefined,
+				createStartGuard({ store, instance: config.instance, restoreId: "", log }),
+			);
+			try {
+				const start = lines
+					.map((line) => JSON.parse(line) as Record<string, unknown>)
+					.filter((line) => line.msg === "harness start");
+				// A first start: no restore, and the counter this database now carries.
+				expect(start).toEqual([expect.objectContaining({ starts: 1, restore: "none" })]);
+				expect(start[0]).not.toHaveProperty("tasksAborted");
+			} finally {
+				await agent.close();
+			}
+		} finally {
+			await running.stop();
+			await rm(dataDir, { recursive: true, force: true });
+		}
 	});
 
 	it("exits 1 when the harness's storage failed, and leaves the code alone on a close", () => {

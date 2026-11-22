@@ -1,0 +1,13 @@
+{
+  "getUpdates": "{\"allowed_updates\":[\"message\",\"callback_query\"],\"offset\":10,\"timeout\":1}",
+  "getMe": "{}",
+  "sendMessage": "{\"chat_id\":-1001,\"text\":\"Saved: wet kitchen · idea · Quartz top\",\"reply_to_message_id\":5,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Undo\",\"callback_data\":\"undo:01ABC\"}]]}}",
+  "sendMessagePlain": "{\"chat_id\":111,\"text\":\"plain \\\"quotes\\\" \\u0026 \\u003cangle\\u003e brackets\"}",
+  "sendChatAction": "{\"action\":\"typing\",\"chat_id\":-1001}",
+  "answerCallbackQuery": "{\"callback_query_id\":\"cb1\",\"text\":\"Undone: removed Fluted glass door\"}",
+  "answerCallbackQueryNoText": "{\"callback_query_id\":\"cb1\"}",
+  "editMessageReplyMarkup": "{\"chat_id\":-1001,\"message_id\":77,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Undo\",\"callback_data\":\"undo:01ABC\"}],[{\"text\":\"Undo 2\",\"callback_data\":\"undo:0DEF\"}]]}}",
+  "editMessageReplyMarkupNil": "{\"chat_id\":-1001,\"message_id\":77,\"reply_markup\":{\"inline_keyboard\":[]}}",
+  "setMyCommands": "{\"commands\":[{\"command\":\"undo\",\"description\":\"Undo my last change\"},{\"command\":\"help\",\"description\":\"What I can do\"}]}",
+  "getFile": "{\"file_id\":\"F1\"}"
+}

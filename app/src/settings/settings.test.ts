@@ -604,7 +604,7 @@ for (const v of variants) {
 }
 
 // T1 F1: the bytes of settings.json, against the Go writer. Both files in
-// testdata are Go's own output (tmp/t14-golden/main.go savebytes): the same
+// testdata are Go's own output (app/golden/t14/main.go savebytes): the same
 // fixture, the same two saves, the same fixed clock. Neither save touches llm,
 // so no apiKeyEnc is involved — the fixture has none, and its llm, checkin and
 // unknown "zeta" sections must survive byte for byte, number literals and all.

@@ -1,0 +1,1209 @@
+{
+  "constants": {
+    "max_ask_messages": 8,
+    "max_overdue_titles": 5,
+    "prefix": "ci:",
+    "max_message": 4000,
+    "stale_claim_seconds": 600,
+    "checkin_cutoff": 20
+  },
+  "toasts": {
+    "archived": "That entry was archived.",
+    "already_done": "Already done.",
+    "moved_dated": "That task was moved since (Fri 13 Nov), so I left it.",
+    "moved_undated": "That task was moved since (no date), so I left it."
+  },
+  "checkin": [
+    {
+      "name": "empty",
+      "today": "2026-11-12",
+      "since": "",
+      "doc": null,
+      "summary": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+      "messages": [
+        {
+          "text": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+          "keyboard": null
+        }
+      ],
+      "note": "(morning check-in)\n\nGood morning! Thu 12 Nov\n\nNothing dated for today.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\"."
+    },
+    {
+      "name": "three_asks",
+      "today": "2026-11-12",
+      "since": "",
+      "doc": [
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+          "kind": "task",
+          "title": "Book movers",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:01Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A02",
+          "kind": "task",
+          "title": "Order tiles",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:02Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A03",
+          "kind": "task",
+          "title": "Measure windows",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:03Z"
+        }
+      ],
+      "summary": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nNot marked done yet (3), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+      "messages": [
+        {
+          "text": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nNot marked done yet (3), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+          "keyboard": null
+        },
+        {
+          "text": "Yesterday: Book movers\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Order tiles\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Measure windows\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111:7"
+                }
+              ]
+            ]
+          }
+        }
+      ],
+      "note": "(morning check-in)\n\nGood morning! Thu 12 Nov\n\nNothing dated for today.\n\nNot marked done yet (3), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".\n\nAsked about:\n• Yesterday: Book movers\n• Yesterday: Order tiles\n• Yesterday: Measure windows"
+    },
+    {
+      "name": "ten_asks",
+      "today": "2026-11-12",
+      "since": "",
+      "doc": [
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+          "kind": "task",
+          "title": "Task 01",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:01Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A02",
+          "kind": "task",
+          "title": "Task 02",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:02Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A03",
+          "kind": "task",
+          "title": "Task 03",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:03Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A04",
+          "kind": "task",
+          "title": "Task 04",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:04Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A05",
+          "kind": "task",
+          "title": "Task 05",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:05Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A06",
+          "kind": "task",
+          "title": "Task 06",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:06Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A07",
+          "kind": "task",
+          "title": "Task 07",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:07Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A08",
+          "kind": "task",
+          "title": "Task 08",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:08Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A09",
+          "kind": "task",
+          "title": "Task 09",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:09Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A10",
+          "kind": "task",
+          "title": "Task 10",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:10Z"
+        }
+      ],
+      "summary": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nNot marked done yet (10), below. Tap a button or just tell me.\nAlso open from earlier days:\n• Task 09 — Wed 11 Nov\n• Task 10 — Wed 11 Nov\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+      "messages": [
+        {
+          "text": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nNot marked done yet (10), below. Tap a button or just tell me.\nAlso open from earlier days:\n• Task 09 — Wed 11 Nov\n• Task 10 — Wed 11 Nov\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+          "keyboard": null
+        },
+        {
+          "text": "Yesterday: Task 01\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Task 02\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Task 03\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A03:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Task 04\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Task 05\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A05:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A05:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A05:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A05:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Task 06\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A06:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A06:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A06:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A06:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Task 07\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Task 08\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A08:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A08:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A08:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A08:20261111:7"
+                }
+              ]
+            ]
+          }
+        }
+      ],
+      "note": "(morning check-in)\n\nGood morning! Thu 12 Nov\n\nNothing dated for today.\n\nNot marked done yet (10), below. Tap a button or just tell me.\nAlso open from earlier days:\n• Task 09 — Wed 11 Nov\n• Task 10 — Wed 11 Nov\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".\n\nAsked about:\n• Yesterday: Task 01\n• Yesterday: Task 02\n• Yesterday: Task 03\n• Yesterday: Task 04\n• Yesterday: Task 05\n• Yesterday: Task 06\n• Yesterday: Task 07\n• Yesterday: Task 08"
+    },
+    {
+      "name": "seven_overdue",
+      "today": "2026-11-12",
+      "since": "",
+      "doc": [
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+          "kind": "task",
+          "title": "Old 1",
+          "date": "2026-11-04",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:01Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A02",
+          "kind": "task",
+          "title": "Old 2",
+          "date": "2026-11-05",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:02Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A03",
+          "kind": "task",
+          "title": "Old 3",
+          "date": "2026-11-06",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:03Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A04",
+          "kind": "task",
+          "title": "Old 4",
+          "date": "2026-11-07",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:04Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A05",
+          "kind": "task",
+          "title": "Old 5",
+          "date": "2026-11-08",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:05Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A06",
+          "kind": "task",
+          "title": "Old 6",
+          "date": "2026-11-09",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:06Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A07",
+          "kind": "task",
+          "title": "Old 7",
+          "date": "2026-11-10",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:07Z"
+        }
+      ],
+      "summary": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nStill overdue (7):\n• Old 1 — Wed 4 Nov\n• Old 2 — Thu 5 Nov\n• Old 3 — Fri 6 Nov\n• Old 4 — Sat 7 Nov\n• Old 5 — Sun 8 Nov\n…and 2 more\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+      "messages": [
+        {
+          "text": "Good morning! Thu 12 Nov\n\nNothing dated for today.\n\nStill overdue (7):\n• Old 1 — Wed 4 Nov\n• Old 2 — Thu 5 Nov\n• Old 3 — Fri 6 Nov\n• Old 4 — Sat 7 Nov\n• Old 5 — Sun 8 Nov\n…and 2 more\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+          "keyboard": null
+        }
+      ],
+      "note": "(morning check-in)\n\nGood morning! Thu 12 Nov\n\nNothing dated for today.\n\nStill overdue (7):\n• Old 1 — Wed 4 Nov\n• Old 2 — Thu 5 Nov\n• Old 3 — Fri 6 Nov\n• Old 4 — Sat 7 Nov\n• Old 5 — Sun 8 Nov\n…and 2 more\n\nAnything else, just say it, e.g. \"move the tiler to Friday\"."
+    },
+    {
+      "name": "missed_days",
+      "today": "2026-11-16",
+      "since": "2026-11-14",
+      "doc": [
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+          "kind": "task",
+          "title": "Paint touch-up",
+          "date": "2026-11-14",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:01Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A02",
+          "kind": "task",
+          "title": "Sweep",
+          "date": "2026-11-15",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:02Z"
+        }
+      ],
+      "summary": "Good morning! Mon 16 Nov\n\nNothing dated for today.\n\nNot marked done yet (2), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+      "messages": [
+        {
+          "text": "Good morning! Mon 16 Nov\n\nNothing dated for today.\n\nNot marked done yet (2), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+          "keyboard": null
+        },
+        {
+          "text": "Sat 14 Nov: Paint touch-up\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261114"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261114"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261114:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261114:7"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "text": "Yesterday: Sweep\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261115"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261115"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261115:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A02:20261115:7"
+                }
+              ]
+            ]
+          }
+        }
+      ],
+      "note": "(morning check-in)\n\nGood morning! Mon 16 Nov\n\nNothing dated for today.\n\nNot marked done yet (2), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".\n\nAsked about:\n• Sat 14 Nov: Paint touch-up\n• Yesterday: Sweep"
+    },
+    {
+      "name": "room_and_time",
+      "today": "2026-11-12",
+      "since": "",
+      "doc": [
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+          "kind": "task",
+          "title": "Electrician",
+          "date": "2026-11-12",
+          "time": "14:00",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:01Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A02",
+          "kind": "task",
+          "title": "Fridge delivery",
+          "date": "2026-11-12",
+          "time": "09:00",
+          "room": "dry kitchen",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:02Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A03",
+          "kind": "question",
+          "title": "Pick grout colour",
+          "date": "2026-11-12",
+          "time": "",
+          "room": "",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:03Z"
+        },
+        {
+          "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A04",
+          "kind": "task",
+          "title": "Measure windows",
+          "date": "2026-11-11",
+          "time": "",
+          "room": "living",
+          "status": "todo",
+          "archived": false,
+          "created": "2026-11-01T00:00:04Z"
+        }
+      ],
+      "summary": "Good morning! Thu 12 Nov\n\nToday:\n• 09:00 Fridge delivery (dry kitchen)\n• 14:00 Electrician\n• Pick grout colour\n\nNot marked done yet (1), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+      "messages": [
+        {
+          "text": "Good morning! Thu 12 Nov\n\nToday:\n• 09:00 Fridge delivery (dry kitchen)\n• 14:00 Electrician\n• Pick grout colour\n\nNot marked done yet (1), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".",
+          "keyboard": null
+        },
+        {
+          "text": "Yesterday: Measure windows (living)\nDone?",
+          "keyboard": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "Done",
+                  "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111"
+                },
+                {
+                  "text": "Done ★",
+                  "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111"
+                },
+                {
+                  "text": "Tomorrow",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111:1"
+                },
+                {
+                  "text": "+1 week",
+                  "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A04:20261111:7"
+                }
+              ]
+            ]
+          }
+        }
+      ],
+      "note": "(morning check-in)\n\nGood morning! Thu 12 Nov\n\nToday:\n• 09:00 Fridge delivery (dry kitchen)\n• 14:00 Electrician\n• Pick grout colour\n\nNot marked done yet (1), below. Tap a button or just tell me.\n\nAnything else, just say it, e.g. \"move the tiler to Friday\".\n\nAsked about:\n• Yesterday: Measure windows (living)"
+    }
+  ],
+  "keyboard": [
+    {
+      "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+      "date": "2026-11-11",
+      "keyboard": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Done",
+              "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111"
+            },
+            {
+              "text": "Done ★",
+              "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111"
+            },
+            {
+              "text": "Tomorrow",
+              "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:1"
+            },
+            {
+              "text": "+1 week",
+              "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:7"
+            }
+          ]
+        ]
+      },
+      "longest_callback_bytes": 42
+    },
+    {
+      "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A07",
+      "date": "2026-11-11",
+      "keyboard": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Done",
+              "callback_data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111"
+            },
+            {
+              "text": "Done ★",
+              "callback_data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111"
+            },
+            {
+              "text": "Tomorrow",
+              "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111:1"
+            },
+            {
+              "text": "+1 week",
+              "callback_data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A07:20261111:7"
+            }
+          ]
+        ]
+      },
+      "longest_callback_bytes": 42
+    }
+  ],
+  "records": [
+    {
+      "name": "sending_first",
+      "steps": [
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "chat": "-1001234567890",
+          "now": "2026-11-12T01:30:00Z"
+        }
+      ],
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"at\":\"2026-11-12T01:30:00Z\",\"chat\":\"-1001234567890\"}"
+    },
+    {
+      "name": "sending_first_no_chat",
+      "steps": [
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "now": "2026-11-12T01:30:00Z"
+        }
+      ],
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"at\":\"2026-11-12T01:30:00Z\"}"
+    },
+    {
+      "name": "sent_first",
+      "steps": [
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "chat": "-1001234567890",
+          "now": "2026-11-12T01:30:00Z"
+        },
+        {
+          "op": "finish",
+          "status": "sent",
+          "now": "2026-11-12T01:31:00Z"
+        }
+      ],
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sent\",\"at\":\"2026-11-12T01:31:00Z\",\"chat\":\"-1001234567890\"}"
+    },
+    {
+      "name": "sending_next_day",
+      "steps": [
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "chat": "-1001234567890",
+          "now": "2026-11-12T01:30:00Z"
+        },
+        {
+          "op": "finish",
+          "status": "sent",
+          "now": "2026-11-12T01:31:00Z"
+        },
+        {
+          "op": "claim",
+          "day": "2026-11-13",
+          "chat": "-100999",
+          "now": "2026-11-13T01:30:00Z"
+        }
+      ],
+      "json": "{\"schema\":1,\"day\":\"2026-11-13\",\"status\":\"sending\",\"since\":\"2026-11-12\",\"at\":\"2026-11-13T01:30:00Z\",\"chat\":\"-100999\"}"
+    },
+    {
+      "name": "quiet_next_day",
+      "steps": [
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "chat": "-1001234567890",
+          "now": "2026-11-12T01:30:00Z"
+        },
+        {
+          "op": "finish",
+          "status": "quiet",
+          "now": "2026-11-12T01:31:00Z"
+        },
+        {
+          "op": "claim",
+          "day": "2026-11-13",
+          "chat": "-1001234567890",
+          "now": "2026-11-13T01:30:00Z"
+        },
+        {
+          "op": "finish",
+          "status": "quiet",
+          "now": "2026-11-13T01:31:00Z"
+        }
+      ],
+      "json": "{\"schema\":1,\"day\":\"2026-11-13\",\"status\":\"quiet\",\"since\":\"2026-11-12\",\"at\":\"2026-11-13T01:31:00Z\",\"chat\":\"-1001234567890\"}"
+    },
+    {
+      "name": "takeover_of_a_crashed_first_ever",
+      "steps": [
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "chat": "-1001234567890",
+          "now": "2026-11-12T01:30:00Z"
+        },
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "chat": "-1001234567890",
+          "now": "2026-11-12T01:41:00Z"
+        }
+      ],
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"at\":\"2026-11-12T01:41:00Z\",\"chat\":\"-1001234567890\"}"
+    },
+    {
+      "name": "released_first_ever",
+      "steps": [
+        {
+          "op": "claim",
+          "day": "2026-11-12",
+          "chat": "-1001234567890",
+          "now": "2026-11-12T01:30:00Z"
+        },
+        {
+          "op": "release",
+          "now": "2026-11-12T01:31:00Z"
+        }
+      ],
+      "json": "{\"schema\":1,\"day\":\"\",\"status\":\"\",\"at\":\"\"}"
+    }
+  ],
+  "record_state": [
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"at\":\"2026-11-12T01:20:00Z\",\"chat\":\"1\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:29:00Z",
+      "finished": false,
+      "taken": true,
+      "next_since": "2026-11-12"
+    },
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"at\":\"2026-11-12T01:20:00Z\",\"chat\":\"1\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:30:00Z",
+      "finished": false,
+      "taken": false,
+      "next_since": "2026-11-12"
+    },
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"at\":\"yesterday\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:29:00Z",
+      "finished": false,
+      "taken": false,
+      "next_since": "2026-11-12"
+    },
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"at\":\"2026-11-12T01:30:00.500Z\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:29:00Z",
+      "finished": false,
+      "taken": true,
+      "next_since": "2026-11-12"
+    },
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sending\",\"since\":\"2026-11-09\",\"at\":\"2026-11-12T01:20:00Z\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:25:00Z",
+      "finished": false,
+      "taken": true,
+      "next_since": "2026-11-09"
+    },
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"sent\",\"at\":\"2026-11-12T01:30:00Z\",\"chat\":\"-100\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T14:00:00Z",
+      "finished": true,
+      "taken": true,
+      "next_since": "2026-11-12"
+    },
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-12\",\"status\":\"quiet\",\"at\":\"2026-11-12T01:30:00Z\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:31:00Z",
+      "finished": true,
+      "taken": true,
+      "next_since": "2026-11-12"
+    },
+    {
+      "json": "{\"schema\":1,\"day\":\"2026-11-11\",\"status\":\"sent\",\"at\":\"2026-11-11T01:30:00Z\"}",
+      "day": "2026-11-13",
+      "now": "2026-11-13T01:30:00Z",
+      "finished": false,
+      "taken": false,
+      "next_since": "2026-11-11"
+    },
+    {
+      "json": "{}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:30:00Z",
+      "finished": false,
+      "taken": false,
+      "next_since": ""
+    },
+    {
+      "json": "{\"schema\":\"x\"}",
+      "day": "2026-11-12",
+      "now": "2026-11-12T01:30:00Z",
+      "error": "decode checkin.json: json: cannot unmarshal string into Go struct field CheckinRecord.schema of type int",
+      "finished": false,
+      "taken": false,
+      "next_since": ""
+    }
+  ],
+  "due": [
+    {
+      "at": "2026-11-12T09:29:00+08:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": false
+    },
+    {
+      "at": "2026-11-12T09:30:00+08:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": true
+    },
+    {
+      "at": "2026-11-12T14:00:00+08:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": true
+    },
+    {
+      "at": "2026-11-12T19:59:00+08:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": true
+    },
+    {
+      "at": "2026-11-12T20:00:00+08:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": false
+    },
+    {
+      "at": "2026-11-12T23:00:00+08:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": false
+    },
+    {
+      "at": "2026-11-12T01:30:00Z",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": true
+    },
+    {
+      "at": "2026-11-12T00:30:00Z",
+      "hour": 9,
+      "minute": 30,
+      "loc": "Asia/Singapore",
+      "out": false
+    },
+    {
+      "at": "2026-11-12T07:14:00Z",
+      "hour": 7,
+      "minute": 15,
+      "loc": "UTC",
+      "out": false
+    },
+    {
+      "at": "2026-11-12T07:15:00Z",
+      "hour": 7,
+      "minute": 15,
+      "loc": "UTC",
+      "out": true
+    },
+    {
+      "at": "2026-11-12T20:00:00Z",
+      "hour": 7,
+      "minute": 15,
+      "loc": "UTC",
+      "out": false
+    },
+    {
+      "at": "2026-11-12T09:29:00-05:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "America/New_York",
+      "out": false
+    },
+    {
+      "at": "2026-11-12T09:30:00-05:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "America/New_York",
+      "out": true
+    },
+    {
+      "at": "2026-11-12T20:00:00-05:00",
+      "hour": 9,
+      "minute": 30,
+      "loc": "America/New_York",
+      "out": false
+    }
+  ],
+  "callbacks": {
+    "now": "2026-11-12T09:30:00Z",
+    "loc": "Asia/Singapore",
+    "cases": [
+      {
+        "data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111",
+        "kind": "done",
+        "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+        "asked": "2026-11-11"
+      },
+      {
+        "data": "ci:m:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111",
+        "kind": "milestone",
+        "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+        "asked": "2026-11-11"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:1",
+        "kind": "move",
+        "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+        "asked": "2026-11-11",
+        "days": 1,
+        "date": "2026-11-13"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:7",
+        "kind": "move",
+        "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+        "asked": "2026-11-11",
+        "days": 7,
+        "date": "2026-11-19"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:31",
+        "kind": "move",
+        "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+        "asked": "2026-11-11",
+        "days": 31,
+        "date": "2026-12-13"
+      },
+      {
+        "data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:2026111",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:2026111a",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261311",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20260230",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:0",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:32",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:-1",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:r:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:x",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:x:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111",
+        "kind": "ack"
+      },
+      {
+        "data": "undo:01K8ZQ4R7S9T2V5W8X1Y3Z5A6C",
+        "kind": "ack"
+      },
+      {
+        "data": "",
+        "kind": "ack"
+      },
+      {
+        "data": "ci:d:01K8ZQ4R7S9T2V5W8X1Y3Z5A01:20261111:extra",
+        "kind": "done",
+        "id": "01K8ZQ4R7S9T2V5W8X1Y3Z5A01",
+        "asked": "2026-11-11"
+      }
+    ]
+  }
+}

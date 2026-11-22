@@ -1,5 +1,5 @@
 // The Go-compatible JSON writer: the raw-section scanner against Go's own
-// answers (app/src/testdata/raw.go.json, written by tmp/t14-golden/main.go
+// answers (app/src/testdata/raw.go.json, written by app/golden/t14/main.go
 // rawtable), and the two read-path differences Go and this port have on purpose.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";

@@ -187,7 +187,7 @@ describe("listModels", () => {
 		}
 	});
 
-	// F2: Go's urlErrorOp, from the Go probe in tmp/t2x-golden.
+	// F2: Go's urlErrorOp, from the Go probe in app/golden/t2x/main.go.
 	it("names a network error's verb the way Go's urlErrorOp does (F2)", () => {
 		expect(["GET", "POST", "PUT", "DELETE", ""].map(urlErrorOp)).toEqual(["Get", "Post", "Put", "Delete", "Get"]);
 	});

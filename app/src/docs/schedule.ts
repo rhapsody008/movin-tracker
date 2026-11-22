@@ -5,8 +5,10 @@
 //
 // The daily run is one timer, re-armed after each run at the next time the
 // app's zone shows the scheduled clock; "off" means there is no daily timer
-// (the startup sync and the refresh still run). Every timer is unref'd: the
-// server keeps the process alive, not this.
+// (the startup sync and the refresh still run). It can also be left out
+// entirely (`daily: false`), which is what production does: the daily run is the
+// agent's durable `docsync` schedule there (T5.2), and two of them would sync
+// twice. Every timer is unref'd: the server keeps the process alive, not this.
 //
 // The clock and the timer are injected so a test can move time instead of
 // waiting for it.
@@ -36,6 +38,12 @@ export interface DocsBackgroundOptions {
 	now?: () => Date;
 	/** The timer; tests pass their own. */
 	setTimer?: SetTimer;
+	/**
+	 * Run the daily timer here. False when the daily run is the durable schedule
+	 * instead (T5.2), so exactly one of them runs it; the startup sync and the
+	 * minute refresh are unaffected. Default true.
+	 */
+	daily?: boolean;
 }
 
 /**
@@ -47,6 +55,7 @@ export function startDocsBackground(o: DocsBackgroundOptions): () => void {
 	const at = parseSchedule("DOCS_SYNC_SCHEDULE", o.schedule, DEFAULT_SYNC_SCHEDULE);
 	const now = o.now ?? ((): Date => new Date());
 	const setTimer = o.setTimer ?? unrefTimer;
+	const daily = o.daily ?? true;
 	let stopped = false;
 	const armed = new Set<() => void>();
 
@@ -84,7 +93,7 @@ export function startDocsBackground(o: DocsBackgroundOptions): () => void {
 	}
 
 	function armDaily(): void {
-		if (!at.on || stopped) return;
+		if (!daily || !at.on || stopped) return;
 		const from = now();
 		const next = nextRun(from, at.hour, at.minute, o.timeZone);
 		o.log.info("next daily document sync", { at: rfc3339(next, o.timeZone) });

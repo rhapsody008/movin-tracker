@@ -12,7 +12,7 @@
 // Nothing here imports pi-durable; the hooks are its neutral AgentHooks.
 
 import { CLASS_SCANNED, docFolder, docName, type Index, STATUS_OK } from "../docs/index.ts";
-import type { AgentHooks, ChangeLine, RunResult, UserContentResult } from "../durable/adapter.ts";
+import type { AgentHooks, ChangeLine, PendingNote, RunResult, UserContentResult } from "../durable/adapter.ts";
 import { type Doc, type Entry, type Meta, ROOMS } from "../entries/model.ts";
 import type { EntriesService } from "../entries/service.ts";
 import { goMarshal } from "../gojson.ts";
@@ -50,6 +50,14 @@ export const GROUP_LINE =
 	"\nThis is a group chat; each user message starts with the speaker's name. If a message needs nothing recorded and asks you nothing (chat between the two of them), reply with exactly " +
 	SILENT_REPLY +
 	".";
+
+/**
+ * The one header line the pending notes go under (T5-plan §2.3): what was sent to
+ * this chat since its last message — a check-in at 09:30 read by the message at
+ * 10:00. The note texts follow verbatim, each already opening with Go's
+ * `(morning check-in)` marker.
+ */
+export const NOTES_HEADER = "Sent to this chat since your last message:";
 
 /** What the prompt reads: the entries, and the documents when the feature is on. */
 export interface PromptOptions {
@@ -108,7 +116,7 @@ export function promptHooks(options: PromptOptions): AgentHooks {
 				body = changedSince(parseState(turn.state).seen, doc);
 			}
 			return {
-				content: joinUser([body, dateLine(doc.meta, now(), timeZone), text]),
+				content: joinUser([body, notesText(turn.notes), dateLine(doc.meta, now(), timeZone), text]),
 				state: { seen } satisfies PromptState,
 			};
 		},
@@ -141,7 +149,7 @@ export function promptHooks(options: PromptOptions): AgentHooks {
 /**
  * rulesText is Go's prompt.go:89-110 raw string with the two %s filled and the
  * one recorded v3 replacement (`when the snapshot is not enough`). The bytes
- * are pinned against tmp/t34-golden.
+ * are pinned against app/golden/t34/main.go.
  */
 export function rulesText(): string {
 	return `You are the renovation assistant for a couple in Singapore fitting out their new condo (unit type C5: 3 bedrooms + flex). You keep their record of ideas, decisions, tasks, notes and questions, and answer questions from it.
@@ -248,6 +256,16 @@ export function changedSince(seen: Record<string, string>, doc: Doc): string {
 	items.sort((a, b) => compareBytes(a.created, b.created) || a.order - b.order);
 	if (items.length === 0) return "";
 	return `Changed since your last message:\n${items.map((item) => `- ${item.line}`).join("\n")}`;
+}
+
+/**
+ * notesText is the notes block: one header line, then each note verbatim with a
+ * blank line between two of them (T5-plan §2.3); `""` when there are none, so
+ * `joinUser` drops it and the bytes are what they were before notes existed.
+ */
+export function notesText(notes: readonly PendingNote[] | undefined): string {
+	if (notes === undefined || notes.length === 0) return "";
+	return `${NOTES_HEADER}\n${notes.map((note) => note.text).join("\n\n")}`;
 }
 
 /** dateLine is Go's date part in the configured zone; `not set` for either key date (prompt.go:54-58). */

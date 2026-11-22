@@ -1,5 +1,6 @@
 // The process: `serve` (the default) and `healthcheck`, ported from
-// cmd/movin/main.go. The Telegram bot is a later step (T4); serve builds the
+// cmd/movin/main.go. With a bot token, serve also starts the Telegram bot (T4) —
+// after the durable agent is open, so no turn ever finds no harness. It builds the
 // store, the entries service, the settings service, the document syncer and the
 // HTTP server, then the durable agent on the data volume — with the entry tools,
 // the document tools, the page viewer and the prompt wiring of T3.3/T3.4, which
@@ -28,16 +29,23 @@ import { createViewer, type Viewer } from "./docs/render.ts";
 import { startDocsBackground } from "./docs/schedule.ts";
 import { createLibrary } from "./docs/search.ts";
 import { createSyncer, type Syncer } from "./docs/sync.ts";
-import { type Agent, type AgentEnd, openAgent } from "./durable/adapter.ts";
+import { type Agent, type AgentEnd, type Outbox, openAgent, type ScheduleSpec } from "./durable/adapter.ts";
+import { createStartGuard, type StartGuard } from "./durable/startguard.ts";
 import { createEntriesService, type EntriesService } from "./entries/service.ts";
 import { goQuote } from "./gostr.ts";
 import { createLog, errorMessage, type Level, type Log } from "./log.ts";
 import { createS3Store } from "./objstore/s3.ts";
 import type { ObjectStore } from "./objstore/store.ts";
+import type { TelegramStatusSource } from "./server/admin.ts";
 import { type Server as AppServer, createServer } from "./server/server.ts";
 import type { StaticFiles } from "./server/static.ts";
 import { createDiskStatic, DEFAULT_STATIC_DIR } from "./server/static-disk.ts";
 import { createSettingsService, type SettingsService } from "./settings/settings.ts";
+import { type CheckinService, createCheckin } from "./tasks/checkin.ts";
+import { createDocsNotifier, type DocsNotifier, docsyncSpec } from "./tasks/docsync.ts";
+import { type Bot, checkinView, createBot, createBotState, statusJSON } from "./telegram/bot.ts";
+import { createClient } from "./telegram/client.ts";
+import { createOutbox } from "./telegram/outbox.ts";
 
 /** A shutdown's budget before the connections are cut (Go's 10 s, main.go:157). */
 export const SHUTDOWN_BUDGET_MS = 10_000;
@@ -57,6 +65,10 @@ export interface ServeDeps {
 	guide?: (() => Promise<Uint8Array>) | null;
 	/** The durable agent, once serve() has opened it: the chat routes read it on every request. */
 	agent?: () => Agent | null;
+	/** The bot's view for the admin page (T4); null (the default) is Go's nil *telegram.Bot. */
+	telegram?: TelegramStatusSource | null;
+	/** Asks the scheduled check-in to run again after a settings save (T5.1c); null (the default) without one. */
+	rearmCheckin?: (() => Promise<void>) | null;
 }
 
 /**
@@ -80,12 +92,18 @@ export interface Running {
 	/** The address listened on, with the port the OS picked filled in. */
 	address: string;
 	port: number;
+	/** The store serve() built: the restore guard reads its counter before the agent opens (T5.3a). */
+	store: ObjectStore;
 	/** The settings service: serve() gives it to the durable agent, which resolves the connection per use. */
 	settings: SettingsService;
 	/** The logger, so the agent writes the same stream as the server. */
 	log: Log;
 	/** The entries, documents and viewer serve() built, for the agent it opens next. */
 	agentDeps: AgentDeps;
+	/** The daily document sync as a durable schedule (T5.2), or null when documents are off. */
+	docsync: ScheduleSpec | null;
+	/** The group notice the syncer raises (T5.2), or null when documents are off. */
+	docsNotifier: DocsNotifier | null;
 	/** Stops the background jobs, ends the streams and closes the listener. Idempotent. */
 	stop: () => Promise<void>;
 }
@@ -156,6 +174,9 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 	// render can't stack up (Go's "one Poppler", main.go:118-123), and the LLM
 	// summariser, which resolves the saved connection per file.
 	const poppler = config.docsOff ? null : createPoppler();
+	// The group notice a sync raises (T5.2): the startup sync runs before the agent
+	// opens, so the notifier holds that one until `serve()` attaches the delivery.
+	const docsNotifier = poppler === null ? null : createDocsNotifier({ settings, log });
 	const syncer =
 		poppler === null
 			? null
@@ -163,6 +184,7 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 					store,
 					converter: poppler,
 					summariser: createLLMSummariser({ settings }),
+					notify: docsNotifier ?? undefined,
 					log,
 					now,
 				});
@@ -170,6 +192,10 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 	// The page viewer is Go's docs.Viewer (main.go:123): only the vision tool uses
 	// it, and only when the connection takes images.
 	const viewer = syncer === null || poppler === null ? null : createViewer({ source: syncer, store, conv: poppler });
+	// The daily sync is the agent's durable `docsync` schedule (T5.2), so the
+	// in-process timer below stays off: one daily run, and a restart catches it up.
+	const docsync =
+		syncer === null ? null : docsyncSpec({ syncer, schedule: config.docsSync, timeZone: config.timeZone, now, log });
 
 	const staticFiles =
 		deps.staticFiles ?? createDiskStatic(config.staticDir === "" ? DEFAULT_STATIC_DIR : config.staticDir);
@@ -184,7 +210,8 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 		allowedEmails: config.allowedEmails,
 		devEmail: config.devEmail,
 		guide: deps.guide ?? null,
-		telegram: null,
+		telegram: deps.telegram ?? null,
+		rearmCheckin: deps.rearmCheckin ?? null,
 		agent: deps.agent ?? ((): null => null),
 	});
 
@@ -244,6 +271,9 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 					timeZone: config.timeZone,
 					log,
 					now,
+					// The daily run is the agent's schedule (T5.2); this keeps startup
+					// and the minute refresh only.
+					daily: false,
 				});
 
 	let stopping: Promise<void> | null = null;
@@ -273,9 +303,12 @@ export async function startServe(config: Config, deps: ServeDeps = {}): Promise<
 	return {
 		address,
 		port: bound,
+		store,
 		settings,
 		log,
 		agentDeps: { entries, syncer, viewer, timeZone: config.timeZone, now },
+		docsync,
+		docsNotifier,
 		stop: () => {
 			stopping ??= shutdown();
 			return stopping;
@@ -298,6 +331,16 @@ export async function openDurableAgent(
 	settings: SettingsService,
 	log: Log,
 	deps: AgentDeps,
+	/** The channel the delivery task sends through (T4): absent in a process that cannot send. */
+	outbox?: Outbox,
+	/**
+	 * The restore guard (T5.3a): serve builds it over the S3 store and the config,
+	 * so the harness decides whether this database was restored before it resumes.
+	 * Absent (a test that opens the agent directly), a start is what it always was.
+	 */
+	startGuard?: StartGuard,
+	/** The scheduled jobs this process runs (T5.1c): absent means a process with none. */
+	schedules?: readonly ScheduleSpec[],
 ): Promise<Agent> {
 	await mkdir(config.dataDir, { recursive: true });
 	// Go builds the search library over the syncer (main.go:120); without documents
@@ -316,6 +359,9 @@ export async function openDurableAgent(
 			now: deps.now,
 			log,
 		}),
+		...(outbox === undefined ? {} : { outbox }),
+		...(startGuard === undefined ? {} : { startGuard }),
+		...(schedules === undefined ? {} : { schedules }),
 	});
 }
 
@@ -331,35 +377,155 @@ export function exitIfFailed(end: AgentEnd, exit: (code: number) => void): void 
 /** serve is `movin`: the same build, then wait for SIGINT or SIGTERM. */
 async function serve(env: Env): Promise<void> {
 	const config = loadConfig(env);
+	// The restore guard names one deployment's counter, and there is no default:
+	// a default would let prod read dev's and run a false restore (T5-plan §14.6).
+	if (config.instance === "") throw new Error('MOVIN_INSTANCE must be "dev" or "prod"');
+	// One shutdown, whoever asks: both signals can arrive, and the guard's read of
+	// the counter is waiting through the same signal (T5.3a), so a start that hangs
+	// on a dead bucket ends when the pod is told to stop.
+	const shutdown = new AbortController();
+	const signalled = new Promise<void>((done) => {
+		const onSignal = (): void => {
+			shutdown.abort();
+			done();
+		};
+		process.once("SIGINT", onSignal);
+		process.once("SIGTERM", onSignal);
+	});
 	// Set once the harness is open, and read by the chat routes per request: the
 	// agent opens after the listener, so a slow volume never delays readiness or
 	// the page (T3.2).
 	let agent: Agent | null = null;
-	const running = await startServe(config, { guide: guideReader(config.guideFile), agent: () => agent });
+	// The morning check-in (T5.1c) exists before the agent does: its spec is what
+	// the adapter schedules, and its delivery goes through the agent once open.
+	let checkin: CheckinService | null = null;
+	// The check-in's delivery waits for the agent instead of failing: its spec is
+	// scheduled inside `openDurableAgent`, so the first tick can run before this
+	// function's `opened` exists. A failed open resolves it with nothing rather than
+	// rejecting — a rejection nobody happened to await would be an unhandled one —
+	// and a tick that waited on it then gives the day back as any failed send does.
+	const ready = Promise.withResolvers<Agent | null>();
+	// The bot's status exists before the bot does: the outbox a delivery task calls
+	// reports a failed send into it, and the admin page answers Go's
+	// `tokenSet:true running:false` in the moment between (main.go:124-138).
+	const state = config.telegramToken === "" ? null : createBotState(true);
+	const client = config.telegramToken === "" ? null : createClient({ token: config.telegramToken });
+	const log = createLog({ level: logLevel(config.logLevel) });
+	const telegram: TelegramStatusSource | null =
+		state === null
+			? null
+			: {
+					status: () => statusJSON(state),
+					checkinStatus: async () => (checkin === null ? checkinView() : await checkin.status()),
+				};
+	const outbox = client === null || state === null ? undefined : createOutbox({ client, log, state });
+	const running = await startServe(config, {
+		log,
+		guide: guideReader(config.guideFile),
+		agent: () => agent,
+		telegram,
+		// A saved check-in time takes effect at the next run, not at the next restart
+		// (T5.1c): the admin route asks the schedule to run again.
+		rearmCheckin:
+			client === null
+				? null
+				: async () => {
+						if (agent !== null) await agent.schedule.rearm("checkin");
+					},
+	});
+	// The morning check-in (T5.1c): Go builds it only with a token, and starts it after
+	// the listener (main.go:129, :181). Its send is the durable delivery, which needs
+	// the agent — so the spec goes to the agent at open, and `deliver` reads it then.
+	checkin =
+		client === null
+			? null
+			: createCheckin({
+					store: running.store,
+					settings: running.settings,
+					entries: running.agentDeps.entries,
+					deliver: async (key, address, parts, options) => {
+						const open = await ready.promise;
+						if (open === null) throw new Error("the durable agent did not open, so the check-in cannot be sent");
+						await open.deliver(key, address, parts, options);
+					},
+					now: running.agentDeps.now,
+					timeZone: running.agentDeps.timeZone,
+					log: running.log,
+				});
 	// The agent opens after the listener, like Go's background jobs (main.go:172-182),
-	// so a slow volume never delays readiness or the page.
+	// so a slow volume never delays readiness or the page. The guard decides about
+	// the database before anything is scheduled (T5.3a).
+	// The scheduled jobs this process runs: the check-in's tick (T5.1c) and the daily
+	// document sync (T5.2). A process with no bot still syncs the documents — Go does
+	// too without a token — so only the check-in needs one.
+	const schedules: ScheduleSpec[] = [];
+	if (checkin !== null) schedules.push(checkin.spec);
+	if (running.docsync !== null) schedules.push(running.docsync);
 	let opened: Agent;
 	try {
-		opened = await openDurableAgent(config, running.settings, running.log, running.agentDeps);
+		opened = await openDurableAgent(
+			config,
+			running.settings,
+			running.log,
+			running.agentDeps,
+			outbox,
+			createStartGuard({
+				store: running.store,
+				instance: config.instance,
+				restoreId: config.restoreId,
+				log: running.log,
+				signal: shutdown.signal,
+			}),
+			schedules,
+		);
 	} catch (err) {
 		// A start that fails must leave nothing running: the listener and the
 		// background jobs would hold the event loop open while the process reported
 		// exit code 1, and the pod would keep answering with no agent.
+		ready.resolve(null);
 		await running.stop();
 		throw err;
 	}
 	agent = opened;
+	ready.resolve(opened);
+	// The startup sync's notice goes out now (T5.2): a group message of its own, with
+	// no note, so it reaches no chat's model context — Go's notice was not history
+	// either. What the notifier held before this line is flushed here.
+	running.docsNotifier?.attach(async (key, address, parts) => {
+		await opened.deliver(key, address, parts);
+	});
+	// The bot starts only once the agent is open: a turn must never find no
+	// harness. Polling starts after startup recovery, which answers what a crash
+	// left open (spec §2.1). Its `/recent` reads entries in the app's own zone (`TZ`)
+	// and its `/sync` re-reads the documents through the one syncer (main.go:124-138).
+	const bot: Bot | null =
+		client === null || state === null
+			? null
+			: createBot({
+					client,
+					settings: running.settings,
+					agent: opened,
+					entries: running.agentDeps.entries,
+					syncer: running.agentDeps.syncer,
+					timeZone: running.agentDeps.timeZone,
+					state,
+					log: running.log,
+					checkin,
+				});
+	// The run promise is the one thing main cannot await on shutdown: a rejection
+	// must be logged, never left unhandled (Go's `log.Error("telegram bot stopped")`,
+	// main.go:132-133; T4 fixes M4).
+	void bot?.run().catch((err: unknown) => {
+		running.log.error("telegram bot stopped", { err: errorMessage(err) });
+	});
 	void opened.closed.then((end) => exitIfFailed(end, (code) => process.exit(code)));
 	try {
-		await new Promise<void>((done) => {
-			// One shutdown, whoever asks: both signals can arrive, and stop() is idempotent.
-			const onSignal = (): void => {
-				void running.stop().then(done);
-			};
-			process.once("SIGINT", onSignal);
-			process.once("SIGTERM", onSignal);
-		});
+		await signalled;
+		await running.stop();
 	} finally {
+		// Polling first: an update already polled is durable, and its turn is what
+		// the next start recovers (spec §2.3).
+		await bot?.stop();
 		await opened.close();
 	}
 }

@@ -255,6 +255,14 @@ The group gets one message listing what was added, changed or removed (never for
 
 The bucket keeps earlier versions of every object (for 90 days with the lifecycle rule): `entries.json`, `settings.json` and your PDFs under `docs/raw/`. A deleted PDF shows up again under **Show versions** (delete the "delete marker" to bring it back). In the AWS console, open the object → **Versions**, download the version you want, and upload it as the current version (or use `aws s3api copy-object` with `--copy-source <bucket>/entries.json?versionId=...`). The app notices within 5 seconds and the web page updates.
 
+### Chat history backup
+
+Chat history, scheduled tasks and the Telegram inbox are kept in a small database on the app's volume (`movin-data`, mounted at `/data`). Everything else (entries, settings, the check-in record and your documents) is in the S3 bucket and is covered by "Recover older data" above.
+
+- **Backups:** Velero snapshots the volume daily and keeps 7 days. **Until that is set up and a restore drill has been recorded, the volume's data is not backed up**; losing it loses chat history only.
+- **Restoring:** follow `docs/movin-v3/velero.md`, section "The real restore, in order". The one step that's easy to miss: set a **new** restore id in the `movin-restore` ConfigMap before starting the app again. With it, the app cancels any half-finished replies and tool calls from the snapshot instead of sending them again.
+- **After a restore:** chat made after the snapshot is gone; entries, settings and documents are not affected.
+
 ### Rotate a secret
 
 | What | Steps |

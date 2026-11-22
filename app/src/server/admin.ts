@@ -53,8 +53,11 @@ const PROBE_TIMEOUT_MS = 30_000;
 export interface TelegramStatusSource {
 	/** Go's telegram.Status, an object in Go's field order: tokenSet, running, … rejected. */
 	status: () => Record<string, unknown>;
-	/** Go's telegram.CheckinView without `setting`, or null when there is no bot. */
-	checkinStatus: () => Record<string, unknown> | null;
+	/**
+	 * Go's telegram.CheckinView without `setting`, or null when there is no bot. Async
+	 * since T5.1c: the view reads `checkin.json` and settings.json.
+	 */
+	checkinStatus: () => Promise<Record<string, unknown> | null>;
 }
 
 export interface AdminOptions {
@@ -66,6 +69,12 @@ export interface AdminOptions {
 	guide: (() => Promise<Uint8Array>) | null;
 	/** The bot, when there is one (T4); null in T2. */
 	telegram: TelegramStatusSource | null;
+	/**
+	 * Ask the scheduled check-in to run again, after a successful save (T5.1c). A
+	 * callback rather than the agent: the admin routes must not import the adapter
+	 * (T5-plan §4). Null when this build has no bot.
+	 */
+	rearmCheckin: (() => Promise<void>) | null;
 }
 
 export interface AdminRoutes {
@@ -141,10 +150,15 @@ export function createAdminRoutes(o: AdminOptions): AdminRoutes {
 		return { tokenSet: false, running: false, rejected: [] };
 	}
 
+	/** Go's CheckinView for a nil *telegram.Bot: `{on:false, noBot:true}` (checkin.go:448-453). */
+	function noBotCheckin(): Record<string, unknown> {
+		return { on: false, noBot: true };
+	}
+
 	/** telegramView, the answer of all three Telegram routes (admin.go:167-215). */
 	async function telegramBody(): Promise<Ordered> {
 		const status = o.telegram?.status() ?? noBotStatus();
-		const checkin = o.telegram?.checkinStatus() ?? { on: false, noBot: true };
+		const checkin = (await o.telegram?.checkinStatus()) ?? noBotCheckin();
 		return new Ordered([
 			["status", status],
 			["allowlist", encodeTelegramView(await settings.viewTelegram())],
@@ -203,6 +217,17 @@ export function createAdminRoutes(o: AdminOptions): AdminRoutes {
 		} catch (err) {
 			await onError(req, res, err);
 			return;
+		}
+		// The saved time applies at the next run, not at the next restart (t5-spec
+		// §11): ask the scheduled check-in to run again now. A rearm that fails leaves
+		// the change in force anyway — the fifteen-minute cap re-reads it.
+		const rearm = o.rearmCheckin;
+		if (rearm !== null) {
+			try {
+				await rearm();
+			} catch (err) {
+				log.warn("check-in rearm failed", { err: errorMessage(err) });
+			}
 		}
 		writeJSON(res, 200, await telegramBody());
 	};

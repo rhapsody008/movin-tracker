@@ -1,6 +1,7 @@
 # Local stack. The app (dev and `make run`) uses the real S3 bucket from .env:
 # dev and production share one bucket and no prefix (decisions.md). MinIO is
-# only for `make test`.
+# only for the tests (`make test`, `make -C app test`) and the TS image check
+# (`make -C app run`, service app-image).
 #
 # MinIO image: the upstream minio/minio images are no longer published, so
 # this uses the community-maintained build from Pigsty. It honours If-Match
@@ -72,6 +73,9 @@ services:
     environment:
       <<: *minio-env
       REQUIRE_S3: "1"
+      # This deployment's name for its S3 start counter, harness/<instance>/epoch.json
+      # (T5.3a): dev here, prod in k8s. It is required, with no default.
+      MOVIN_INSTANCE: dev
       HOME: /tmp
       # fontconfig's cache dir (as the Go production image, Dockerfile:57);
       # without it a render logs "No writable cache directories" on stderr.
@@ -96,6 +100,9 @@ services:
     environment:
       LISTEN_ADDR: ":8080"
       STATIC_DIR: /src/app/static
+      # The dev app shares the real bucket, so its own counter keeps it away from
+      # prod's (T5.3a, T5-plan §14.6).
+      MOVIN_INSTANCE: dev
       HOME: /tmp
       XDG_CACHE_HOME: /tmp/.cache
       # The durable harness's SQLite file. No data volume is mounted for this
@@ -127,6 +134,41 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"
 
+  # `make -C app run`: the v3 (TypeScript) production image, locked down as in
+  # k8s (deploy/k8s/base/deployment.yaml) and built by app/Dockerfile. MinIO
+  # instead of the real bucket, under its own prefix, so nothing here reaches
+  # real data. No env_file on purpose: the image gets only what is written here.
+  app-image:
+    profiles: [image]
+    image: movin-app:local
+    environment:
+      <<: *minio-env
+      # The test bucket, under a prefix of its own, so a check run and
+      # `make -C app test` never read each other's objects. Nothing creates the
+      # bucket: objstore.test.ts does (CreateBucket + versioning), so run
+      # `make -C app test` once against a fresh MinIO before `make run`.
+      S3_BUCKET: movin-test
+      S3_PREFIX: image-check
+      # This deployment's name for its S3 start counter (T5.3a). No bot: a
+      # token here would take the updates of the real one.
+      MOVIN_INSTANCE: dev
+      TELEGRAM_BOT_TOKEN: ""
+      DEV_EMAIL: dev@localhost
+      LISTEN_ADDR: ":8080"
+      NODE_OPTIONS: --max-old-space-size=256
+    read_only: true
+    mem_limit: 384m # as in k8s; the poppler children share it
+    tmpfs: ["/tmp:size=32m"]
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - app-data:/data
+    ports:
+      - "127.0.0.1:${APP_IMAGE_PORT:-8091}:8080"
+    depends_on: [minio]
+
 volumes:
   minio-data:
   go-build:
+  app-data:

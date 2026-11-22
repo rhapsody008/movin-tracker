@@ -6,7 +6,8 @@ metadata:
 spec:
   # One replica, and it must stay one: Telegram allows a single getUpdates
   # poller per bot token (a second gets 409), and SSE fan-out is per
-  # process. Recreate so two never overlap during a rollout.
+  # process. Recreate so two never overlap during a rollout (and so the
+  # ReadWriteOnce volume is released before the next pod mounts it).
   replicas: 1
   strategy: { type: Recreate }
   selector:
@@ -20,6 +21,10 @@ spec:
         runAsUser: 65532
         runAsGroup: 65532
         fsGroup: 65532
+        # The kubelet applies fsGroup to the data volume at mount time; with
+        # OnRootMismatch it skips the recursive chown once the volume root
+        # already has the right group, so a restart does not walk the volume.
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: app
@@ -29,27 +34,41 @@ spec:
             # Localhost only: nothing but the oauth2-proxy sidecar can reach
             # the app, so the X-Forwarded-Email header can be trusted.
             - { name: LISTEN_ADDR, value: "127.0.0.1:8080" }
-            # Go's own heap target, below the limit: the PDF tools (poppler)
-            # run as child processes in the same memory limit.
-            - { name: GOMEMLIMIT, value: "128MiB" }
+            # Node's old-space target, below the limit: the PDF tools
+            # (poppler) run as child processes in the same memory limit.
+            - { name: NODE_OPTIONS, value: "--max-old-space-size=256" }
+            # The durable harness's SQLite file (plan.md · Storage).
+            - { name: DATA_DIR, value: "/data" }
           envFrom:
             - configMapRef: { name: movin-config }
             - secretRef: { name: movin-secrets }
-          # Measured with the documents feature on the production image: about
-          # 30 MiB at rest, 135 MiB peak while rendering a drawing (whole
-          # sheet, then a zoomed crop; poppler included).
+            # The restore id after a volume restore (velero.md); applied by
+            # the runbook, so it is normally absent.
+            - configMapRef: { name: movin-restore, optional: true }
+          # Measured on the production image with documents on (T6.1,
+          # progress.md): idle 57 MB of the 384Mi cgroup (Node RSS 117 MB), a
+          # probe adds 47 MB, a small PDF render 2 MB. The 256 MB heap cap
+          # sits below the limit; poppler's children share it.
           resources:
-            requests: { cpu: 10m, memory: 64Mi }
-            limits: { memory: 256Mi }
+            requests: { cpu: 10m, memory: 128Mi }
+            limits: { memory: 384Mi }
           livenessProbe:
-            exec: { command: ["/movin", "healthcheck"] }
+            # The app listens on 127.0.0.1, so this is an exec of the same
+            # `healthcheck` the Go binary had. Node has to load the import
+            # graph before it can make the request: the default 1 s timeout
+            # is too short for a cold probe (T6.1 measured it).
+            exec: { command: ["node", "/srv/app/src/main.ts", "healthcheck"] }
             periodSeconds: 30
+            timeoutSeconds: 5
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
+            # Chat history, durable tasks and the start counter. Outside
+            # Flux's render: deploy/manual/pvc.yaml, applied by hand (T6.4).
+            - { name: data, mountPath: /data }
 
         - name: oauth2-proxy
           image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
@@ -79,6 +98,8 @@ spec:
             - { name: oauth2-proxy-config, mountPath: /etc/oauth2-proxy, readOnly: true }
       volumes:
         - name: tmp
-          emptyDir: { sizeLimit: 16Mi }
+          emptyDir: { sizeLimit: 32Mi }
+        - name: data
+          persistentVolumeClaim: { claimName: movin-data }
         - name: oauth2-proxy-config
           configMap: { name: oauth2-proxy-config }

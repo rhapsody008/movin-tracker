@@ -1,12 +1,19 @@
 # Test, then build the production image and push it to GHCR; on a release
-# tag, also publish the rendered manifests that Flux deploys.
+# tag, also publish the rendered manifests that Flux deploys. Since T6 the
+# image is the v3 TypeScript app (app/Dockerfile); the Go tree is still tested
+# here while it is in the repo.
 #
 #   pull request     -> test + build (no push)
 #   push to main     -> ghcr.io/<owner>/<repo>:main, :sha-<short>, :latest
-#   tag v1.2.3       -> ghcr.io/<owner>/<repo>:1.2.3, :1.2, :sha-<short>
-#                       + ghcr.io/<owner>/<repo>-deploy:1.2.3 (deploy/render.sh,
+#   tag v2.0.0       -> ghcr.io/<owner>/<repo>:2.0.0, :2.0, :sha-<short>
+#                       + ghcr.io/<owner>/<repo>-deploy:2.0.0 (deploy/render.sh,
 #                         image pinned by digest; deploy/flux picks it up)
-#   tag v1.2.3-rc.1  -> the same, but Flux ignores prereleases (a rehearsal)
+#   tag v2.0.0-rc.1  -> the same, but Flux ignores prereleases (a rehearsal)
+#
+# A v1.* tag is refused here: a tag builds from its own tree, so a v1 tag on
+# main would publish the v2 manifests (PVC mount, exec probe twice the timeout)
+# to the v1 prod (Flux follows >=1.0.0 until T6.3 pins 1.0.x). Hotfix 1.0.x
+# from a release/1.0 branch cut at v1.0.1, which keeps the v1 tree.
 name: image
 
 on:
@@ -32,6 +39,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Refuse a v1 tag on the v2 tree
+        if: startsWith(github.ref, 'refs/tags/v1.')
+        run: |
+          echo "tag v1 hotfixes from release/1.0" >&2
+          exit 1
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-go@v6
@@ -73,8 +86,26 @@ jobs:
           kustomize build deploy/k8s/overlays/prod > /dev/null
           kustomize build deploy/flux > /dev/null
 
+  # The v3 app under app/. Everything runs in Docker (app/Makefile: Biome,
+  # tsc, vitest with the S3 half against the compose MinIO), so the runner
+  # needs nothing installed but make and Docker.
+  ts-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The compose MinIO has no healthcheck: start it first and wait, as the Go
+      # job does, so the S3 tests never race its startup on a fresh runner.
+      - name: Start MinIO
+        run: |
+          docker compose --profile tools up -d minio
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
+
+      - name: Lint and test the TypeScript app
+        run: make -C app lint test
+
   image:
-    needs: test
+    needs: [test, ts-test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -98,8 +129,8 @@ jobs:
           target: poppler-test
           platforms: linux/amd64,linux/arm64
           push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=go-poppler
+          cache-to: type=gha,mode=max,scope=go-poppler
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -125,12 +156,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: app/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
 
   # Release only: render the prod manifests with the image pinned by digest
   # and publish them as an OCI artifact. Never commits to the repo.

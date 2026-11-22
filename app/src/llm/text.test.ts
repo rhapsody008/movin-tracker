@@ -1,7 +1,7 @@
 // stripSpecialTokens is compared case by case with Go's own answers in
-// testdata/striptokens.go.json, which tmp/t31-golden/main.go writes:
+// testdata/striptokens.go.json, which app/golden/t31/main.go writes:
 //
-//	docker compose --profile tools run --rm --no-deps test go run tmp/t31-golden/main.go
+//	docker compose --profile tools run --rm --no-deps test sh -c 'cd /src && go run ./app/golden/t31/main.go'
 //
 // The cases are Go's TestStripSpecialTokens plus the shapes a port gets wrong:
 // mid-text tokens, repeated ones, nothing but tokens, a lookalike token and the

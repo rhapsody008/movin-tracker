@@ -41,6 +41,20 @@ async function restrictedImports(): Promise<string[]> {
 /** AGENT_RUNTIME is a runtime import of the agent layer: `import … from "../agent/…"`, not `import type`. */
 const AGENT_RUNTIME = /(?:^|\n)\s*import\s+(?!type\b)[^;]*?from\s*["']\.\.\/agent\/[^"']*["']/g;
 
+/**
+ * STARTGUARD_ALLOWED is what the restore guard may import, the leaf modules only:
+ * the object store, gojson, gostr and log. The guard is the S3 half of the start,
+ * a plain value the adapter acts on, so it never reaches the adapter, the agent
+ * layer or pi-durable itself.
+ */
+const STARTGUARD_ALLOWED = /^\.\.\/(?:objstore\/[^"']*|gojson\.ts|gostr\.ts|log\.ts)$/;
+
+/** RELATIVE is every relative specifier a static import or a literal dynamic import names. */
+const RELATIVE = /(?:from|import)\s*\(?\s*["'](\.[^"']*)["']/g;
+
+/** startguard is the file the rule below constrains. */
+const STARTGUARD = join("src", "durable", "startguard.ts");
+
 describe("the pi-durable import rule", () => {
 	it("finds the adapter's own imports, so the scan is not vacuous", async () => {
 		const hits = await restrictedImports();
@@ -54,6 +68,23 @@ describe("the pi-durable import rule", () => {
 });
 
 describe("the layer rule", () => {
+	// The restore guard is the leaf that must not grow: it decides a restore from a
+	// plain value and hands it to the adapter, so every import it gains the other
+	// way — the adapter, the agent layer, a durable sibling — would make that
+	// decision depend on the harness opening (T5 fixes, round 1, minor 2).
+	it("keeps src/durable/startguard.ts on the leaf modules", async () => {
+		const guard = await readFile(STARTGUARD, "utf8");
+		const specifiers = [...guard.matchAll(RELATIVE)].map((match) => match[1] ?? "");
+		// The scan is not vacuous: the file does import the leaves it is allowed.
+		expect(specifiers).toContain("../objstore/store.ts");
+		expect(specifiers.filter((specifier) => !STARTGUARD_ALLOWED.test(specifier))).toEqual([]);
+		// The pattern is probed against the imports it exists to stop, so a silent
+		// regex cannot pass this by matching nothing.
+		expect(["./adapter.ts", "../agent/tools.ts", "./startguard.ts"].filter((s) => STARTGUARD_ALLOWED.test(s))).toEqual(
+			[],
+		);
+	});
+
 	// The adapter is the neutral layer: it returns RunResult and knows nothing of
 	// Go's reply rules. `reply.ts` (in src/agent) applies those to a run and to a
 	// reloaded row alike, so one import the other way would put a reply rule back

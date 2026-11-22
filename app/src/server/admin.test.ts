@@ -550,6 +550,38 @@ describe("the Telegram admin", () => {
 		}
 	});
 
+	it("re-arms the scheduled check-in after a successful save, and not after a refused one", async () => {
+		// T5.1c: a saved time applies at the next run, not at the next restart, so the
+		// route asks the agent's schedule to run again. The admin routes never import
+		// the adapter: main.ts hands them this callback (T5-plan §4).
+		let rearms = 0;
+		const rig = await startServer({
+			rearmCheckin: async () => {
+				rearms += 1;
+			},
+		});
+		try {
+			const saved = await rig.do("PUT", "/api/settings/checkin", `{"schedule":"10:00","chat":""}`);
+			expect([saved.status, rearms]).toEqual([200, 1]);
+			// The same time again is still a save, and still re-arms.
+			await rig.do("PUT", "/api/settings/checkin", `{"schedule":"10:00","chat":""}`);
+			expect(rearms).toBe(2);
+			// A refused value changes nothing, so nothing is re-armed.
+			const refused = await rig.do("PUT", "/api/settings/checkin", `{"schedule":"21:00"}`);
+			expect([refused.status, rearms]).toEqual([400, 2]);
+			// With no bot there is no callback at all, and the save still works.
+			const plain = await startServer();
+			try {
+				const noBot = await plain.do("PUT", "/api/settings/checkin", `{"schedule":"10:00","chat":""}`);
+				expect([noBot.status, rearms]).toEqual([200, 2]);
+			} finally {
+				await plain.close();
+			}
+		} finally {
+			await rig.close();
+		}
+	});
+
 	it("saves the check-in through the API, and keeps both sections (TestCheckinSettingThroughTheAPI)", async () => {
 		const rig = await startServer();
 		try {
@@ -879,8 +911,8 @@ describe("the key-leak and case-folding contracts", () => {
 	it("matches body keys case-insensitively, the last match winning (F15)", async () => {
 		const rig = await startServer();
 		try {
-			// Go's encoding/json folds a struct's field names; tmp/t2x-golden holds
-			// Go's own answers for these bodies.
+			// Go's encoding/json folds a struct's field names; app/golden/t2x/main.go
+			// holds Go's own answers for these bodies.
 			const checkin = await rig.do("PUT", "/api/settings/checkin", `{"SCHEDULE":"8:05","CHAT":"","USEENV":false}`);
 			expect([checkin.status, settingOf(checkin).schedule]).toEqual([200, "08:05"]);
 
@@ -892,7 +924,7 @@ describe("the key-leak and case-folding contracts", () => {
 			expect([telegram.status, users.length, users[0]?.id, users[0]?.name]).toEqual([200, 1, "7", "Ada"]);
 
 			// A struct's key folding does not reach the entries routes: Go decodes
-			// those into a map, so "Title" is still an unknown field (tmp/t2x-golden).
+			// those into a map, so "Title" is still an unknown field (app/golden/t2x/main.go).
 			const entry = await rig.do("POST", "/api/entries", `{"title":"x","TITLE":"y"}`);
 			expect([entry.status, entry.json.error]).toEqual([400, 'unknown field "TITLE"']);
 		} finally {

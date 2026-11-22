@@ -64,6 +64,8 @@ export interface ServerDeps {
 	guide?: (() => Promise<Uint8Array>) | null;
 	/** The Telegram bot's view of the world (T4); null in T2, as Go's nil *Bot. */
 	telegram?: TelegramStatusSource | null;
+	/** Asks the scheduled check-in to run again after a settings save (T5.1c); absent without a bot. */
+	rearmCheckin?: (() => Promise<void>) | null;
 	/**
 	 * The durable agent, read on every chat request: serve() opens it after the
 	 * listener (T3.2), so the chat routes ask for it rather than holding it.
@@ -115,6 +117,7 @@ export function createServer(deps: ServerDeps): Server {
 		log,
 		guide: deps.guide ?? null,
 		telegram: deps.telegram ?? null,
+		rearmCheckin: deps.rearmCheckin ?? null,
 	});
 	const llm = createLLMSettingsRoutes({ entries: deps.entries, settings: deps.settings, log });
 	const docs = createDocsRoutes({ entries: deps.entries, docs: deps.docs ?? null, log });

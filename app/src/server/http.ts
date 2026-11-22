@@ -286,7 +286,7 @@ export function decodeFailed(res: ServerResponse, err: unknown): void {
  * `foldName`): a key that differs only in case matches too, and when more than
  * one key matches, the **last** one in the document wins. Go's own answers for
  * `{"apikey":"a","APIKEY":"b"}` (b) and the reverse order (a) are in
- * tmp/t2x-golden; the object is walked in JSON.parse's key order.
+ * app/golden/t2x/main.go; the object is walked in JSON.parse's key order.
  *
  * Two gaps against Go, both accepted (decisions.md, brief G2):
  * - a repeated exact key. `JSON.parse` keeps the FIRST position with the LAST

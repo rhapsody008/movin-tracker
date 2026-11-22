@@ -83,6 +83,8 @@ export interface RigOptions {
 	/** Server.Guide; null is a build with no guide. */
 	guide?: (() => Promise<Uint8Array>) | null;
 	telegram?: TelegramStatusSource | null;
+	/** Asks the scheduled check-in to run again after a settings save (T5.1c). */
+	rearmCheckin?: (() => Promise<void>) | null;
 	/** Replaces any other dependency before the server is built. */
 	deps?: (deps: ServerDeps) => ServerDeps;
 }
@@ -147,6 +149,7 @@ export async function startServer(o: RigOptions = {}): Promise<Rig> {
 		sseHeartbeatMs: o.heartbeatMs ?? 50,
 		guide: o.guide ?? null,
 		telegram: o.telegram ?? null,
+		rearmCheckin: o.rearmCheckin ?? null,
 	};
 	const app = createServer(o.deps === undefined ? deps : o.deps(deps));
 

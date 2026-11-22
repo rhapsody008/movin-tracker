@@ -1,5 +1,5 @@
 // The prompt (T3.4): Go's texts and v3's layout. The rules, documents section,
-// date and group line are compared with tmp/t34-golden's bytes; the snapshot
+// date and group line are compared with app/golden/t34/main.go's bytes; the snapshot
 // selection and the deltas are Go's prompt.go rules moved into the user
 // message. Port of internal/agent/prompt_test.go's cases (which no longer has
 // its own file in Go: the rules and snapshot live in milestone_test.go and
@@ -53,7 +53,7 @@ function entry(over: Partial<Entry>): Entry {
 	};
 }
 
-/** goldenDoc is tmp/t34-golden's fixture: 173 live entries and three archived. */
+/** goldenDoc is app/golden/t34/main.go's fixture: 173 live entries and three archived. */
 function goldenDoc(): Doc {
 	const doc = emptyDoc();
 	const start = Date.UTC(2026, 0, 1, 0, 0, 0);
@@ -380,6 +380,47 @@ describe("the hooks", () => {
 		});
 		if (later === undefined) throw new Error("no userContent");
 		expect(later.content).toBe(`${dateLine(doc.meta, FIXED, "UTC")}\n\nagain`);
+	});
+
+	it("puts the pending notes under one header line, after the delta and before the date", async () => {
+		const doc = emptyDoc();
+		doc.meta = { keyDate: "2026-10-29", moveDate: null };
+		doc.entries.push(entry({ id: "a", title: "A" }));
+		const entries = await service(doc);
+		const hooks = promptHooks({ entries, log: createTestLog().log, timeZone: "UTC", now: () => FIXED });
+		const checkin = "(morning check-in) Good morning. Today: nothing due.\n\nAsked about:\n• Yesterday: Book movers";
+
+		const first = await hooks.userContent?.("k", "hello", {
+			fresh: true,
+			group: false,
+			state: null,
+			notes: [{ tag: "checkin", text: checkin }],
+		});
+		if (first === undefined) throw new Error("no userContent");
+		// The exact bytes: the snapshot, the notes block, the date line, the message.
+		expect(first.content).toBe(
+			`${snapshotText(doc)}\n\nSent to this chat since your last message:\n${checkin}\n\n${dateLine(doc.meta, FIXED, "UTC")}\n\nhello`,
+		);
+
+		// Two notes are one block, separated by a blank line; the same turn without
+		// notes is exactly what it was before notes existed.
+		const later = await hooks.userContent?.("k", "again", {
+			fresh: false,
+			group: false,
+			state: first.state,
+			notes: [
+				{ tag: "checkin", text: "(morning check-in) one" },
+				{ tag: "notice", text: "(documents updated) two" },
+			],
+		});
+		if (later === undefined) throw new Error("no userContent");
+		expect(later.content).toBe(
+			`Sent to this chat since your last message:\n(morning check-in) one\n\n(documents updated) two\n\n${dateLine(doc.meta, FIXED, "UTC")}\n\nagain`,
+		);
+
+		const plain = await hooks.userContent?.("k", "again", { fresh: false, group: false, state: first.state });
+		if (plain === undefined) throw new Error("no userContent");
+		expect(plain.content).toBe(`${dateLine(doc.meta, FIXED, "UTC")}\n\nagain`);
 	});
 
 	it("shows one edit from elsewhere as exactly one updated line", async () => {

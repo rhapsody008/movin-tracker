@@ -26,7 +26,7 @@ EVAL_ENV := -e LLM_BASE_URL -e LLM_MODEL -e LLM_STREAMING -e LLM_THINK_ON_DEMAND
 # unset forwards nothing, which would leave those MinIO values in place. With
 # explicit values an unset S3_ENDPOINT_URL reaches the container empty, which is
 # how the app talks to AWS in production; a set one points at that endpoint.
-# Export them in your shell first (repo root: `set -a; . ./.env; set +a`).
+# The chat-eval recipes load them from the repo's .env (EVAL_LOAD_ENV below).
 EVAL_BUCKET := -e S3_ENDPOINT_URL="$${S3_ENDPOINT_URL}" -e S3_BUCKET="$${S3_BUCKET}" \
 	-e S3_PREFIX="$${S3_PREFIX}" -e AWS_REGION="$${AWS_REGION}"
 # Secrets are forwarded by name only: `docker compose run -e NAME` takes the value
@@ -36,7 +36,7 @@ EVAL_BUCKET := -e S3_ENDPOINT_URL="$${S3_ENDPOINT_URL}" -e S3_BUCKET="$${S3_BUCK
 # stays off the command line either way.
 EVAL_SECRETS := -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e SETTINGS_SECRET
 
-.PHONY: help lint test format shell clean ui-check chat-eval chat-eval-docs
+.PHONY: help lint test format image run shell clean ui-check chat-eval chat-eval-docs chat-eval-env
 
 help: ## List the targets
 	@awk 'BEGIN{FS=":.*## "} /^[a-z-]+:.*## /{printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,16 +54,37 @@ test: node_modules/.installed ## Vitest on Node 24, the S3 half against the comp
 format: node_modules/.installed ## Biome check --write
 	$(RUN) npm run format
 
+# The v3 production image (app/Dockerfile). The build context is the repo
+# root, because the image needs docs/admin-guide.md as well as app/.
+image: ## Build the production image; the context is the repo root
+	docker build -f Dockerfile -t movin-app:local ..
+
+# The same image under compose's app-image: read-only root filesystem, /data
+# on a volume, MinIO instead of the real bucket (docker-compose.yml).
+run: image ## Build and start it as compose's app-image on 127.0.0.1:8091
+	docker compose -f ../docker-compose.yml --profile image up -d app-image
+
 # Port of cmd/chateval (agent-spec §6): the twelve messages through the real v3
 # agent, on an in-memory copy of the fixture. Billed: it calls the endpoint.
-chat-eval: node_modules/.installed ## Run the eval messages against the LLM_* in your environment
-	HOST_UID=$$(id -u) HOST_GID=$$(id -g) docker compose -f ../docker-compose.yml --profile tools run --rm \
-		$(FIXTURES) $(EVAL_ENV) app-test node eval/chateval.ts
+# `chat-eval` and `chat-eval-docs` use the connection saved on the web page (the
+# NAI gateway), read only from the app's bucket: the recipe loads the repo's
+# .env into its own shell (never echoed), so nothing needs exporting first;
+# .env's values win over the shell's. `chat-eval-env` uses LLM_* from
+# the environment instead (e.g. a local model server).
+EVAL_LOAD_ENV := set -a; if [ -f ../.env ]; then . ../.env; fi; set +a; \
+	test -n "$${S3_BUCKET}" || { echo "chat-eval reads the saved connection from the app's bucket: set S3_BUCKET (and AWS_*, SETTINGS_SECRET) in .env or your shell."; exit 1; }
+EVAL_RUN := HOST_UID=$$(id -u) HOST_GID=$$(id -g) docker compose -f ../docker-compose.yml --profile tools run --rm $(FIXTURES) $(EVAL_ENV)
+
+chat-eval: node_modules/.installed ## Run the eval messages on the saved connection (NAI; read only; billed)
+	@$(EVAL_LOAD_ENV); \
+	$(EVAL_RUN) $(EVAL_BUCKET) $(EVAL_SECRETS) app-test node eval/chateval.ts -saved
 
 chat-eval-docs: node_modules/.installed ## The eval plus the document questions, on the saved connection (read only; billed)
-	@test -n "$${S3_BUCKET}" || { echo "chat-eval-docs reads the app's bucket: export S3_BUCKET first, with S3_PREFIX, S3_ENDPOINT_URL, AWS_* and SETTINGS_SECRET (repo root: set -a; . ./.env; set +a)."; exit 1; }
-	HOST_UID=$$(id -u) HOST_GID=$$(id -g) docker compose -f ../docker-compose.yml --profile tools run --rm \
-		$(FIXTURES) $(EVAL_ENV) $(EVAL_BUCKET) $(EVAL_SECRETS) app-test node eval/chateval.ts -saved -docs
+	@$(EVAL_LOAD_ENV); \
+	$(EVAL_RUN) $(EVAL_BUCKET) $(EVAL_SECRETS) app-test node eval/chateval.ts -saved -docs
+
+chat-eval-env: node_modules/.installed ## Run the eval messages against the LLM_* in your environment (billed if remote)
+	$(EVAL_RUN) app-test node eval/chateval.ts
 
 ui-check: ## Headless Chrome against the TS app on MinIO; screenshots in tmp/ui-check-ts
 	tools/ui-check/run.sh

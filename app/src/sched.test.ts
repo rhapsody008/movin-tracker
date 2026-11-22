@@ -1,7 +1,7 @@
 // Port of internal/sched/sched_test.go, plus the zone formatting the daily
 // documents timer's log line needs. nextRun, day and addDays are compared case
 // by case with Go's own answers in testdata/sched.go.json, which
-// tmp/t15c-golden/main.go writes: two zones without DST (Asia/Singapore, UTC)
+// app/golden/t15c/main.go writes: two zones without DST (Asia/Singapore, UTC)
 // and one with (Europe/London, across both 2026 changes).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

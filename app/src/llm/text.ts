@@ -3,7 +3,7 @@
 //
 // Go's regex is case-sensitive and the trim happens only when the text holds a
 // "<|" at all, which is what keeps every other reply byte-identical. The case
-// table lives in testdata/striptokens.go.json, written by tmp/t31-golden.
+// table lives in testdata/striptokens.go.json, written by app/golden/t31/main.go.
 
 import { goTrimSpace } from "../gostr.ts";
 

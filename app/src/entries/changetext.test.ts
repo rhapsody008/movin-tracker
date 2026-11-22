@@ -1,5 +1,5 @@
 // The change line, against the Go program's own answers. The fixture comes from
-// tmp/t21-golden/main.go (agent.Money, agent.Summary and agent.ChangeText), so
+// app/golden/t21/main.go (agent.Money, agent.Summary and agent.ChangeText), so
 // this compares the port with Go rather than with a guess.
 //
 // It lives in src/server/testdata beside the HTTP transcript, not in

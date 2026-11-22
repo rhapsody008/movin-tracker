@@ -17,6 +17,9 @@ configMapGenerator:
       - S3_BUCKET=movintrackerbackend
       - S3_PREFIX=
       - ALLOWED_EMAILS=yizhou0514@gmail.com
+      # This deployment's own S3 start counter (harness/prod/epoch.json, T5.3a):
+      # there is no default, so prod can never read dev's counter.
+      - MOVIN_INSTANCE=prod
       # Optional Telegram allowlist defaults; the web page (Settings →
       # Telegram) replaces them, so these can stay empty.
       - TELEGRAM_ALLOWED_IDS=8322949531=Yi,8833869288=Vicky

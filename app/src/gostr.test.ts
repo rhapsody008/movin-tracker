@@ -72,8 +72,8 @@ describe("strings.Trim and strings.TrimRight", () => {
 });
 
 describe("goQuote", () => {
-	// Go's answers for these, from tmp/t14-golden/probe4.go: printable text
-	// stays raw, non-printable space and controls are escaped.
+	// Go's answers for these, from a Go probe: printable text stays raw,
+	// non-printable space and controls are escaped.
 	it("writes Go's %q: raw when printable, \\x below U+0080, \\u above", () => {
 		expect(goQuote("a\tb")).toBe(String.raw`"a\tb"`);
 		expect(goQuote("é 厨房 😀")).toBe('"é 厨房 😀"');
@@ -92,7 +92,7 @@ describe("goStamp", () => {
 });
 
 describe("compareBytes", () => {
-	// The order Go's sort.Strings gives these keys (tmp/t14-golden/main.go
+	// The order Go's sort.Strings gives these keys (app/golden/t14/main.go
 	// sortkeys), not one worked out here. JS's UTF-16 order differs: it puts a
 	// surrogate pair (a non-BMP character) before U+E000.
 	it("sorts in Go's byte order, not JavaScript's UTF-16 order", () => {

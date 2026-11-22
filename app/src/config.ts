@@ -24,6 +24,12 @@ const DEFAULT_GUIDE_FILE = fileURLToPath(new URL("../../docs/admin-guide.md", im
 /** The LLM limits that come from Defaults, not from the environment. */
 export const LLM_DEFAULTS = { timeoutSec: 600, maxToolRounds: 5, streaming: true } as const;
 
+/** How long HARNESS_RESTORE_ID may be, in characters (T5.3a). */
+const RESTORE_ID_MAX = 128;
+
+/** What a restore id may be: printable ASCII, so it survives a shell and a log line unchanged. */
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+
 export interface LLMConfig {
 	/** Always "openai" in v2. */
 	kind: "openai";
@@ -66,6 +72,15 @@ export interface Config {
 	dataDir: string;
 	/** false when MOVIN_DOCS=off: no syncer, no syncs, and GET /api/docs says on:false. */
 	docsOff: boolean;
+	/**
+	 * MOVIN_INSTANCE: `dev` or `prod`, naming this deployment's S3 start counter
+	 * (`harness/<instance>/epoch.json`, T5-plan §14.6). Empty when it is not set:
+	 * serve() then refuses to start, so prod can never share dev's counter — but a
+	 * test or tool that builds only the rest of the config may leave it out.
+	 */
+	instance: string;
+	/** HARNESS_RESTORE_ID: a fresh id after a restore, else empty (the ConfigMap `movin-restore`). */
+	restoreId: string;
 	pollEveryMs: number;
 	logLevel: string;
 }
@@ -169,6 +184,18 @@ export function loadConfig(e: Env): Config {
 	const docsSwitch = env(e, "MOVIN_DOCS", "on");
 	if (docsSwitch !== "on" && docsSwitch !== "off") throw new Error('MOVIN_DOCS must be "on" or "off"');
 
+	// The restore guard's two variables (T5.3a). A default for the instance would
+	// let prod share dev's counter and run a false restore, so there is none: the
+	// value is required where the guard is built (serve).
+	const instance = env(e, "MOVIN_INSTANCE", "");
+	if (instance !== "" && instance !== "dev" && instance !== "prod") {
+		throw new Error('MOVIN_INSTANCE must be "dev" or "prod"');
+	}
+	const restoreId = env(e, "HARNESS_RESTORE_ID", "");
+	if (restoreId.length > RESTORE_ID_MAX || !PRINTABLE_ASCII.test(restoreId)) {
+		throw new Error(`HARNESS_RESTORE_ID must be at most ${String(RESTORE_ID_MAX)} printable ASCII characters`);
+	}
+
 	const allowedEmails: string[] = [];
 	for (const part of env(e, "ALLOWED_EMAILS", "").split(",")) {
 		const mail = goTrimSpace(part).toLowerCase();
@@ -195,6 +222,8 @@ export function loadConfig(e: Env): Config {
 		guideFile: env(e, "GUIDE_FILE", DEFAULT_GUIDE_FILE),
 		dataDir: env(e, "DATA_DIR", "/data"),
 		docsOff: docsSwitch === "off",
+		instance,
+		restoreId,
 		pollEveryMs: 5000,
 		logLevel: env(e, "LOG_LEVEL", "info"),
 	});

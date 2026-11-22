@@ -33,6 +33,14 @@ export const CUT_OFF_NOTE = " (cut off: the reply hit the length limit)";
 export const CUT_OFF_ERROR =
 	"the model's reply was cut off by the output limit before it said anything; try a shorter question";
 
+/**
+ * Go's InputError for a connection with no endpoint or model (agent.go:152-154):
+ * `prepare` refuses it before any request, and every channel prints the same
+ * text — the web route as its 400, the bot through Go's failure line (T4 fixes,
+ * M1).
+ */
+export const NO_CONNECTION_MESSAGE = "no LLM endpoint or model is configured; set one in Settings → LLM";
+
 /** Go's finish(): what a turn says when it made a change and said nothing (agent.go:245-249). */
 export const DONE_REPLY = "Done.";
 

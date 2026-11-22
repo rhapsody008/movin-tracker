@@ -16,7 +16,15 @@
 // follows the conversation (T3.5).
 
 import { randomUUID } from "node:crypto";
-import { type ChatResult, chatReply, cutOffBeforeText, parseThink, replyText, wireChanges } from "../agent/reply.ts";
+import {
+	type ChatResult,
+	chatReply,
+	cutOffBeforeText,
+	NO_CONNECTION_MESSAGE,
+	parseThink,
+	replyText,
+	wireChanges,
+} from "../agent/reply.ts";
 import type { Agent, AgentEvent, ChangeLine } from "../durable/adapter.ts";
 import { goMarshal, Ordered } from "../gojson.ts";
 import { goTrimSpace } from "../gostr.ts";
@@ -25,9 +33,6 @@ import type { SettingsService } from "../settings/settings.ts";
 import { startSSE } from "./events.ts";
 import { decodeBody, decodeFailed, fieldOf, header, requestPath, writeErr, writeJSON } from "./http.ts";
 import type { Handler } from "./router.ts";
-
-/** Go's InputError for a connection with no endpoint or model (agent.go:161-163). */
-export const NO_CONNECTION_MESSAGE = "no LLM endpoint or model is configured; set one in Settings → LLM";
 
 /** Go's InputError for a body whose last turn is not the person speaking (agent.go:157-159). */
 export const LAST_TURN_MESSAGE = "the last turn must be a user message";

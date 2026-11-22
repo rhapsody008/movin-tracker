@@ -5,7 +5,7 @@
 // are the ones faux cannot show: the provider request body (pi-durable's
 // beforeProviderRequest rides on pi-ai's onPayload, which the faux provider does
 // not call) and the Authorization header an HTTP request really carries.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,7 @@ import {
 	fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, describe, expect, it } from "vitest";
-import { promptHooks } from "../agent/prompt.ts";
+import { NOTES_HEADER, promptHooks } from "../agent/prompt.ts";
 import { buildTools } from "../agent/tools.ts";
 import { CLASS_TEXT, type Doc, emptyDoc, STATUS_OK } from "../docs/index.ts";
 import { IMAGE_LIMIT_REPLY } from "../docs/render.ts";
@@ -29,20 +29,43 @@ import { goMarshal } from "../gojson.ts";
 import { startStub } from "../llm/stub.ts";
 import { createTestLog } from "../log.ts";
 import { createMemoryStore } from "../objstore/memory.ts";
+import type { ObjectStore } from "../objstore/store.ts";
 import { DEFAULTS, type LLM } from "../settings/settings.ts";
 import {
 	type Agent,
 	type AgentEvent,
 	type AgentHooks,
+	abortDeliveries,
+	abortSchedules,
+	createScheduleTwice,
 	EARLIER_IMAGE,
+	IDLE_RESET_MS,
+	INTAKE_DOC,
+	type IntakeItem,
+	inspectLive,
+	inspectSchedules,
+	isUnsettled,
 	MAX_IMAGES_PER_RUN,
+	markSchedules,
 	NO_ACTOR,
+	type Outbox,
+	OutboxError,
+	type OutboxJson,
+	observeCommits,
 	observeDocuments,
 	openAgent,
 	type RetryOptions,
+	type RunResult,
+	SCHEDULE_MAX_SLEEP_MS,
+	type ScheduleInspection,
+	type ScheduleSpec,
 	type SettingsSource,
+	scheduleOwners,
+	type Timer,
 	type ToolSpec,
+	whenIdle,
 } from "./adapter.ts";
+import { createStartGuard, epochKey, type StartGuard } from "./startguard.ts";
 
 /** One request a faux provider answered, as the test needs to see it. */
 interface Request {
@@ -124,6 +147,14 @@ async function open(options: {
 	tools?: readonly ToolSpec[];
 	now?: () => number;
 	retry?: RetryOptions;
+	/** The harness's timer, when a test owns time as well as the clock. */
+	setTimer?: Timer;
+	/** The channel a delivery goes through; absent is a process that cannot send. */
+	outbox?: Outbox;
+	/** The scheduled jobs this process runs (T5.1b); absent is a process with none. */
+	schedules?: readonly ScheduleSpec[];
+	/** The restore guard (T5.3a); absent is a start that only creates the schedules. */
+	startGuard?: StartGuard;
 }): Promise<Rig> {
 	const dir = await mkdtemp(join(tmpdir(), "movin-t32-"));
 	dirs.push(dir);
@@ -157,6 +188,10 @@ async function open(options: {
 			...(options.tools === undefined ? {} : { tools: options.tools }),
 			...(options.hooks === undefined ? {} : { hooks: options.hooks }),
 			...(options.retry === undefined ? {} : { retry: options.retry }),
+			...(options.setTimer === undefined ? {} : { setTimer: options.setTimer }),
+			...(options.outbox === undefined ? {} : { outbox: options.outbox }),
+			...(options.schedules === undefined ? {} : { schedules: options.schedules }),
+			...(options.startGuard === undefined ? {} : { startGuard: options.startGuard }),
 			models: () => ({ models, modelRef: { provider: model.provider, modelId: model.id } }),
 		});
 	agent = await make();
@@ -1885,5 +1920,1802 @@ describe("the prompt through the adapter", () => {
 		} finally {
 			await stub.close();
 		}
+	});
+});
+
+// The outbox (T4.3b): the `movin.outbox.delivery` task hands a reply's parts to
+// a channel one at a time, and the checkpoint moves only after a part went out.
+// Its waits are pi-durable sleeps: stored on the Harness clock and armed as a
+// real timer for `until - now()`. A test that owns the clock therefore owns the
+// timer too (OpenAgentOptions.setTimer), so no case here waits a real backoff.
+const OUTBOX_KEY = "tg:4242";
+
+/** A clock and timer a test drives: `now()` answers, and `advance()` passes time. */
+interface ManualClock {
+	now: () => number;
+	setTimer: Timer;
+	/**
+	 * How many foreground timers are armed: the ones that resume work, such as a
+	 * delivery's backoff. A background timer only frees memory (pi-durable arms one
+	 * at open), so it is not counted.
+	 */
+	waiting: () => number;
+	/** advance moves the clock forward, firing each timer as its time comes, and settles. */
+	advance: (ms: number) => Promise<void>;
+}
+
+/** theSettle is one turn of the event loop, enough for a fired timer's work to commit. */
+function theSettle(): Promise<void> {
+	return new Promise((done) => setImmediate(done));
+}
+
+/**
+ * manualClock is the Harness's time as a test owns it. `advance` walks the armed
+ * timers in order, so a 1 s backoff costs nothing; a disarm takes the timer off
+ * the list, as the Harness disarms the one it replaces.
+ */
+function manualClock(start = Date.parse("2026-11-11T09:00:00Z")): ManualClock {
+	let clock = start;
+	const timers: { at: number; callback: () => void; background: boolean }[] = [];
+	return {
+		now: () => clock,
+		setTimer: (callback, delayMs, options) => {
+			const timer = { at: clock + delayMs, callback, background: options.background };
+			timers.push(timer);
+			return () => {
+				const at = timers.indexOf(timer);
+				if (at >= 0) timers.splice(at, 1);
+			};
+		},
+		waiting: () => timers.filter((timer) => !timer.background).length,
+		advance: async (ms) => {
+			const target = clock + ms;
+			for (;;) {
+				const next = timers.filter((timer) => timer.at <= target).sort((a, b) => a.at - b.at)[0];
+				if (next === undefined) break;
+				timers.splice(timers.indexOf(next), 1);
+				clock = Math.max(clock, next.at);
+				next.callback();
+				await theSettle();
+			}
+			clock = Math.max(clock, target);
+		},
+	};
+}
+
+/** waitFor polls until a condition holds, so a test can catch a task between two steps. */
+async function waitFor(condition: () => boolean, what: string): Promise<void> {
+	const deadline = Date.now() + 4_000;
+	while (!condition()) {
+		if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+		await new Promise((done) => setTimeout(done, 5));
+	}
+}
+
+/** stillWaiting is whether `work` is unresolved `ms` later: the idle wait must not have finished. */
+async function stillWaiting(work: Promise<void>, ms = 100): Promise<boolean> {
+	const timer = new Promise<string>((done) => setTimeout(() => done("waiting"), ms));
+	return (await Promise.race([work.then(() => "idle"), timer])) === "waiting";
+}
+
+/** flood is Telegram's 429, as T4.2b will map it: `retry_after` in milliseconds. */
+function flood(retryAfterMs: number): OutboxError {
+	const error = new OutboxError("telegram sendMessage: 429 Too Many Requests: retry after 3");
+	error.retryAfterMs = retryAfterMs;
+	return error;
+}
+
+describe("the outbox", () => {
+	it("sends the parts in order, each once, to the address it was given", async () => {
+		const sends: { address: OutboxJson; part: OutboxJson }[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (address, part) => {
+					sends.push({ address, part });
+				},
+			},
+		});
+		const address: OutboxJson = { chat: 4242, messageId: 7, group: true };
+
+		await rig.agent.deliver(OUTBOX_KEY, address, ["one", "two", "three"]);
+		await whenIdle(rig.agent, OUTBOX_KEY);
+
+		expect(sends.map((send) => send.part)).toEqual(["one", "two", "three"]);
+		expect(sends.map((send) => send.address)).toEqual([address, address, address]);
+		// A delivery is not a turn: no model request was made for it.
+		expect(rig.requests).toHaveLength(0);
+	});
+
+	it("waits out a 429 before it sends that part again", async () => {
+		const clock = manualClock();
+		const sends: { part: OutboxJson; at: number }[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			outbox: {
+				send: async (_address, part) => {
+					sends.push({ part, at: clock.now() });
+					if (sends.length === 1) throw flood(3000);
+				},
+			},
+		});
+
+		await rig.agent.deliver(OUTBOX_KEY, null, ["only"]);
+		await waitFor(() => sends.length === 1 && clock.waiting() === 1, "the 429's sleep");
+		// Nothing before `retry_after` plus the second of margin: the part is not retried early.
+		await clock.advance(3999);
+		expect(sends).toHaveLength(1);
+		await clock.advance(1);
+		await whenIdle(rig.agent, OUTBOX_KEY);
+
+		expect(sends.map((send) => send.part)).toEqual(["only", "only"]);
+		expect((sends[1]?.at ?? 0) - (sends[0]?.at ?? 0)).toBe(4000);
+	});
+
+	it("stops the rest of a delivery after a permanent failure", async () => {
+		const sends: OutboxJson[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					if (part === "b") {
+						const refused = new OutboxError("telegram sendMessage: 400 Bad Request: chat not found");
+						refused.permanent = true;
+						throw refused;
+					}
+				},
+			},
+		});
+
+		await rig.agent.deliver(OUTBOX_KEY, null, ["a", "b", "c"]);
+		await whenIdle(rig.agent, OUTBOX_KEY);
+
+		expect(sends).toEqual(["a", "b"]);
+		const failed = rig.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+		expect(failed.filter((line) => line.msg === "outbox delivery failed")).toEqual([
+			expect.objectContaining({ part: 1, of: 3, attempts: 1, permanent: true }),
+		]);
+	});
+
+	it("ends failed after six attempts on one part, and the next part is never sent", async () => {
+		const clock = manualClock();
+		const sends: { part: OutboxJson; at: number }[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			outbox: {
+				send: async (_address, part) => {
+					sends.push({ part, at: clock.now() });
+					throw new Error("telegram sendMessage: fetch failed");
+				},
+			},
+		});
+
+		await rig.agent.deliver(OUTBOX_KEY, null, ["a", "b"]);
+		await waitFor(() => clock.waiting() === 1, "the first backoff");
+		// The whole schedule is 1 + 2 + 4 + 8 + 16 s of waiting, and one advance.
+		await clock.advance(31_000);
+		await whenIdle(rig.agent, OUTBOX_KEY);
+
+		// Six attempts at the first part, and the delivery stopped there.
+		expect(sends.map((send) => send.part)).toEqual(["a", "a", "a", "a", "a", "a"]);
+		const waitBetween = sends.slice(1).map((send, index) => send.at - (sends[index]?.at ?? 0));
+		expect(waitBetween).toEqual([1000, 2000, 4000, 8000, 16000]);
+		const lines = rig.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+		expect(lines.filter((line) => line.msg === "outbox delivery failed")).toEqual([
+			expect.objectContaining({
+				part: 0,
+				of: 2,
+				attempts: 6,
+				permanent: false,
+				err: "telegram sendMessage: fetch failed",
+			}),
+		]);
+	});
+
+	it("sends nothing more once a delivery is aborted, and drops the parts after it", async () => {
+		const clock = manualClock();
+		const sends: OutboxJson[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					throw new Error("telegram sendMessage: 502 Bad Gateway");
+				},
+			},
+		});
+
+		await rig.agent.deliver(OUTBOX_KEY, null, ["a", "b"]);
+		// The first attempt failed; the delivery now sleeps out its 1 s backoff.
+		await waitFor(() => clock.waiting() === 1, "the first backoff");
+		await abortDeliveries(rig.agent, OUTBOX_KEY);
+		await whenIdle(rig.agent, OUTBOX_KEY);
+		// Even the wait it stored is not waited out: nothing more is sent.
+		await clock.advance(60_000);
+
+		expect(sends).toEqual(["a"]);
+	});
+
+	it("counts a part's attempts on its own, not the delivery's", async () => {
+		const clock = manualClock();
+		const sends: { part: OutboxJson; at: number }[] = [];
+		let aTries = 0;
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			outbox: {
+				send: async (_address, part) => {
+					sends.push({ part, at: clock.now() });
+					// The first part fails once and then goes out; the second never does.
+					if (part === "a") {
+						aTries += 1;
+						if (aTries === 1) throw new Error("telegram sendMessage: fetch failed");
+						return;
+					}
+					throw new Error("telegram sendMessage: fetch failed");
+				},
+			},
+		});
+
+		await rig.agent.deliver(OUTBOX_KEY, null, ["a", "b"]);
+		await waitFor(() => clock.waiting() === 1, "the first backoff");
+		await clock.advance(32_000);
+		await whenIdle(rig.agent, OUTBOX_KEY);
+
+		// The second part starts again at the first backoff: a successful send resets
+		// the count, so it gets its six attempts and not the first part's leftovers.
+		expect(sends.map((send) => send.part)).toEqual(["a", "a", "b", "b", "b", "b", "b", "b"]);
+		// The moving part is where a part ends and the next begins: no wait there.
+		const waits = sends.slice(1).map((send, index) => send.at - (sends[index]?.at ?? 0));
+		expect(waits.filter((wait) => wait > 0)).toEqual([1000, 1000, 2000, 4000, 8000, 16000]);
+	});
+
+	it("does not hold the store while a send is in flight", async () => {
+		const sends: string[] = [];
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(String(part));
+					if (part === "slow") await held;
+				},
+			},
+		});
+
+		await rig.agent.deliver("tg:1", null, ["slow"]);
+		await waitFor(() => sends.length === 1, "the first chat's send");
+		// Another chat's delivery commits while that send is open: a send inside the
+		// commit callback would make every writer wait for the channel.
+		await rig.agent.deliver("tg:2", null, ["quick"]);
+		await waitFor(() => sends.includes("quick"), "the second chat's part");
+
+		release();
+		await whenIdle(rig.agent, "tg:1");
+		await whenIdle(rig.agent, "tg:2");
+		expect(sends).toEqual(["slow", "quick"]);
+	});
+
+	it("keeps two deliveries for one key in the order they were created", async () => {
+		const sends: OutboxJson[] = [];
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					if (part === "first") await held;
+				},
+			},
+		});
+
+		await rig.agent.deliver(OUTBOX_KEY, null, ["first"]);
+		await rig.agent.deliver(OUTBOX_KEY, null, ["second"]);
+		// The first delivery's send is still open, so the second must be waiting.
+		await waitFor(() => sends.length === 1, "the first delivery's send");
+		expect(await stillWaiting(whenIdle(rig.agent, OUTBOX_KEY), 50)).toBe(true);
+		expect(sends).toEqual(["first"]);
+
+		release();
+		await whenIdle(rig.agent, OUTBOX_KEY);
+		expect(sends).toEqual(["first", "second"]);
+	});
+
+	it("refuses to queue a delivery when no outbox is configured", async () => {
+		const rig = await open({ answer: say("unused") });
+		await expect(rig.agent.deliver(OUTBOX_KEY, null, ["a"])).rejects.toThrow("no outbox configured");
+		// An empty reply is nothing to send, so it needs no channel either.
+		await rig.agent.deliver(OUTBOX_KEY, null, []);
+		expect(rig.requests).toHaveLength(0);
+	});
+
+	it("is conversation-owned and not background: the idle wait covers it running and sleeping", async () => {
+		const clock = manualClock();
+		const sends: OutboxJson[] = [];
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					// The first attempt holds the task in its phase, then fails so the
+					// second state to prove is the retry backoff.
+					if (sends.length === 1) {
+						await held;
+						throw new Error("telegram sendMessage: 502 Bad Gateway");
+					}
+				},
+			},
+		});
+
+		await rig.agent.deliver(OUTBOX_KEY, null, ["a"]);
+		// Running: a background task would be excluded from this wait.
+		await waitFor(() => sends.length === 1, "the first send");
+		expect(await stillWaiting(whenIdle(rig.agent, OUTBOX_KEY), 50)).toBe(true);
+
+		// Sleeping: the 1 s backoff holds the conversation just as a phase does.
+		release();
+		await waitFor(() => clock.waiting() === 1, "the backoff");
+		expect(await stillWaiting(whenIdle(rig.agent, OUTBOX_KEY), 50)).toBe(true);
+		await clock.advance(1000);
+		await whenIdle(rig.agent, OUTBOX_KEY);
+
+		expect(sends).toEqual(["a", "a"]);
+	});
+
+	it("opens a database whose pending delivery has no outbox, and parks it instead of faulting", async () => {
+		// A process with a channel queues a reply and stops before it went out.
+		const first = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async () => {
+					throw new Error("telegram sendMessage: fetch failed");
+				},
+			},
+		});
+		await first.agent.deliver(OUTBOX_KEY, null, ["a"]);
+		await first.close();
+		rigs.splice(rigs.indexOf(first), 1);
+
+		// Reopened by a process that cannot send, a minute on so the backoff is due.
+		// The kind is registered, so the database opens and the task runs; the phase
+		// finds no channel and parks, and the reply is still there to be sent later.
+		const second = await open({ answer: say("unused"), dbPath: first.dbPath, now: () => Date.now() + 60_000 });
+		await waitFor(
+			() => second.lines.some((line) => line.includes("no outbox is configured")),
+			"the parked delivery's warning",
+		);
+		expect(await stillWaiting(whenIdle(second.agent, OUTBOX_KEY), 100)).toBe(true);
+		expect(second.lines.filter((line) => line.includes("harness report"))).toEqual([]);
+	});
+});
+
+// The intake ledger (T4.2a): a channel's poll accepts a batch in one commit, and
+// a chat's worker submits, takes or settles each item afterwards, so polling
+// never waits for a turn and nothing is accepted, run or replied to twice across
+// a crash. Item ids are Telegram's update_ids; address and payload are opaque.
+const INTAKE_KEY = "tg:4242";
+const OTHER_KEY = "tg:9";
+
+/** item is one accepted update, with only the fields a case cares about spelled out. */
+function item(id: number, over: Partial<IntakeItem> = {}): IntakeItem {
+	return {
+		id,
+		key: INTAKE_KEY,
+		address: { chat: 4242, group: false },
+		payload: { text: `m${id}` },
+		at: 1_000 + id,
+		...over,
+	};
+}
+
+/** logged reads the test log's lines with one message, as the fields they carry. */
+function logged(lines: string[], msg: string): Record<string, unknown>[] {
+	return lines.map((line) => JSON.parse(line) as Record<string, unknown>).filter((line) => line.msg === msg);
+}
+
+describe("the intake ledger", () => {
+	it("accepts a batch once, however often it is redelivered", async () => {
+		const rig = await open({ answer: say("unused") });
+		const batch = { cursor: 13, items: [item(11), item(12)] };
+
+		expect(await rig.agent.intake.accept(batch)).toEqual(batch.items);
+		// The same batch again (a poll retried after a crash) adds nothing: the ids
+		// are in `recent`, which is what makes dedupe independent of the queue.
+		expect(await rig.agent.intake.accept(batch)).toEqual([]);
+		expect(await rig.agent.intake.state()).toEqual({
+			cursor: 13,
+			acceptedAt: expect.any(Number),
+			queue: batch.items,
+			open: [],
+		});
+	});
+
+	it("keeps the id of an item it settled, so a redelivery is not queued again", async () => {
+		const rig = await open({ answer: say("unused") });
+		await rig.agent.intake.accept({ cursor: 11, items: [item(10)] });
+
+		expect(await rig.agent.intake.take(10)).toBe(true);
+		expect(await rig.agent.intake.state()).toEqual({ cursor: 11, acceptedAt: expect.any(Number), queue: [], open: [] });
+		// Gone from the queue, still known: a redelivered update is dropped.
+		expect(await rig.agent.intake.accept({ cursor: 11, items: [item(10)] })).toEqual([]);
+		expect(await rig.agent.intake.state()).toEqual({ cursor: 11, acceptedAt: expect.any(Number), queue: [], open: [] });
+	});
+
+	it("drops the 65th queued item of one chat and still moves the cursor", async () => {
+		const rig = await open({ answer: say("unused") });
+		const flood = Array.from({ length: 64 }, (_unused, index) => item(100 + index));
+		await rig.agent.intake.accept({ cursor: 1_001, items: flood });
+
+		// The 65th for this chat is over the cap; another chat's item is not.
+		const added = await rig.agent.intake.accept({ cursor: 1_002, items: [item(200), item(500, { key: OTHER_KEY })] });
+
+		expect(added).toEqual([item(500, { key: OTHER_KEY })]);
+		expect(logged(rig.lines, "intake queue full, dropping update")).toEqual([
+			expect.objectContaining({ level: "WARN", key: INTAKE_KEY, id: 200 }),
+		]);
+		const state = await rig.agent.intake.state();
+		expect(state.queue.filter((queued) => queued.key === INTAKE_KEY)).toHaveLength(64);
+		expect(state.queue.filter((queued) => queued.key === OTHER_KEY)).toEqual([item(500, { key: OTHER_KEY })]);
+		// The batch was accepted either way: the cursor moves, so the poll is not stuck.
+		expect(state.cursor).toBe(1_002);
+	});
+
+	it("keeps the batch's own offset, forwards or back, so a stale poll can come back", async () => {
+		const rig = await open({ answer: say("unused") });
+		await rig.agent.intake.accept({ cursor: 20, items: [] });
+		// A batch polled at 0 after six quiet days carries ids below the stored cursor
+		// (B1): keeping the higher one would hide everything between them for ever.
+		await rig.agent.intake.accept({ cursor: 5, items: [item(4)] });
+
+		const state = await rig.agent.intake.state();
+		expect(state.cursor).toBe(5);
+		expect(state.queue).toEqual([item(4)]);
+	});
+
+	it("forgets the ids a stale poll brings back, but not what is still queued", async () => {
+		const rig = await open({ answer: say("unused") });
+		await rig.agent.intake.accept({ cursor: 13, items: [item(10), item(11)] });
+		expect(await rig.agent.intake.take(10)).toBe(true);
+
+		// Telegram dropped update 10 a day ago, and the reset gave a new one its id, so
+		// the stale batch queues it again; the item still queued is not queued twice (B2).
+		expect(await rig.agent.intake.accept({ cursor: 12, items: [item(10), item(11)], fresh: true })).toEqual([item(10)]);
+		expect((await rig.agent.intake.state()).queue).toEqual([item(11), item(10)]);
+	});
+
+	it("records when a batch was accepted, so a stale cursor can be told from a fresh one", async () => {
+		const clock = 1_700_000_000_000;
+		const rig = await open({ answer: say("unused"), now: () => clock });
+		// Nothing accepted yet: unknown, which is what tells the bot to poll from 0.
+		expect((await rig.agent.intake.state()).acceptedAt).toBe(0);
+
+		await rig.agent.intake.accept({ cursor: 11, items: [] });
+		// Even an empty batch is an accept: the cursor moved, so the ledger is not silent.
+		expect((await rig.agent.intake.state()).acceptedAt).toBe(clock);
+	});
+
+	it("takes an item exactly once, even for two callers at the same time", async () => {
+		const rig = await open({ answer: say("unused") });
+		await rig.agent.intake.accept({ cursor: 11, items: [item(10)] });
+
+		const takes = await Promise.all([rig.agent.intake.take(10), rig.agent.intake.take(10)]);
+
+		// At-most-once: the first caller is the one that acts.
+		expect(takes.filter((taken) => taken)).toEqual([true]);
+		expect(await rig.agent.intake.take(10)).toBe(false);
+	});
+
+	it("settles a turn once: two settles make one delivery and one send", async () => {
+		const sends: OutboxJson[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+				},
+			},
+		});
+		await rig.agent.intake.accept({ cursor: 11, items: [item(10)] });
+		await rig.agent.submit(INTAKE_KEY, "m10", { requestId: "tg:10", intake: { id: 10, deadlineAt: 5_000 } });
+
+		const address: OutboxJson = { chat: 4242, group: false };
+		await Promise.all([
+			rig.agent.intake.settle(10, INTAKE_KEY, address, ["the reply"]),
+			rig.agent.intake.settle(10, INTAKE_KEY, address, ["the reply"]),
+		]);
+		await whenIdle(rig.agent, INTAKE_KEY);
+
+		// The removal and the task were one commit, so the second settle found nothing
+		// to drop and created no task: one send, not two.
+		expect(sends).toEqual(["the reply"]);
+		expect(await rig.agent.intake.state()).toEqual({ cursor: 11, acceptedAt: expect.any(Number), queue: [], open: [] });
+	});
+
+	it("settles silently with null parts, and does nothing for an id it does not hold", async () => {
+		const sends: OutboxJson[] = [];
+		const conversations: string[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+				},
+			},
+		});
+		await rig.agent.intake.accept({ cursor: 11, items: [item(10)] });
+		const stop = observeDocuments(rig.agent, (change) => conversations.push(change.kind));
+		try {
+			// No parts: the item goes, and no delivery is created for it.
+			await rig.agent.intake.settle(10, INTAKE_KEY, { chat: 4242 }, null);
+			expect(await rig.agent.intake.state()).toEqual({
+				cursor: 11,
+				acceptedAt: expect.any(Number),
+				queue: [],
+				open: [],
+			});
+			// An id it never held: nothing removed, nothing queued, no conversation made.
+			await rig.agent.intake.settle(99, INTAKE_KEY, { chat: 4242 }, ["never sent"]);
+		} finally {
+			stop();
+		}
+
+		expect(conversations).not.toContain("movin.conversations");
+		expect(sends).toEqual([]);
+	});
+
+	it("moves the item from queue to open in the commit that admits the turn", async () => {
+		const rig = await open({ answer: say("Hello.") });
+		await rig.agent.intake.accept({ cursor: 11, items: [item(10)] });
+		const commits: { type: string; kind: string }[][] = [];
+		const stop = observeCommits(rig.agent, (changes) => commits.push([...changes]));
+		try {
+			expect(
+				await rig.agent.submit(INTAKE_KEY, "m10", { requestId: "tg:10", intake: { id: 10, deadlineAt: 7_000 } }),
+			).toMatchObject({ status: "answered", text: "Hello." });
+		} finally {
+			stop();
+		}
+
+		const state = await rig.agent.intake.state();
+		expect(state.queue).toEqual([]);
+		expect(state.open).toEqual([{ ...item(10), submission: expect.any(Number), deadlineAt: 7_000 }]);
+		// One commit holds the admission and the move, so a crash cannot leave a
+		// submitted turn whose item is still queued (or the other way round).
+		const moved = commits.filter((changes) =>
+			changes.some((change) => change.type === "document" && change.kind === INTAKE_DOC),
+		);
+		expect(moved).toHaveLength(1);
+		expect(moved[0]).toEqual(expect.arrayContaining([expect.objectContaining({ type: "submission" })]));
+	});
+
+	it("attaches to the turn a repeated requestId already admitted, and writes nothing", async () => {
+		let clock = Date.parse("2026-11-11T09:00:00Z");
+		const examined: unknown[] = [];
+		const rig = await open({
+			now: () => clock,
+			retry: { enabled: false },
+			hooks: {
+				userContent: async (_key, text, { state }) => {
+					examined.push(state);
+					return { content: text, state: { turns: 1 } };
+				},
+				afterRun: async (_key, _result, state) => state,
+			},
+			answer: (_request, index) => {
+				if (index > 0) throw new Error("a repeated requestId must not reach the model");
+				return fauxAssistantMessage(fauxText("once"));
+			},
+		});
+		const first = await rig.agent.submit(INTAKE_KEY, "one", { requestId: "tg:10" });
+		// Past the idle reset and with a thinking level the second turn would
+		// configure: both are writes a duplicate must not make.
+		clock += IDLE_RESET_MS + 1;
+		const commits: { type: string; kind: string }[][] = [];
+		const stop = observeCommits(rig.agent, (changes) => commits.push([...changes]));
+		let second: RunResult;
+		try {
+			second = await rig.agent.submit(INTAKE_KEY, "one", { requestId: "tg:10", think: true });
+		} finally {
+			stop();
+		}
+
+		expect(second).toEqual(first);
+		expect(rig.requests).toHaveLength(1);
+		// The hook that builds the model's message did not run either.
+		expect(examined).toHaveLength(1);
+		const changes = commits.flat();
+		expect(changes.filter((change) => change.type === "submission")).toEqual([]);
+		expect(changes.filter((change) => change.kind === "movin.prompt")).toEqual([]);
+		expect(changes.filter((change) => change.kind === "pi.agent")).toEqual([]);
+		expect(changes.filter((change) => change.type === "entry" && change.kind === "pi.reset")).toEqual([]);
+	});
+
+	it("starts a chat's next turn only after the earlier turn and its reply are done", async () => {
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const sends: OutboxJson[] = [];
+		const rig = await open({
+			answer: (_request, index) => fauxAssistantMessage(fauxText(index === 0 ? "first answer" : "second answer")),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					// The reply stays in flight until the test lets it go.
+					await held;
+				},
+			},
+		});
+		await rig.agent.submit(INTAKE_KEY, "first message");
+		await rig.agent.deliver(INTAKE_KEY, { chat: 4242 }, ["the reply"]);
+		await waitFor(() => sends.length === 1, "the reply's send");
+
+		const second = rig.agent.submit(INTAKE_KEY, "second message");
+		// The delivery holds the chat (it is conversation-owned), so run 2 waits.
+		expect(
+			await stillWaiting(
+				second.then(() => undefined),
+				100,
+			),
+		).toBe(true);
+		expect(rig.requests).toHaveLength(1);
+
+		release();
+		expect(await second).toMatchObject({ status: "answered", text: "second answer" });
+		expect(rig.requests).toHaveLength(2);
+		// Run 2 sees run 1, and only started once reply 1 was out.
+		const request = rig.requests[1] as Request;
+		expect(userTexts(request)).toEqual(["first message", "second message"]);
+		expect(request.messages.some((message) => textOf(message) === "first answer")).toBe(true);
+	});
+
+	it("reports a recovered turn exactly as the submit reported it", async () => {
+		const rig = await open({ answer: say("Saved it.") });
+		await rig.agent.intake.accept({ cursor: 11, items: [item(10)] });
+		const submitted = await rig.agent.submit(INTAKE_KEY, "m10", {
+			requestId: "tg:10",
+			intake: { id: 10, deadlineAt: 5_000 },
+		});
+
+		const [turn] = (await rig.agent.intake.state()).open;
+		const attached = await rig.agent.attach(INTAKE_KEY, turn?.submission ?? 0);
+
+		expect(attached).toEqual(submitted);
+		expect(attached).toMatchObject({ status: "answered", text: "Saved it." });
+		// Attaching waits the run out; it does not run it again.
+		expect(rig.requests).toHaveLength(1);
+	});
+
+	it("reports a failed turn the same way, with the key still scrubbed", async () => {
+		const rig = await open({
+			answer: () =>
+				fauxAssistantMessage("", {
+					stopReason: "error",
+					errorMessage: "insufficient_quota: the key sk-test-1234 is over its budget",
+				}),
+		});
+		await rig.agent.intake.accept({ cursor: 11, items: [item(10)] });
+		const submitted = await rig.agent.submit(INTAKE_KEY, "m10", {
+			requestId: "tg:10",
+			intake: { id: 10, deadlineAt: 5_000 },
+		});
+
+		const [turn] = (await rig.agent.intake.state()).open;
+		const attached = await rig.agent.attach(INTAKE_KEY, turn?.submission ?? 0);
+
+		expect(submitted).toMatchObject({ status: "failed", reason: "model_error" });
+		expect(attached).toEqual(submitted);
+	});
+
+	it("is idle at once for an unknown key, and waits for a running delivery", async () => {
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const sends: OutboxJson[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					await held;
+				},
+			},
+		});
+		// A chat the adapter has never seen has nothing running.
+		await rig.agent.idle(OTHER_KEY);
+
+		await rig.agent.deliver(INTAKE_KEY, { chat: 4242 }, ["the reply"]);
+		await waitFor(() => sends.length === 1, "the reply's send");
+		expect(await stillWaiting(rig.agent.idle(INTAKE_KEY), 50)).toBe(true);
+
+		release();
+		await rig.agent.idle(INTAKE_KEY);
+		expect(sends).toEqual(["the reply"]);
+	});
+
+	it("returns aborted when the caller's signal fires during the idle wait", async () => {
+		const sends: OutboxJson[] = [];
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const rig = await open({
+			answer: say("unused"),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					await held;
+				},
+			},
+		});
+		await rig.agent.deliver(INTAKE_KEY, { chat: 4242 }, ["the reply"]);
+		await waitFor(() => sends.length === 1, "the reply's send");
+
+		// A Stop while the chat is busy with the delivery: the wait is the caller's, so
+		// the turn ends `aborted` and nothing is submitted (minor 4).
+		const controller = new AbortController();
+		const turn = rig.agent.submit(INTAKE_KEY, "hi", { signal: controller.signal });
+		expect(
+			await stillWaiting(
+				turn.then(() => undefined),
+				50,
+			),
+		).toBe(true);
+		controller.abort(new Error("the person stopped it"));
+
+		expect(await turn).toMatchObject({ status: "failed", reason: "aborted" });
+		// No run was created: the model was never asked, and nothing was admitted.
+		expect(rig.requests).toHaveLength(0);
+		expect(await rig.agent.history(INTAKE_KEY, { limit: 10 })).toMatchObject({ items: [] });
+
+		release();
+		await rig.agent.idle(INTAKE_KEY);
+	});
+});
+
+describe("an unsettled result", () => {
+	it("is what a close cut short returns, and a channel must not settle it", { timeout: 15_000 }, async () => {
+		const stub = await startStub();
+		try {
+			stub.answer({ kind: "hang" });
+			const agent = await openOnStub(stub.origin, []);
+			const pending = agent.submit("web:zy@example.com", "hi");
+			await new Promise((done) => setTimeout(done, 50));
+			await agent.close();
+
+			// The turn is still durable and unanswered, so a worker leaves its item
+			// open and the restart's attach reports the real result (T4-plan §2.2).
+			expect(isUnsettled(await pending)).toBe(true);
+		} finally {
+			await stub.close();
+		}
+	});
+
+	it("is neither an answered run nor one that failed with an outcome", async () => {
+		const answered = await open({ answer: say("fine") });
+		expect(isUnsettled(await answered.agent.submit(INTAKE_KEY, "hi"))).toBe(false);
+
+		const failed = await open({
+			answer: () => fauxAssistantMessage("", { stopReason: "error", errorMessage: "insufficient_quota: over budget" }),
+		});
+		const result = await failed.agent.submit(INTAKE_KEY, "hi");
+		expect(result).toMatchObject({ status: "failed", reason: "model_error" });
+		// A refusal to answer is an outcome: the channel renders it and settles.
+		expect(isUnsettled(result)).toBe(false);
+		// So is a `faulted` built from a settled submission (resultOf's own): only
+		// what ended() returned leaves the item open, or it would stay open forever.
+		const built = { ...result, reason: "faulted", detail: "the submission was not an input" } as RunResult;
+		expect(isUnsettled(built)).toBe(false);
+	});
+});
+
+// The generic scheduled task and the pending notes (T5.1b, T5-plan §2.1, §2.3):
+// one looping task per name on the dedicated `sys:schedule` conversation, and the
+// note a delivery leaves for the chat's next message. Both are the adapter's own
+// mechanisms; what a spec does with a tick is T5.1c's and T5.2's.
+const SCHEDULE_KEY = "sys:schedule";
+
+/** A schedule spec that records the targets it was called with, and answers what `answer` says. */
+function scheduleSpec(name: string, answer: () => number): ScheduleSpec & { calls: (number | null)[] } {
+	const calls: (number | null)[] = [];
+	const spec: ScheduleSpec = {
+		name,
+		run: async ({ target }) => {
+			calls.push(target);
+			return answer();
+		},
+	};
+	return { ...spec, calls };
+}
+
+/** untilSchedules polls the agent's scheduled tasks until `done` accepts them. */
+async function untilSchedules(
+	agent: Agent,
+	done: (list: ScheduleInspection[]) => boolean,
+	what: string,
+): Promise<void> {
+	const deadline = Date.now() + 4_000;
+	for (;;) {
+		if (done(await inspectSchedules(agent))) return;
+		if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+	}
+}
+
+/** asleep is the predicate every case here waits on: the one task, sleeping. */
+function asleep(list: ScheduleInspection[]): boolean {
+	return list.length === 1 && list[0]?.state === "sleeping";
+}
+
+describe("the scheduled task", () => {
+	it("runs at creation with no target, then again at the target it answered", async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 5 * 60_000);
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+
+		await untilSchedules(rig.agent, asleep, "the first run's sleep");
+		const start = clock.now();
+		expect(spec.calls).toEqual([null]);
+		expect(await inspectSchedules(rig.agent)).toEqual([
+			{ name: "checkin", state: "sleeping", until: start + 5 * 60_000, target: start + 5 * 60_000 },
+		]);
+
+		await clock.advance(5 * 60_000);
+		await untilSchedules(rig.agent, (list) => spec.calls.length === 2 && asleep(list), "the second run");
+		// The wake hands the spec the target it stored, so a spec can decide what a
+		// wake before the target means.
+		expect(spec.calls).toEqual([null, start + 5 * 60_000]);
+	});
+
+	it("caps a far target at fifteen minutes and keeps the same target", async () => {
+		const clock = manualClock();
+		const far = clock.now() + 24 * 3_600_000;
+		const spec = scheduleSpec("docsync", () => far);
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+
+		await untilSchedules(rig.agent, asleep, "the first run's sleep");
+		const start = clock.now();
+		expect(await inspectSchedules(rig.agent)).toEqual([
+			{ name: "docsync", state: "sleeping", until: start + SCHEDULE_MAX_SLEEP_MS, target: far },
+		]);
+
+		await clock.advance(SCHEDULE_MAX_SLEEP_MS);
+		await untilSchedules(rig.agent, (list) => spec.calls.length === 2 && asleep(list), "the capped wake");
+		expect(spec.calls).toEqual([null, far]);
+		expect((await inspectSchedules(rig.agent))[0]).toMatchObject({
+			target: far,
+			until: start + 2 * SCHEDULE_MAX_SLEEP_MS,
+		});
+	});
+
+	it("logs a throwing spec, retries in a minute and never faults the task", async () => {
+		const clock = manualClock();
+		const calls: (number | null)[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [
+				{
+					name: "checkin",
+					run: async ({ target }) => {
+						calls.push(target);
+						throw new Error("the check-in store is unreadable");
+					},
+				},
+			],
+		});
+
+		await untilSchedules(rig.agent, asleep, "the failed run's sleep");
+		const start = clock.now();
+		expect(await inspectSchedules(rig.agent)).toEqual([
+			{ name: "checkin", state: "sleeping", until: start + 60_000, target: null },
+		]);
+		expect(logged(rig.lines, "schedule run failed")).toEqual([
+			expect.objectContaining({ name: "checkin", err: "the check-in store is unreadable" }),
+		]);
+
+		await clock.advance(60_000);
+		await untilSchedules(rig.agent, (list) => calls.length === 2 && asleep(list), "the retry");
+		// The target it had is kept: a failed run must not lose the day it was on.
+		expect(calls).toEqual([null, null]);
+	});
+
+	it("creates no second task when the database is opened again", async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 5 * 60_000);
+		const first = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(first.agent, asleep, "the first open's run");
+		expect(spec.calls).toEqual([null]);
+		await first.agent.close();
+
+		const second = await open({
+			answer: say("unused"),
+			dbPath: first.dbPath,
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await new Promise((done) => setTimeout(done, 50));
+		expect(await inspectSchedules(second.agent)).toEqual([
+			expect.objectContaining({ name: "checkin", state: "sleeping" }),
+		]);
+		// The stored sleep survived the reopen, so nothing ran before its target.
+		expect(spec.calls).toEqual([null]);
+		expect(logged(second.lines, "schedule task replaced")).toEqual([]);
+	});
+
+	it("replaces a task that ended", async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 5 * 60_000);
+		const first = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(first.agent, asleep, "the first open's run");
+		await abortSchedules(first.agent);
+		await first.agent.close();
+
+		const second = await open({
+			answer: say("unused"),
+			dbPath: first.dbPath,
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(second.agent, (list) => spec.calls.length === 2 && asleep(list), "the replacement");
+		expect(await inspectSchedules(second.agent)).toHaveLength(1);
+		expect(logged(second.lines, "schedule task replaced")).toEqual([
+			expect.objectContaining({ name: "checkin", was: expect.any(String) }),
+		]);
+	});
+
+	it("runs a sleeping schedule at once when it is rearmed", async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 5 * 60_000);
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(rig.agent, asleep, "the first run");
+		expect(spec.calls).toEqual([null]);
+
+		await rig.agent.schedule.rearm("checkin");
+		await untilSchedules(rig.agent, (list) => spec.calls.length === 2 && asleep(list), "the rearmed run");
+		// A replaced task starts from nothing, so the spec re-reads what it reads.
+		expect(spec.calls).toEqual([null, null]);
+		expect(await inspectSchedules(rig.agent)).toHaveLength(1);
+		expect(logged(rig.lines, "schedule task replaced")).toHaveLength(1);
+	});
+
+	it("reruns once when rearmed mid-run, and aborts nothing", async () => {
+		const clock = manualClock();
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const calls: (number | null)[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [
+				{
+					name: "checkin",
+					run: async ({ target }) => {
+						calls.push(target);
+						if (calls.length === 1) await held;
+						return clock.now() + 5 * 60_000;
+					},
+				},
+			],
+		});
+		await waitFor(() => calls.length === 1, "the first run");
+
+		// The task is running: rearm must not abort it, only shorten its sleep.
+		await rig.agent.schedule.rearm("checkin");
+		release();
+		await untilSchedules(rig.agent, (list) => calls.length === 2 && asleep(list), "the immediate rerun");
+		expect(calls).toEqual([null, clock.now() + 5 * 60_000]);
+		expect(await inspectSchedules(rig.agent)).toHaveLength(1);
+		expect(logged(rig.lines, "schedule task replaced")).toEqual([]);
+	});
+
+	it("leaves one task when two rearms overlap", async () => {
+		const clock = manualClock();
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		const calls: (number | null)[] = [];
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [
+				{
+					name: "checkin",
+					run: async ({ target }) => {
+						calls.push(target);
+						// The replacement is held inside its run, so nothing it does changes the
+						// task count while the assertions run.
+						if (calls.length > 1) await held;
+						return clock.now() + 5 * 60_000;
+					},
+				},
+			],
+		});
+		await untilSchedules(rig.agent, asleep, "the first run's sleep");
+		expect(calls).toEqual([null]);
+
+		// A double-click, or two tabs: both calls see the one sleeping task. A second
+		// replacement would loop for ever with nothing looking at it again.
+		const both = Promise.all([rig.agent.schedule.rearm("checkin"), rig.agent.schedule.rearm("checkin")]);
+		await waitFor(() => calls.length === 2, "the replacement's run");
+		await both;
+		// The aborted task's handler settles under resume(); once it has, exactly one
+		// task is live — and a duplicate never settles, so this wait catches it.
+		await untilSchedules(rig.agent, (list) => list.length === 1, "the aborted task to settle");
+		const owners = await scheduleOwners(rig.agent);
+		expect(owners.live).toHaveLength(1);
+		expect(owners.guard).toEqual({ checkin: owners.live[0] });
+		expect(logged(rig.lines, "schedule task replaced")).toHaveLength(1);
+
+		release();
+		await untilSchedules(rig.agent, asleep, "the replacement's sleep");
+		expect(await inspectSchedules(rig.agent)).toHaveLength(1);
+	});
+
+	it("creates one task when the creating commit runs twice with the same id", async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 5 * 60_000);
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(rig.agent, asleep, "the first run's sleep");
+
+		// The compare-and-set alone: `rearm`'s creating commit run twice with the id
+		// both callers read. The second sees the guard already moved and creates
+		// nothing — otherwise its task would loop with nothing ever looking at it.
+		await markSchedules(rig.agent);
+		const [first, second] = await createScheduleTwice(rig.agent, "checkin");
+		expect(second).toBe(first);
+		await untilSchedules(rig.agent, asleep, "the one replacement's sleep");
+		const owners = await scheduleOwners(rig.agent);
+		expect(owners.live).toEqual([first]);
+		expect(owners.guard).toEqual({ checkin: first });
+	});
+
+	it("replaces a task that was only abort-marked when the database was opened again", async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 5 * 60_000);
+		const first = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(first.agent, asleep, "the first open's run");
+		expect(spec.calls).toEqual([null]);
+
+		// The abort is its own commit (pi-durable's `Tx` has no abort), so a crash
+		// between it and the creating commit leaves the guard naming a task whose only
+		// change is the mark — the state `markSchedules` leaves, without waiting for
+		// the abort handler. Nothing was created after it.
+		await markSchedules(first.agent);
+		await first.agent.close();
+
+		// The mark counts as gone: the open replaces it, and the one task runs.
+		const second = await open({
+			answer: say("unused"),
+			dbPath: first.dbPath,
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(second.agent, (list) => spec.calls.length === 2 && asleep(list), "the replacement");
+		expect(await inspectSchedules(second.agent)).toHaveLength(1);
+		const owners = await scheduleOwners(second.agent);
+		expect(owners.live).toHaveLength(1);
+		expect(owners.guard).toEqual({ checkin: owners.live[0] });
+	});
+
+	it("does not hold a chat's idle, nor its own conversation's", { timeout: 10_000 }, async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 60 * 60_000);
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+			outbox: { send: async () => undefined },
+		});
+		await untilSchedules(rig.agent, asleep, "the schedule's sleep");
+		await rig.agent.deliver("tg:1", { chat: 1 }, ["hello"]);
+
+		// Background: a sleeping schedule is not a chat's work, and not even its own
+		// conversation's (t5-spec §13.2). Without that, this test times out.
+		await rig.agent.idle("tg:1");
+		await whenIdle(rig.agent, SCHEDULE_KEY);
+	});
+
+	it("parks and warns once when this process has no spec for the name", async () => {
+		const clock = manualClock();
+		const first = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [scheduleSpec("checkin", () => clock.now() + 5 * 60_000)],
+		});
+		await untilSchedules(first.agent, asleep, "the first open's run");
+		const start = clock.now();
+		await first.agent.close();
+
+		// A process without the spec still opens the database: the kind is
+		// registered here, so the task parks instead of faulting.
+		const second = await open({
+			answer: say("unused"),
+			dbPath: first.dbPath,
+			now: clock.now,
+			setTimer: clock.setTimer,
+		});
+		expect(await inspectSchedules(second.agent)).toEqual([
+			{ name: "checkin", state: "sleeping", until: start + 5 * 60_000, target: start + 5 * 60_000 },
+		]);
+
+		await clock.advance(5 * 60_000);
+		await untilSchedules(
+			second.agent,
+			(list) => list[0]?.until === start + 5 * 60_000 + SCHEDULE_MAX_SLEEP_MS,
+			"the parking wake",
+		);
+		expect(logged(second.lines, "no schedule spec; the task parks")).toEqual([
+			expect.objectContaining({ name: "checkin" }),
+		]);
+
+		// Once per name, not once per cap.
+		await clock.advance(SCHEDULE_MAX_SLEEP_MS);
+		await untilSchedules(
+			second.agent,
+			(list) => list[0]?.until === start + 5 * 60_000 + 2 * SCHEDULE_MAX_SLEEP_MS,
+			"the second parking wake",
+		);
+		expect(logged(second.lines, "no schedule spec; the task parks")).toHaveLength(1);
+	});
+
+	it("keeps the database bounded over a thousand wakes", { timeout: 120_000 }, async () => {
+		const clock = manualClock();
+		const spec = scheduleSpec("checkin", () => clock.now() + 60_000);
+		const rig = await open({
+			answer: say("unused"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+		});
+		await untilSchedules(rig.agent, asleep, "the first run");
+		const wal = `${rig.dbPath}-wal`;
+		const total = (): number => statSync(rig.dbPath).size + (existsSync(wal) ? statSync(wal).size : 0);
+		const report = (): string =>
+			`${String(statSync(rig.dbPath).size)} db + ${String(existsSync(wal) ? statSync(wal).size : 0)} wal`;
+		let wakes = 0;
+		const wake = async (count: number): Promise<void> => {
+			for (let i = 0; i < count; i++) {
+				await clock.advance(60_000);
+				const want = wakes + 1;
+				await waitFor(() => spec.calls.length > want, "a wake");
+				wakes = want;
+			}
+		};
+		await wake(100);
+		const at100 = total();
+		const report100 = report();
+		await wake(900);
+		console.log(
+			`load check: ${report100} after 100 wakes, ${report()} after 1000 wakes, runs ${String(spec.calls.length)}`,
+		);
+		expect(wakes).toBe(1000);
+		expect(spec.calls).toHaveLength(1001);
+		// pi-durable keeps no row per wake: the task record and the guard document are
+		// updated in place, and the WAL is checkpointed and reused (see the report).
+		expect(total()).toBeLessThanOrEqual(at100 * 2);
+	});
+});
+
+describe("the pending notes", () => {
+	const CHECKIN = "(morning check-in) Good morning. Today: nothing due.";
+
+	it("writes the note in the commit that creates the delivery", async () => {
+		const rig = await open({ answer: say("unused"), outbox: { send: async () => undefined } });
+		const commits: { type: string; kind: string }[][] = [];
+		const stop = observeCommits(rig.agent, (changes) => commits.push([...changes]));
+		try {
+			await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["the check-in"], {
+				note: { tag: "checkin", text: CHECKIN },
+			});
+		} finally {
+			stop();
+		}
+
+		// One commit: the chat's next message can never read a note whose check-in
+		// was never queued, nor the other way round.
+		const withNote = commits.filter((changes) =>
+			changes.some((change) => change.type === "document" && change.kind === "movin.notes"),
+		);
+		expect(withNote).toHaveLength(1);
+		expect(withNote[0]).toEqual(expect.arrayContaining([expect.objectContaining({ type: "task" })]));
+	});
+
+	it("carries a delivery's note in the next turn only", async () => {
+		const { hooks } = await promptRig();
+		const sends: OutboxJson[] = [];
+		const rig = await open({
+			hooks,
+			answer: say("Noted."),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+				},
+			},
+		});
+
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, [CHECKIN], { note: { tag: "checkin", text: CHECKIN } });
+		await rig.agent.submit(PROMPT_KEY, "what about the kitchen?");
+		const first = userTexts(rig.requests[0] as Request).at(-1) ?? "";
+		// After the delta block and before the date line, then the message itself.
+		expect(first).toContain(`\n\n${NOTES_HEADER}\n${CHECKIN}\n\nToday is `);
+		expect(first.endsWith("\n\nwhat about the kitchen?")).toBe(true);
+
+		await rig.agent.submit(PROMPT_KEY, "and the bathroom?");
+		expect(userTexts(rig.requests[1] as Request).at(-1) ?? "").not.toContain(NOTES_HEADER);
+		expect(sends).toEqual([CHECKIN]);
+	});
+
+	it("replaces a note with the same tag and keeps the others", async () => {
+		const { hooks } = await promptRig();
+		const rig = await open({ hooks, answer: say("ok"), outbox: { send: async () => undefined } });
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["one"], {
+			note: { tag: "checkin", text: "(morning check-in) first" },
+		});
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["two"], {
+			note: { tag: "checkin", text: "(morning check-in) second" },
+		});
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["three"], { note: { tag: "other", text: "(other) kept" } });
+
+		await rig.agent.submit(PROMPT_KEY, "hi");
+		const text = userTexts(rig.requests[0] as Request).at(-1) ?? "";
+		expect(text).toContain(`${NOTES_HEADER}\n(morning check-in) second\n\n(other) kept`);
+		expect(text).not.toContain("(morning check-in) first");
+	});
+
+	it("clears the notes in the commit that admits the message", async () => {
+		const { hooks } = await promptRig();
+		const rig = await open({ hooks, answer: say("ok"), outbox: { send: async () => undefined } });
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, [CHECKIN], { note: { tag: "checkin", text: CHECKIN } });
+
+		const commits: { type: string; kind: string }[][] = [];
+		const stop = observeCommits(rig.agent, (changes) => commits.push([...changes]));
+		try {
+			await rig.agent.submit(PROMPT_KEY, "hello");
+		} finally {
+			stop();
+		}
+
+		const cleared = commits.filter((changes) =>
+			changes.some((change) => change.type === "document" && change.kind === "movin.notes"),
+		);
+		expect(cleared).toHaveLength(1);
+		// The admission and the clearing are one commit: a crash can neither show the
+		// note twice nor lose one the model was already given.
+		expect(cleared[0]).toEqual(expect.arrayContaining([expect.objectContaining({ type: "submission" })]));
+	});
+
+	it("keeps a note that lands while the message is being prepared for the next turn", async () => {
+		const MORNING = "(morning check-in) Good morning.";
+		const LATER = "(later check-in) Lunch is at one.";
+		const { hooks } = await promptRig();
+		if (hooks.userContent === undefined) throw new Error("the prompt rig has userContent");
+		const content = hooks.userContent;
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((done) => {
+			release = done;
+		});
+		let gated = true;
+		const gatedHooks: AgentHooks = {
+			...hooks,
+			userContent: async (key, text, turn) => {
+				// The window: the notes are read before this hook and cleared in the commit
+				// after it, and `deliver` does not wait for the turn.
+				if (gated) {
+					gated = false;
+					await held;
+				}
+				return await content(key, text, turn);
+			},
+		};
+		const rig = await open({ hooks: gatedHooks, answer: say("ok"), outbox: { send: async () => undefined } });
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["the check-in"], { note: { tag: "morning", text: MORNING } });
+
+		const turn = rig.agent.submit(PROMPT_KEY, "hello");
+		await waitFor(() => !gated, "the hook to hold the message");
+		// A second check-in lands inside the window: it is not in the message being
+		// prepared, and the admission commit must not clear it.
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["the later check-in"], {
+			note: { tag: "later", text: LATER },
+		});
+		release();
+		await turn;
+
+		const first = userTexts(rig.requests[0] as Request).at(-1) ?? "";
+		expect(first).toContain(MORNING);
+		expect(first).not.toContain(LATER);
+		// It reaches the next turn, and only that one.
+		await rig.agent.submit(PROMPT_KEY, "next");
+		expect(userTexts(rig.requests[1] as Request).at(-1) ?? "").toContain(LATER);
+		await rig.agent.submit(PROMPT_KEY, "after");
+		const last = userTexts(rig.requests[2] as Request).at(-1) ?? "";
+		expect(last).not.toContain(LATER);
+		expect(last).not.toContain(NOTES_HEADER);
+	});
+
+	it("consumes nothing on a duplicate requestId", async () => {
+		const { hooks } = await promptRig();
+		const rig = await open({ hooks, answer: say("ok"), outbox: { send: async () => undefined } });
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["one"], {
+			note: { tag: "checkin", text: "(morning check-in) first" },
+		});
+		await rig.agent.submit(PROMPT_KEY, "hi", { requestId: "tg:1" });
+		expect(userTexts(rig.requests[0] as Request).at(-1) ?? "").toContain("(morning check-in) first");
+
+		// A note that arrives after that turn, then the same requestId again: the
+		// attach path asks the model nothing and consumes nothing.
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, ["two"], {
+			note: { tag: "checkin", text: "(morning check-in) second" },
+		});
+		await rig.agent.submit(PROMPT_KEY, "hi", { requestId: "tg:1" });
+		expect(rig.requests).toHaveLength(1);
+
+		await rig.agent.submit(PROMPT_KEY, "next");
+		expect(userTexts(rig.requests[1] as Request).at(-1) ?? "").toContain("(morning check-in) second");
+	});
+
+	it("still carries the note after a six hour gap, in a fresh context", async () => {
+		const clock = manualClock();
+		const { hooks } = await promptRig();
+		const rig = await open({
+			hooks,
+			answer: say("ok"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			outbox: { send: async () => undefined },
+		});
+		await rig.agent.submit(PROMPT_KEY, "yesterday");
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, [CHECKIN], { note: { tag: "checkin", text: CHECKIN } });
+
+		// The idle reset starts a new context, which a transcript entry would have
+		// been hidden behind (T5-plan §2.3): the note rides on the message instead.
+		await clock.advance(IDLE_RESET_MS + 1);
+		await rig.agent.submit(PROMPT_KEY, "this morning");
+		const text = userTexts(rig.requests[1] as Request).at(-1) ?? "";
+		expect(text.startsWith(`Entries snapshot: []\n\n${NOTES_HEADER}\n${CHECKIN}\n\n`)).toBe(true);
+	});
+
+	it("never shows a note in the web history", async () => {
+		const { hooks } = await promptRig();
+		const rig = await open({ hooks, answer: say("ok"), outbox: { send: async () => undefined } });
+		await rig.agent.deliver(PROMPT_KEY, { chat: 1 }, [CHECKIN], { note: { tag: "checkin", text: CHECKIN } });
+		await rig.agent.submit(PROMPT_KEY, "hello");
+
+		const page = await rig.agent.history(PROMPT_KEY, { limit: 10 });
+		expect(page.items.map((item) => [item.role, item.text])).toEqual([
+			["assistant", "ok"],
+			["user", "hello"],
+		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T5.3a: the restore path. The guard decides before `resume()`; on a restore
+// every live task and unsettled submission is aborted by id, the intake's queue,
+// open turns and cursor are dropped (recent stays), the epoch rotates and the
+// schedules are recreated. Without a restore the open is what it always was.
+// ---------------------------------------------------------------------------
+
+/** guardOn is serve's guard over a memory store, so no case here needs S3. */
+function guardOn(
+	store: ObjectStore,
+	options: { instance?: string; restoreId?: string; signal?: AbortSignal } = {},
+): StartGuard {
+	return createStartGuard({
+		store,
+		instance: options.instance ?? "dev",
+		restoreId: options.restoreId ?? "",
+		log: createTestLog().log,
+		...(options.signal === undefined ? {} : { signal: options.signal }),
+	});
+}
+
+/** starts are the `harness start` lines of a rig, as the fields the log carries. */
+function starts(lines: string[]): Record<string, unknown>[] {
+	return logged(lines, "harness start");
+}
+
+/** untilNoDelivery waits for the restore path's abort handlers to settle every delivery. */
+async function untilNoDelivery(agent: Agent): Promise<{ kind: string; state: string }[]> {
+	const deadline = Date.now() + 4_000;
+	for (;;) {
+		const live = await inspectLive(agent);
+		if (live.every((task) => task.kind !== "movin.outbox.delivery")) return live;
+		if (Date.now() > deadline) throw new Error(`a delivery stayed live: ${JSON.stringify(live)}`);
+		await new Promise((done) => setTimeout(done, 10));
+	}
+}
+
+describe("the restore path", () => {
+	/** What one seeded database leaves for the next open to find. */
+	interface Seeded {
+		dbPath: string;
+		epoch: string;
+		acceptedAt: number;
+		/** Every part a send was called with, from either process. */
+		sends: OutboxJson[];
+		spec: ScheduleSpec & { calls: (number | null)[] };
+	}
+
+	/**
+	 * seed leaves the work a restored copy must not continue, then closes the
+	 * database: one accepted item that has run (an open turn nothing settled), one
+	 * still queued, and two deliveries on one chat — the first sleeping on a 429,
+	 * the second waiting behind it — plus one sleeping schedule.
+	 */
+	async function seed(clock: ManualClock, store: ObjectStore, options: { restoreId?: string } = {}): Promise<Seeded> {
+		const sends: OutboxJson[] = [];
+		const spec = scheduleSpec("checkin", () => clock.now() + 600_000);
+		const rig = await open({
+			answer: say("ok"),
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [spec],
+			startGuard: guardOn(store, { restoreId: options.restoreId }),
+			outbox: {
+				send: async (_address, part) => {
+					sends.push(part);
+					throw flood(60_000);
+				},
+			},
+		});
+		await rig.agent.intake.accept({ cursor: 11, items: [item(70), item(71)] });
+		// The item's turn ran and answered; no worker settled it, so it is an open
+		// turn whose reply the restore path must not send.
+		await rig.agent.submit(INTAKE_KEY, "message 70", {
+			requestId: "tg:70",
+			intake: { id: 70, deadlineAt: Date.parse("2026-11-11T09:15:00Z") },
+		});
+		await untilSchedules(rig.agent, asleep, "the schedule's sleep");
+		await rig.agent.deliver(OUTBOX_KEY, { chat: 4242 }, ["222a"]);
+		await waitFor(() => sends.length === 1 && clock.waiting() === 1, "the 429's sleep");
+		// The second delivery parks behind the first, which is still live.
+		await rig.agent.deliver(OUTBOX_KEY, { chat: 4242 }, ["222b"]);
+		const state = await rig.agent.intake.state();
+		const seeded: Seeded = { dbPath: rig.dbPath, epoch: rig.agent.epoch, acceptedAt: state.acceptedAt, sends, spec };
+		await rig.agent.close();
+		return seeded;
+	}
+
+	/**
+	 * bump moves one instance's counter, as the start of a timeline this database
+	 * never saw would: that is what a restored copy finds ahead of its own number.
+	 */
+	async function bump(store: ObjectStore, count: number, instance = "dev"): Promise<void> {
+		const current = await store.get(epochKey(instance));
+		await store.put(
+			epochKey(instance),
+			new TextEncoder().encode(`{"schema":1,"starts":${String(count)}}`),
+			current.etag,
+		);
+	}
+
+	/** reopen opens a seeded database again with a new guard and its own sends. */
+	async function reopen(clock: ManualClock, seeded: Seeded, guard: StartGuard): Promise<Rig & { sent: OutboxJson[] }> {
+		const sent: OutboxJson[] = [];
+		const rig = await open({
+			answer: say("must not be called"),
+			dbPath: seeded.dbPath,
+			now: clock.now,
+			setTimer: clock.setTimer,
+			schedules: [seeded.spec],
+			startGuard: guard,
+			outbox: {
+				send: async (_address, part) => {
+					sent.push(part);
+					seeded.sends.push(part);
+				},
+			},
+		});
+		return { ...rig, sent };
+	}
+
+	it("aborts every live task and drops the intake when the S3 counter is ahead", async () => {
+		const clock = manualClock();
+		const store = createMemoryStore();
+		const seeded = await seed(clock, store);
+		// The snapshot's SQLite is at start 1; the deployment the snapshot lost has
+		// started once more since, so S3 is at 2.
+		await bump(store, 2);
+		const second = await reopen(clock, seeded, guardOn(store));
+
+		// One line for the start, with what the restore threw away: the two
+		// deliveries and the schedule task, and the ledger's two items.
+		expect(starts(second.lines)).toEqual([
+			expect.objectContaining({
+				starts: 3,
+				restore: "counter",
+				tasksAborted: 3,
+				submissionsAborted: 0,
+				intakeDropped: 2,
+			}),
+		]);
+
+		// The ledger: no queue, no open turn, cursor 0 — and the accept clock kept, so
+		// a stale cursor is still recognisable (T4.2b).
+		expect(await second.agent.intake.state()).toEqual({
+			cursor: 0,
+			acceptedAt: seeded.acceptedAt,
+			queue: [],
+			open: [],
+		});
+		// `recent` is kept: a redelivery of the ids the lost timeline accepted is
+		// still dropped rather than queued again (decision 13.14).
+		expect(await second.agent.intake.accept({ cursor: 12, items: [item(70), item(71)] })).toEqual([]);
+
+		// No send, and no model request: resume() recovered nothing that was lost.
+		await new Promise((done) => setTimeout(done, 100));
+		expect(second.sent).toEqual([]);
+		expect(seeded.sends).toEqual(["222a"]);
+		expect(second.requests).toEqual([]);
+
+		// The epoch rotated, and the tools read the new one.
+		expect(second.agent.epoch).not.toBe(seeded.epoch);
+		expect(second.agent.epoch).toMatch(/^[0-9a-f-]{36}$/);
+
+		// Nothing live but the schedule this start recreated (T5-plan §5.2: "recreate
+		// from settings"), asleep towards the target its spec answered.
+		expect(await untilNoDelivery(second.agent)).toEqual([{ kind: "movin.schedule", state: "sleeping" }]);
+		expect(await inspectSchedules(second.agent)).toEqual([
+			expect.objectContaining({ name: "checkin", state: "sleeping", target: clock.now() + 600_000 }),
+		]);
+
+		// The rotation is committed, not only held in memory: the next open reads the
+		// same epoch back, so a change id minted after the restore cannot collide with
+		// one the lost timeline minted.
+		const rotated = second.agent.epoch;
+		await second.agent.close();
+		const third = await reopen(clock, seeded, guardOn(store));
+		expect(starts(third.lines)).toEqual([expect.objectContaining({ restore: "none" })]);
+		expect(third.agent.epoch).toBe(rotated);
+		expect(third.agent.epoch).not.toBe(seeded.epoch);
+	});
+
+	it("restores on a new id, and only on a new one", async () => {
+		const clock = manualClock();
+		const store = createMemoryStore();
+		const seeded = await seed(clock, store);
+
+		// The runbook's new id: the counters are equal, so only the id can tell.
+		const restored = await reopen(clock, seeded, guardOn(store, { restoreId: "r1" }));
+		expect(starts(restored.lines)).toEqual([
+			expect.objectContaining({ starts: 2, restore: "id", tasksAborted: 3, intakeDropped: 2 }),
+		]);
+		expect(restored.agent.epoch).not.toBe(seeded.epoch);
+		expect(await restored.agent.intake.state()).toMatchObject({ cursor: 0, queue: [], open: [] });
+		await new Promise((done) => setTimeout(done, 100));
+		expect(restored.sent).toEqual([]);
+		const epoch = restored.agent.epoch;
+		await restored.agent.close();
+
+		// Leaving it set is harmless: the id this database recorded is its own now.
+		const again = await reopen(clock, seeded, guardOn(store, { restoreId: "r1" }));
+		expect(starts(again.lines)).toEqual([expect.objectContaining({ starts: 3, restore: "none" })]);
+		expect(starts(again.lines)[0]).not.toHaveProperty("tasksAborted");
+		expect(again.agent.epoch).toBe(epoch);
+		await again.agent.close();
+
+		// A different id is a new restore, so the runbook's second drill works too.
+		const third = await reopen(clock, seeded, guardOn(store, { restoreId: "r2" }));
+		expect(starts(third.lines)).toEqual([expect.objectContaining({ restore: "id" })]);
+		expect(third.agent.epoch).not.toBe(epoch);
+	});
+
+	it("is a normal start when the counters are equal, and keeps the ledger's work", async () => {
+		const clock = manualClock();
+		const store = createMemoryStore();
+		const seeded = await seed(clock, store);
+		const second = await reopen(clock, seeded, guardOn(store));
+
+		expect(starts(second.lines)).toEqual([expect.objectContaining({ starts: 2, restore: "none" })]);
+		expect(starts(second.lines)[0]).not.toHaveProperty("tasksAborted");
+		// Nothing was dropped: the queued item, the open turn and the epoch survive.
+		const state = await second.agent.intake.state();
+		expect(state.queue.map((queued) => queued.id)).toEqual([71]);
+		expect(state.open.map((turn) => turn.id)).toEqual([70]);
+		expect(second.agent.epoch).toBe(seeded.epoch);
+		// And both deliveries are still there to be sent when their waits end (their
+		// exact state moves as the scheduler resumes them, so only the kinds are
+		// compared), with the schedule this start kept.
+		const live = (await inspectLive(second.agent)).map((task) => task.kind).sort();
+		expect(live).toEqual(["movin.outbox.delivery", "movin.outbox.delivery", "movin.schedule"]);
+	});
+
+	it("never treats a new database with S3 ahead as a restore", async () => {
+		const store = createMemoryStore();
+		await store.put(epochKey("dev"), new TextEncoder().encode('{"schema":1,"starts":5}'), null);
+		const rig = await open({ answer: say("unused"), startGuard: guardOn(store) });
+
+		// A database with no start of its own has nothing to lose, so it takes the
+		// higher number instead of dropping work it never had (T5-plan §2.4.1).
+		expect(starts(rig.lines)).toEqual([expect.objectContaining({ starts: 6, restore: "none" })]);
+		expect(starts(rig.lines)[0]).not.toHaveProperty("intakeDropped");
+	});
+
+	it("keeps dev's and prod's counters apart", async () => {
+		const store = createMemoryStore();
+		const first = await open({ answer: say("unused"), startGuard: guardOn(store, { instance: "dev" }) });
+		expect(starts(first.lines)).toEqual([expect.objectContaining({ starts: 1, restore: "none" })]);
+		await first.agent.close();
+
+		// prod's object does not exist, so this database is behind nothing there: its
+		// two starts carry on from SQLite, and dev's counter is left as it was.
+		const prod = await open({
+			dbPath: first.dbPath,
+			answer: say("unused"),
+			startGuard: guardOn(store, { instance: "prod" }),
+		});
+		expect(starts(prod.lines)).toEqual([expect.objectContaining({ starts: 2, restore: "none" })]);
+		await prod.agent.close();
+		const devBody = new TextDecoder().decode((await store.get(epochKey("dev"))).body);
+		const prodBody = new TextDecoder().decode((await store.get(epochKey("prod"))).body);
+		expect(devBody).toContain('"starts":1');
+		expect(prodBody).toContain('"starts":2');
+	});
+
+	it("records in SQLite before S3, so a crash between the two is no false restore", async () => {
+		const store = createMemoryStore();
+		const first = await open({ answer: say("unused"), startGuard: guardOn(store) });
+		await first.agent.close();
+		const second = await open({ dbPath: first.dbPath, answer: say("unused"), startGuard: guardOn(store) });
+		await second.agent.close();
+
+		// The third start dies right after the S3 write — the crash the order is for.
+		const real = guardOn(store);
+		const crashing: StartGuard = {
+			check: real.check,
+			committed: async (count) => {
+				await real.committed(count);
+				throw new Error("the process died");
+			},
+		};
+		await expect(open({ dbPath: first.dbPath, answer: say("unused"), startGuard: crashing })).rejects.toThrow(
+			"the process died",
+		);
+
+		// SQLite already recorded start 3, so the next start is normal. The other
+		// order would read 2 against S3's 3 and drop every pending reply.
+		const fourth = await open({ dbPath: first.dbPath, answer: say("unused"), startGuard: guardOn(store) });
+		expect(starts(fourth.lines)).toEqual([expect.objectContaining({ starts: 4, restore: "none" })]);
+	});
+
+	it("waits for the counter before it resumes anything", { timeout: 20_000 }, async () => {
+		const store = createMemoryStore();
+		const sends: OutboxJson[] = [];
+		// One delivery whose first send fails for a reason that retries after 1 s. Both
+		// opens get the outbox: a process with no channel parks the delivery instead of
+		// sending it, and then the absence of a send would prove nothing at all.
+		const outbox: Outbox = {
+			send: async (_address, part) => {
+				sends.push(part);
+				if (sends.length === 1) throw new Error("socket hang up");
+			},
+		};
+		const first = await open({ answer: say("unused"), startGuard: guardOn(store), outbox });
+		await first.agent.deliver(OUTBOX_KEY, { chat: 4242 }, ["only"]);
+		await waitFor(() => sends.length === 1, "the first send");
+		await first.agent.close();
+
+		// The guard's reads fail twice, so it answers after 1 s + 2 s. By then the
+		// delivery's own 1 s backoff has long expired, so a resume now would send at
+		// once: what follows is what the guard holds back.
+		let reads = 0;
+		const flaky: ObjectStore = {
+			...store,
+			get: async (key, signal) => {
+				reads++;
+				if (reads <= 2) throw new Error("SlowDown");
+				return await store.get(key, signal);
+			},
+		};
+		let opened = false;
+		const pending = open({
+			dbPath: first.dbPath,
+			answer: say("unused"),
+			startGuard: guardOn(flaky),
+			outbox,
+		}).then((rig) => {
+			opened = true;
+			return rig;
+		});
+		// Halfway through the guard's wait and past the backoff the delivery sleeps on:
+		// nothing ran. A wake here would have called `send` at once, so the sends are the
+		// evidence, and the open has not landed — a harness refuses reads once it is
+		// closed, and the one this open built is out of reach until it resumes.
+		await new Promise((done) => setTimeout(done, 1_500));
+		expect(opened).toBe(false);
+		expect(sends).toEqual(["only"]);
+
+		// The answer came, and only then did the harness resume — and resume() wakes a
+		// sleep whose `until` has already passed. The delivery the guard held back goes
+		// out now: the second "only" is that catch-up, not a resend of a lost part.
+		const rig = await pending;
+		expect(starts(rig.lines)).toEqual([expect.objectContaining({ starts: 2, restore: "none" })]);
+		await waitFor(() => sends.length === 2, "the caught-up send");
+		expect(sends).toEqual(["only", "only"]);
+		expect(await rig.agent.submit("tg:7", "after the wait")).toMatchObject({ status: "answered" });
+	});
+
+	it("fails the open, and closes the harness, when the counter cannot be read", async () => {
+		const store = createMemoryStore();
+		const first = await open({ answer: say("unused"), startGuard: guardOn(store) });
+		await first.agent.close();
+
+		// A shutdown during the wait: the read throws and nothing is resumed.
+		const guard = guardOn(store, { signal: AbortSignal.abort() });
+		await expect(open({ dbPath: first.dbPath, answer: say("unused"), startGuard: guard })).rejects.toThrow(
+			"the harness start counter could not be read: aborted",
+		);
+
+		// The harness was closed behind the failed start, so the file opens again now.
+		const again = await open({ dbPath: first.dbPath, answer: say("unused"), startGuard: guardOn(store) });
+		expect(starts(again.lines)).toEqual([expect.objectContaining({ starts: 2, restore: "none" })]);
 	});
 });

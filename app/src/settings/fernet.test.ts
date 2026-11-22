@@ -25,8 +25,8 @@ function key(secret: string): Buffer {
 
 // settings.json's key is decrypted with ttl = 0: no expiry and no clock-skew
 // check. Two of invalid.json's vectors are rejected by Go only because of the
-// TTL, so with ttl = 0 they verify (to an empty plaintext) — Go prints
-// `ttl=0 -> ok=true` for exactly those two (tmp/t14-golden/probe2.go).
+// TTL, so with ttl = 0 they verify (to an empty plaintext) — a Go probe printed
+// `ttl=0 -> ok=true` for exactly those two.
 const TTL_ONLY = new Set(["far-future TS (unacceptable clock skew)", "expired TTL"]);
 
 function tokenBytes(token: string): Buffer {

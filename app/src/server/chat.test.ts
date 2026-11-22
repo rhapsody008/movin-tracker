@@ -15,13 +15,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { promptHooks } from "../agent/prompt.ts";
-import { CUT_OFF_ERROR, CUT_OFF_NOTE, NOT_FOUND_IN_DOCS_REPLY, REFUSAL_REPLY } from "../agent/reply.ts";
+import {
+	CUT_OFF_ERROR,
+	CUT_OFF_NOTE,
+	NO_CONNECTION_MESSAGE,
+	NOT_FOUND_IN_DOCS_REPLY,
+	REFUSAL_REPLY,
+} from "../agent/reply.ts";
 import { buildTools } from "../agent/tools.ts";
 import { CLASS_TEXT, type Doc, emptyDoc, type Index, STATUS_OK } from "../docs/index.ts";
 import type { Library } from "../docs/search.ts";
 import { type Agent, openAgent, whenIdle } from "../durable/adapter.ts";
 import { type Stub, type StubAnswer, startStub } from "../llm/stub.ts";
-import { LAST_TURN_MESSAGE, NO_CONNECTION_MESSAGE } from "../server/chat.ts";
+import { LAST_TURN_MESSAGE } from "../server/chat.ts";
 import { DEFAULTS, type LLM } from "../settings/settings.ts";
 import { headerOf, PARTNER, type Rig, type ServerStream, startServer, ZY } from "./rig.ts";
 

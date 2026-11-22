@@ -11,7 +11,7 @@ T0: T0.1 → T0.2 → T0.3 (gate)
 T1 domain: T1.1 → T1.2 → T1.3 → T1.4 → T1.5
 T2 web: T2.1 → T2.2 → T2.3
 T3 agent: T3.1 → T3.2 → T3.3 → T3.4 → T3.5 → T3.6 (checkpoint: TS dev app usable on the web)
-T4 Telegram: T4.1 → T4.2 → T4.3 → T4.4
+T4 Telegram: T4.1 → T4.3a → T4.3b → T4.2a → T4.2b → T4.4 (reordered 2026-11-22, `briefs/T4-plan.md`)
 T5 scheduled work: T5.1 → T5.2 → T5.3
 T6 cutover: T6.1 → T6.2 → T6.3 → T6.4 → T6.5 → T6.6; T6.7 (Velero) any time, not blocking
 T7: T7.1 → T7.2
@@ -73,10 +73,10 @@ T7: T7.1 → T7.2
 - Images: at most 6 per run, counted in the tool; images from earlier runs are replaced by a placeholder before each request.
 
 ### Telegram
-- Each update is submitted with `requestId tg:<update_id>` before the offset moves.
-- Replies and Undo buttons are sent by a durable delivery task: at-least-once, a rare duplicate chunk after a crash is accepted. A run that ends without an answer gets the fixed failure line from the host.
-- Commands (`/undo`, `/recent`, `/sync`, `/start`, `/help`, `/checkin`) and callbacks stay at-most-once.
-- Auth and the rejected list as today, checked before submit. Group silence is a `stay_silent` tool.
+- Each accepted update is stored durably in the intake inbox (`movin.intake`) in the same commit that moves the offset; a per-chat worker then submits it with `requestId tg:<chat_id>:<message_id>` (2026-11-22: the submit waits for the chat's previous run, so the offset cannot ride with it without stalling polling).
+- Replies and Undo buttons are sent by a durable delivery task, created by the host in the commit that settles the turn (not by `afterRun`, which never fires for a failed run): at-least-once, a rare duplicate chunk after a crash is accepted. A run that ends without an answer gets the fixed failure line from the host.
+- Commands (`/undo`, `/recent`, `/sync`, `/start`, `/help`, `/checkin`) and callbacks stay at-most-once, and run in the chat's queue order (take, then act).
+- Auth and the rejected list as today, checked before submit. Auth is checked twice, as in Go: at intake and again when the worker reaches the update. Group silence is Go's `NO_REPLY` rule in `reply.ts` (T3.6), not a tool.
 
 ### Deploy
 - One Node 24 container (alpine + poppler-utils + font, uid 65532), oauth2-proxy and the tunnel unchanged.
@@ -132,7 +132,7 @@ T7: T7.1 → T7.2
 
 **T5.2 Docs sync task** — daily, startup, `/sync`, web button; single-flight; conditional index write. Verify: ported sync tests; notify only on change; fake clock across midnight.
 
-**T5.3 Restore safety + Velero notes** — restore path with both triggers (Design); `docs/movin-v3/velero.md`; guide section "Chat history backup". The notes cover: the movin Schedule (namespace `movin-tracker`, PVC `movin-data` only, daily, keep 7 days), the snapshot-class label, a restore drill into a scratch namespace with an integrity check, and the real restore order (suspend Flux → scale to 0 → restore the PVC → apply `movin-restore` with a new ID → resume). Verify: tests with a DB copied mid-run: new ID → run aborted, nothing resent, offset reset, tasks recreated; same ID again → normal start; no ID but SQLite counter behind S3 → restore path; counters equal → normal start; dev and prod counters independent.
+**T5.3 Restore safety + Velero notes** — restore path with both triggers (Design); it also clears `movin.intake` (queue and open turns) and aborts pending `movin.outbox.delivery` tasks before `resume()`; `docs/movin-v3/velero.md`; guide section "Chat history backup". The notes cover: the movin Schedule (namespace `movin-tracker`, PVC `movin-data` only, daily, keep 7 days), the snapshot-class label, a restore drill into a scratch namespace with an integrity check, and the real restore order (suspend Flux → scale to 0 → restore the PVC → apply `movin-restore` with a new ID → resume). Verify: tests with a DB copied mid-run: new ID → run aborted, nothing resent, offset reset, tasks recreated; same ID again → normal start; no ID but SQLite counter behind S3 → restore path; counters equal → normal start; dev and prod counters independent.
 
 **T6.1 Image + CI** — Dockerfile (Node 24 alpine + poppler, by digest), `.github/workflows/image.yml` builds from `app/`. Verify: `make run` on a read-only rootfs with a `/data` volume; image size and RSS recorded.
 

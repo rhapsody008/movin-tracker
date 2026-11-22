@@ -147,3 +147,48 @@ describe("MOVIN_DOCS and GUIDE_FILE (F13)", () => {
 		expect(loadConfig(env({ DATA_DIR: "  " })).dataDir).toBe("/data");
 	});
 });
+
+// T5.3a: the two variables the restore guard reads. The instance name is
+// validated here and required where the guard is built (serve), so prod cannot
+// silently share dev's counter; a restore id is optional and printable.
+describe("MOVIN_INSTANCE and HARNESS_RESTORE_ID", () => {
+	it("takes dev or prod, and leaves it empty when unset", () => {
+		expect(loadConfig(env({ MOVIN_INSTANCE: "dev" })).instance).toBe("dev");
+		expect(loadConfig(env({ MOVIN_INSTANCE: "prod" })).instance).toBe("prod");
+		// Blank is unset, as every other env() read treats it: serve() refuses to
+		// start on an empty instance, and the tests that need only the rest of the
+		// config do not have to name one.
+		expect(loadConfig(env({ MOVIN_INSTANCE: "  " })).instance).toBe("");
+		expect(loadConfig(env()).instance).toBe("");
+	});
+
+	it("refuses any other instance with one message for both cases", () => {
+		for (const value of ["Dev", "production", "staging", "dev prod"]) {
+			expect(() => loadConfig(env({ MOVIN_INSTANCE: value }))).toThrow('MOVIN_INSTANCE must be "dev" or "prod"');
+		}
+	});
+
+	it("trims the restore id and defaults it to empty", () => {
+		expect(loadConfig(env({ HARNESS_RESTORE_ID: "  r-2026-11-22  " })).restoreId).toBe("r-2026-11-22");
+		expect(loadConfig(env({ HARNESS_RESTORE_ID: "   " })).restoreId).toBe("");
+		expect(loadConfig(env()).restoreId).toBe("");
+	});
+
+	it("accepts 128 printable characters and refuses 129", () => {
+		const longest = "r".repeat(128);
+		expect(loadConfig(env({ HARNESS_RESTORE_ID: longest })).restoreId).toBe(longest);
+		expect(() => loadConfig(env({ HARNESS_RESTORE_ID: "r".repeat(129) }))).toThrow(
+			"HARNESS_RESTORE_ID must be at most 128 printable ASCII characters",
+		);
+	});
+
+	it("refuses a restore id that is not printable ASCII", () => {
+		for (const value of ["tab\tid", "new\nline", "caf\u00e9", "sp\u00a0ace", "del\u007f"]) {
+			expect(() => loadConfig(env({ HARNESS_RESTORE_ID: value }))).toThrow(
+				"HARNESS_RESTORE_ID must be at most 128 printable ASCII characters",
+			);
+		}
+		// The space itself is printable, so an id with one is taken as written.
+		expect(loadConfig(env({ HARNESS_RESTORE_ID: "restore 1" })).restoreId).toBe("restore 1");
+	});
+});

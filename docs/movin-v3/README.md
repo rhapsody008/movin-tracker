@@ -18,7 +18,7 @@ T0 done (gate passed); T1.1, T1.2 done. Next: T1.3 entries.
 | `plan.md` | Design and steps |
 | `progress.md` | Each step with its verification evidence; facts gathered before T0 |
 | `decisions.md` | What ZY decided and why. Don't reopen these without asking |
-| `velero.md` | Backup and restore of the chat-history volume (written in T5.3) |
+| `velero.md` | Backup and restore of the chat-history volume (written in T5.3b; the Schedule and the drill are T6.7, not applied yet) |
 
 ## How work is done here
 - **Planning:** non-trivial work goes to the `planner` agent first; ZY sees the plan before code starts.
@@ -32,5 +32,5 @@ T0 done (gate passed); T1.1, T1.2 done. Next: T1.3 entries.
 - **One bucket** (`movintrackerbackend`) serves dev and prod; the TS dev app runs beside the Go one on it during T2–T5. No new entry or settings fields until Go is gone.
 - **LLM:** the saved connection is the NAI gateway (`https://nai.yolocal.cloud/enterpriseai/gateway/v1`, model `movin-backend`), OpenAI-compatible. Claude native is being removed.
 - **Harness state** (SQLite) lives on PVC `movin-data` at `/data` in prod, and in a local directory in dev; never shared between dev and prod.
-- **Velero** runs on zy-all-in-one (namespace `zy-all-in-one-workspace`) but does not yet capture volume data (see `plan.md`, Backup and restore).
+- **Velero** runs on zy-all-in-one (namespace `zy-all-in-one-workspace`) and the snapshot class is labelled (2026-11-22), but no movin Schedule exists and no drill has run, so the volume's data is not backed up yet (see `velero.md`).
 - **Safety:** never print the Telegram token, API keys or AWS credentials; ZY creates secrets and runs any `kubectl apply`; never commit `/unitmaterial/` or `.env`.

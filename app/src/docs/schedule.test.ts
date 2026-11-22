@@ -167,6 +167,33 @@ describe("startDocsBackground", () => {
 		stop();
 	});
 
+	it("leaves the daily run to the durable schedule when asked, and still syncs and refreshes", async () => {
+		const fake = fakeSyncer();
+		const timers = fakeTimers();
+		const { log, lines } = createTestLog();
+		const stop = startDocsBackground({
+			syncer: fake.syncer,
+			schedule: "03:00",
+			timeZone: "Asia/Singapore",
+			log,
+			now: () => FIXED,
+			setTimer: timers.setTimer,
+			// T5.2: the agent's `docsync` spec is the one daily run in production.
+			daily: false,
+		});
+		await flush();
+		expect(fake.reasons).toEqual(["startup"]);
+		// The minute refresh only: no daily timer, and no line saying one was armed.
+		expect(timers.armed.map((t) => t.afterMs)).toEqual([60_000]);
+		expect(logged(lines).filter((l) => l.msg === "next daily document sync")).toEqual([]);
+		timers.armed[0]?.run();
+		await flush();
+		expect(fake.refreshes).toBe(1);
+		expect(fake.reasons).toEqual(["startup"]);
+		stop();
+		expect(timers.armed).toEqual([]);
+	});
+
 	it("stops every timer", async () => {
 		const fake = fakeSyncer();
 		const timers = fakeTimers();
