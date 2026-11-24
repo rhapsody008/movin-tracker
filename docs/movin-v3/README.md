@@ -35,7 +35,7 @@ Since T7.2 the app is the repo root, not `app/`: `src/`, `static/`, `eval/`, `te
 
 ## Environment notes
 - **One bucket** (`movintrackerbackend`) serves dev and prod; `make dev` uses it with the prod bot token, so it competes with the prod bot while running.
-- **LLM:** the saved connection is the NAI gateway (`https://nai.yolocal.cloud/enterpriseai/gateway/v1`, model `movin-backend`), OpenAI-compatible. Claude native is being removed.
+- **LLM:** the saved connection is the NAI gateway (`https://nai.yolocal.cloud/enterpriseai/gateway/v1`, model `zy-agent-uep`, switched from `movin-backend` on 2026-11-24 in Settings → LLM; same gateway and key), OpenAI-compatible. Claude native is being removed.
 - **Harness state** (SQLite) lives on PVC `movin-data` at `/data` in prod, and in a local directory in dev; never shared between dev and prod.
 - **Velero** runs on zy-all-in-one (namespace `zy-all-in-one-workspace`) with `EnableCSI`; Schedule `movin-data-daily` (02:30, 7 days) backs up the volume; drill passed 2026-11-22 (see `velero.md`).
 - **Safety:** never print the Telegram token, API keys or AWS credentials; ZY creates secrets and runs any `kubectl apply`; never commit `/unitmaterial/` or `.env`.
